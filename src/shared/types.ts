@@ -455,6 +455,8 @@ export interface AppSettings {
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
   glassStyle: 'smoke' | 'frost'
+  /** The first-run tour has been seen. */
+  tourDone: boolean
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
@@ -510,6 +512,13 @@ export interface LocalLlm {
   models: string[]
   /** Models already in memory, which answer straight away. */
   loaded: string[]
+}
+
+export interface SiteLogSource {
+  name: string
+  path: string
+  /** Empty when sent back to the window; only the model sees the text. */
+  text: string
 }
 
 export interface LlmTest {
@@ -602,6 +611,8 @@ export interface Channels {
   'ai:detect': { args: []; result: LocalLlm[] }
   'ai:chat': { args: [ChatMessage[]]; result: string }
   'ai:test': { args: [string, string]; result: LlmTest }
+  'sites:doctor': { args: [string, ChatMessage[]]; result: { reply: string; sources: SiteLogSource[] } }
+  'sites:open-log': { args: [string, string]; result: void }
   'import:choose': { args: []; result: ImportPlan | null }
   'import:run': { args: [string, ImportAnswers]; result: ImportResult }
   'import:cancel': { args: [string]; result: void }
@@ -689,6 +700,8 @@ export interface Events {
   'update:available': UpdateInfo
   'shell:data': { session: string; data: string }
   'shell:exit': { session: string }
+  /** The menu bar asks the window to show a page. */
+  'app:navigate': string
 }
 
 export interface LaramacApi {

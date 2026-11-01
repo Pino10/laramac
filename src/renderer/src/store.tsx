@@ -52,6 +52,11 @@ interface AppCtx {
   /** Runs an action, tracking a busy key and showing any error as a toast. */
   act: <T>(key: string, fn: () => Promise<T>) => Promise<T | undefined>
   notify: (toast: Toast) => void
+  tourOpen: boolean
+  setTourOpen: (open: boolean) => void
+  /** A starter picked from the command bar, opened by the Starters page. */
+  pendingStarter: string | null
+  setPendingStarter: (id: string | null) => void
 }
 
 const Ctx = createContext<AppCtx | null>(null)
@@ -87,6 +92,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [llms, setLlms] = useState<LocalLlm[]>([])
   const [toast, setToast] = useState<Toast | null>(null)
   const [busy, setBusy] = useState<Set<string>>(new Set())
+  const [tourOpen, setTourOpen] = useState(false)
+  const [pendingStarter, setPendingStarter] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   const notify = useCallback((t: Toast) => {
@@ -150,7 +157,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       api().on('jobs:changed', setJobs),
       api().on('sites:changed', setSites),
       api().on('activity:changed', setActivity),
-      api().on('update:available', setUpdate)
+      api().on('update:available', setUpdate),
+      api().on('app:navigate', (p) => setPage(p as Page))
     ]
     window.addEventListener('focus', refreshAll)
     return () => {
@@ -200,9 +208,13 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       refreshAll,
       refreshLlms,
       act,
-      notify
+      notify,
+      tourOpen,
+      setTourOpen,
+      pendingStarter,
+      setPendingStarter
     }),
-    [page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [tourOpen, pendingStarter, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

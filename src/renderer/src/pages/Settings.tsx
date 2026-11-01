@@ -73,7 +73,7 @@ function SiteNames(): React.JSX.Element | null {
 }
 
 export default function Settings(): React.JSX.Element {
-  const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify } = useApp()
+  const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify, setTourOpen } = useApp()
   const api = window.laramac
   const [resetOpen, setResetOpen] = useState(false)
   if (!settings) return <></>
@@ -234,6 +234,15 @@ export default function Settings(): React.JSX.Element {
             <div className="row-sub">Tell me when installs finish, updates arrive, links are shared, or a service stops on its own.</div>
           </div>
           <Switch on={settings.notifications} label="Notifications" onChange={() => updateSettings({ notifications: !settings.notifications })} />
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Tour</div>
+            <div className="row-sub">A one-minute walk through every part of Laramac.</div>
+          </div>
+          <button className="btn" onClick={() => setTourOpen(true)}>
+            Take the tour
+          </button>
         </div>
         <div className="row row-set">
           <div className="row-main">

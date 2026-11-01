@@ -19,7 +19,7 @@ function summary(running: number, installed: number, failing: string | null, off
 }
 
 export default function Dashboard(): React.JSX.Element {
-  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, php } = useApp()
+  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, php, setPage } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
@@ -224,13 +224,13 @@ export default function Dashboard(): React.JSX.Element {
               </span>
               <ArrowUpRight size={14} className="action-go" />
             </button>
-            <button className="action-row" onClick={() => setNewProject(true)}>
+            <button className="action-row" onClick={() => setPage('starters')}>
               <Plus size={16} />
               <span>
                 <strong>New project</strong>
-                <small>WordPress, Laravel or plain PHP</small>
+                <small>React, Laravel, Django, C# and 30 more</small>
               </span>
-              <span className="kbd">⌘N</span>
+              <ArrowUpRight size={14} className="action-go" />
             </button>
             <button className="action-row" onClick={() => setImportOpen(true)}>
               <Upload size={16} />

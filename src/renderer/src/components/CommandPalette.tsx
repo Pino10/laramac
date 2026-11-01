@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import { NAV } from './Sidebar'
+import { STARTERS } from '@shared/starters'
 
 interface Command {
   id: string
@@ -14,7 +15,7 @@ interface Command {
 
 /** ⌘K: one place to jump anywhere or do anything, without the mouse. */
 export default function CommandPalette(): React.JSX.Element | null {
-  const { paletteOpen, setPaletteOpen, setPage, setNewProject, setImportOpen, services, sites, php, tools, settings, act, setServices, setPhp, setTools } =
+  const { paletteOpen, setPaletteOpen, setPage, setNewProject, setImportOpen, services, sites, php, tools, settings, act, setServices, setPhp, setTools, setSites, setTourOpen, setPendingStarter } =
     useApp()
   const api = window.laramac
   const [query, setQuery] = useState('')
@@ -43,6 +44,9 @@ export default function CommandPalette(): React.JSX.Element | null {
     }
     list.push({ id: 'mail', group: 'Open', label: 'Mail inbox', keywords: 'mailpit email smtp', run: () => api.invoke('sites:open-url', 'http://127.0.0.1:8025') })
     list.push({ id: 'www', group: 'Open', label: 'Projects folder', keywords: 'www finder', run: () => api.invoke('www:reveal') })
+    for (const st of STARTERS) list.push({ id: `starter-${st.id}`, group: 'Create', label: `New ${st.name} project`, keywords: `${st.category} starter create new ${st.description}`, run: () => { setPendingStarter(st.id); setPage('starters') } })
+    for (const site of sites.filter((x) => x.dev)) list.push({ id: `dev-${site.name}`, group: 'Dev servers', label: `${site.dev!.running ? 'Stop' : 'Start'} ${site.name} dev server`, hint: `:${site.dev!.port}`, keywords: 'dev server run vite npm', run: () => act(`dev-${site.name}`, () => api.invoke(site.dev!.running ? 'dev:stop' : 'dev:start', site.name).then(setSites)) })
+    list.push({ id: 'tour', group: 'Help', label: 'Take the tour', keywords: 'help guide onboarding walkthrough', run: () => setTourOpen(true) })
     list.push({ id: 'new', group: 'Create', label: 'New project', hint: '⌘N', keywords: 'wordpress laravel site', run: () => setNewProject(true) })
     list.push({ id: 'import', group: 'Create', label: 'Import a project or database', hint: '⌘I', keywords: 'laragon zip tar sql dump restore backup migrate', run: () => setImportOpen(true) })
 
@@ -90,15 +94,30 @@ export default function CommandPalette(): React.JSX.Element | null {
       }
     }
     return list
-  }, [services, sites, php, tools, tld, act, api, setPage, setNewProject, setImportOpen, setServices, setPhp, setTools])
+  }, [services, sites, php, tools, tld, act, api, setPage, setNewProject, setImportOpen, setServices, setPhp, setTools, setSites, setTourOpen, setPendingStarter])
 
   const results = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean)
     if (words.length === 0) return commands
-    return commands.filter((c) => {
-      const hay = `${c.group} ${c.label} ${c.hint ?? ''} ${c.keywords ?? ''}`.toLowerCase()
-      return words.every((w) => hay.includes(w))
-    })
+    // Matches in the name rank above matches in keywords, whole words above parts of words.
+    const score = (c: Command): number => {
+      const label = c.label.toLowerCase()
+      let n = 0
+      for (const w of words) {
+        if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(label)) n += 3
+        else if (label.includes(w)) n += 2
+      }
+      // Closer names win ties: "react" prefers React over React Router.
+      return n * 100 - label.length
+    }
+    return commands
+      .filter((c) => {
+        const hay = `${c.group} ${c.label} ${c.hint ?? ''} ${c.keywords ?? ''}`.toLowerCase()
+        return words.every((w) => hay.includes(w))
+      })
+      .map((c, i) => ({ c, i, s: score(c) }))
+      .sort((a, b) => (Math.floor(b.s / 100) === Math.floor(a.s / 100) && b.s >= 100 ? b.s - a.s : Math.floor(b.s / 100) - Math.floor(a.s / 100)) || a.i - b.i)
+      .map((x) => x.c)
   }, [commands, query])
 
   useEffect(() => {

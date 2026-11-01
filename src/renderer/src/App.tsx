@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { AppProvider, useApp } from './store'
 import Sidebar, { PAGE_ORDER } from './components/Sidebar'
+import Tour from './components/Tour'
 import JobsBar from './components/JobsBar'
 import CommandPalette from './components/CommandPalette'
 import Activity from './components/Activity'
@@ -60,6 +61,7 @@ function Shell(): React.JSX.Element {
       <div className="canvas" aria-hidden />
       <div className="shell">
         <Sidebar />
+        <Tour />
         <main className="main">
           <header className="topbar drag">
             <button className="search-pill glass" onClick={() => setPaletteOpen(true)}>

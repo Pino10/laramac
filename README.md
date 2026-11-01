@@ -66,6 +66,11 @@ This downloads the newest release for your Mac, checks it against the published 
 
 ### First run
 
+The first time Laramac opens, a one-minute **tour** shows where everything is (replay it any time from Settings or by typing “tour” in the ⌘K command bar).
+
+<img src="docs/screenshots/tour.png" alt="The first-run tour" width="720">
+
+
 1. On the **Overview**, press **Set up my stack**. Laramac installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, turns on `.test` addresses and trusts local HTTPS. macOS asks for your password twice.
 2. Put a project in `~/Laramac/www` (or create one under **Sites › New project**).
 3. Open `https://yourproject.test`.
@@ -157,6 +162,12 @@ Open **Starters** in the sidebar, pick a framework, type a folder name and press
 <img src="docs/screenshots/languages.png" alt="Languages: Node.js, PHP, Python, Bun, .NET, Go, Rust and Swift" width="820">
 
 Swift needs Apple's tools: the **Languages** tab opens Apple's installer for the command line tools, and iPhone and Mac apps also need Xcode from the App Store.
+
+#### Explain errors with AI
+
+The stethoscope button on each site opens the **site doctor**. It reads that site's recent logs (the Laravel, Symfony, WordPress or Django log, the dev server output, and only the PHP, Apache and Nginx error lines that mention the site), blanks passwords, tokens, keys and cookies, and asks your local model (LM Studio, Ollama or vMLX) what is wrong and how to fix it. Ask follow-up questions in the same window, open any of the logs it read, or press **Fix with Claude Code** to hand the job to your coding agent inside that project.
+
+<img src="docs/screenshots/site-doctor.png" alt="The site doctor explaining a database error" width="820">
 
 #### Dev servers
 
@@ -277,11 +288,11 @@ Laramac checks for new versions once a day and shows a banner when one is ready.
 
 ### Everywhere
 
-- **⌘K** opens a command bar for every site, service and action.
+- **⌘K** opens a command bar for every site, service, starter, dev server and action: type “react”, “start mysql” or a site's name.
 - **⌘1 to ⌘9** switch pages, **⌘N** starts a new project and **⌘I** imports one.
-- The **menu bar** icon starts and stops everything and opens phpMyAdmin, the mail inbox and your projects folder.
+- The **menu bar** icon shows how many services and dev servers are running, switches each one on or off, opens any site in the browser, your editor, your AI tool or Finder, and starts a new project, without opening the window.
 - **Notifications** tell you when installs finish, links are shared or a service stops unexpectedly; the bell keeps the history.
-- Light and dark appearance follow macOS, with Liquid Glass on macOS 26 and later.
+- Smoked glass by default, or Frosted glass that follows macOS light and dark mode, with Liquid Glass on macOS 26 and later.
 
 ---
 

@@ -20,8 +20,10 @@ import { homedir } from 'os'
 import { checkForUpdate, installUpdate, releaseNotes } from './updater'
 import { installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
 import { createFromStarter } from './starterrun'
-import { devFromScript, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
+import { devFromScript, devLogFile, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
 import { STARTERS, starterById } from '../shared/starters'
+import { collectSiteLogs, explainSite } from './sitedoctor'
+import { buildTrayMenu, type TrayAction, type TrayItem } from './traymenu'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
 import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
@@ -231,30 +233,88 @@ function createTray(): void {
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Laramac')
-  const rebuild = (): void => {
-    const tld = getSettings().tld
+  const run = (a: TrayAction): void => {
+    switch (a.kind) {
+      case 'show':
+        showWindow()
+        if (a.page) send('app:navigate', a.page)
+        break
+      case 'service':
+        void (a.on ? services.start(a.id) : services.stop(a.id)).then(rebuild)
+        break
+      case 'start-all':
+        void services.startAll().then(rebuild)
+        break
+      case 'stop-all':
+        void services.stopAll().then(rebuild)
+        break
+      case 'dev': {
+        const site = scanSites().find((x) => x.name === a.site)
+        const cfg = getSettings().siteConfig[a.site]?.dev
+        if (!site || !cfg) break
+        void (a.on ? startDev(site, cfg) : stopDev(site.name))
+          .catch((err) => activity.push('error', `${site.name} dev server did not start`, (err as Error).message.slice(0, 300)))
+          .finally(() => {
+            notifySitesChanged()
+            rebuild()
+          })
+        break
+      }
+      case 'open-url':
+        if (isWebUrl(a.url)) void shell.openExternal(a.url)
+        break
+      case 'open-folder':
+        void shell.openPath(a.path)
+        break
+      case 'editor':
+        void openInEditor(getSettings().editor, a.path).catch(() => undefined)
+        break
+      case 'ai':
+        void launchAiTool(getSettings().aiTool, a.path).catch(() => openClaudeCode(a.path))
+        break
+      case 'quit':
+        app.quit()
+        break
+    }
+  }
+  const toNative = (items: TrayItem[]): Electron.MenuItemConstructorOptions[] =>
+    items.map((i) =>
+      i.separator
+        ? { type: 'separator' }
+        : {
+            label: i.label,
+            enabled: i.enabled ?? true,
+            ...(i.checked !== undefined ? { type: 'checkbox' as const, checked: i.checked } : {}),
+            ...(i.submenu ? { submenu: toNative(i.submenu) } : {}),
+            ...(i.action ? { click: () => run(i.action!) } : {})
+          }
+    )
+  const AI_LABEL: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', opencode: 'OpenCode', gemini: 'Gemini CLI', openclaw: 'OpenClaw' }
+  function rebuild(): void {
+    const st = getSettings()
     tray?.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: 'Open Laramac', click: showWindow },
-        { type: 'separator' },
-        { label: 'Start All', click: () => void services.startAll() },
-        { label: 'Stop All', click: () => void services.stopAll() },
-        { type: 'separator' },
-        {
-          label: 'Open phpMyAdmin',
-          enabled: phpmyadminInstalled(),
-          click: () => void shell.openExternal(`http://phpmyadmin.${tld}`)
-        },
-        { label: 'Open Mail Inbox', click: () => void shell.openExternal('http://127.0.0.1:8025') },
-        { label: 'Open www Folder', click: () => void shell.openPath(ensureWww()) },
-        { type: 'separator' },
-        { label: 'Quit Laramac', role: 'quit' }
-      ])
+      Menu.buildFromTemplate(
+        toNative(
+          buildTrayMenu({
+            services: services.list(),
+            sites: listSites(),
+            tld: st.tld,
+            phpmyadmin: phpmyadminInstalled(),
+            editor: st.editor === 'vscode' ? 'VS Code' : 'Cursor',
+            aiName: AI_LABEL[st.aiTool] ?? 'AI tool'
+          })
+        )
+      )
     )
   }
   rebuild()
   tray.on('mouse-enter', rebuild)
   jobs.on('finished', rebuild)
+  let timer: ReturnType<typeof setTimeout> | null = null
+  services.on('changed', () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(rebuild, 300)
+  })
 }
 
 // ------------------------------------------------------------------ IPC
@@ -543,6 +603,13 @@ function registerIpc(): void {
 
   handle('ai:detect', () => detectLlms())
   handle('ai:chat', (messages) => assistantChat(cleanMessages(messages)))
+  handle('sites:doctor', (name, history) => explainSite(siteByName(name), cleanMessages(history)))
+  handle('sites:open-log', async (name, path) => {
+    // Only a log Laramac itself listed for this site may be opened.
+    const site = siteByName(name)
+    if (!collectSiteLogs(site).some((l) => l.path === path) && !(site.dev && path === devLogFile(site.name))) throw new ValidationError('That log is not one of this site’s.')
+    await shell.openPath(path)
+  })
   handle('ai:test', (baseUrl, model) => {
     if (typeof baseUrl !== 'string' || !/^https?:\/\/[^\s]+$/.test(baseUrl) || typeof model !== 'string' || !model || model.length > 300) throw new ValidationError('Pick a server and a model first.')
     return testLlm(baseUrl, model)

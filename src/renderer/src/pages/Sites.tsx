@@ -23,9 +23,12 @@ import {
   Loader2,
   Play,
   Square,
-  ScrollText
+  ScrollText,
+  Stethoscope,
+  Sparkles,
+  Wrench
 } from 'lucide-react'
-import type { DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
+import type { SiteLogSource, DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
@@ -150,6 +153,159 @@ function DevLogs({ site, onClose }: { site: SiteInfo; onClose: () => void }): Re
   )
 }
 
+/** Tiny formatter for model answers: paragraphs, numbered steps and `code`. */
+function Answer({ text }: { text: string }): React.JSX.Element {
+  const inline = (line: string): React.ReactNode[] =>
+    line.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*)/g).map((part, i) =>
+      part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
+        <code key={i}>{part.slice(1, -1)}</code>
+      ) : part.length > 4 && part.startsWith('**') && part.endsWith('**') ? (
+        <strong key={i}>{inline(part.slice(2, -2))}</strong>
+      ) : part.length > 2 && part.startsWith('*') && part.endsWith('*') ? (
+        <em key={i}>{inline(part.slice(1, -1))}</em>
+      ) : (
+        part
+      )
+    )
+  const blocks: React.ReactNode[] = []
+  const lines = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim().split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.startsWith('```')) {
+      const body: string[] = []
+      for (i++; i < lines.length && !lines[i].startsWith('```'); i++) body.push(lines[i])
+      blocks.push(
+        <pre key={i} className="code-block">
+          {body.join('\n')}
+        </pre>
+      )
+    } else if (line.trim()) {
+      const m = /^\s*(\d+[.)]|[-*])\s+(.*)$/.exec(line)
+      blocks.push(
+        m ? (
+          <div key={i} className="ans-step">
+            <span>{/\d/.test(m[1]) ? m[1].replace(')', '.') : '•'}</span>
+            <p>{inline(m[2])}</p>
+          </div>
+        ) : (
+          <p key={i}>{inline(line.replace(/^#+\s*/, ''))}</p>
+        )
+      )
+    }
+  }
+  return <div className="answer">{blocks}</div>
+}
+
+function SiteDoctor({ site, aiName, onClose }: { site: SiteInfo; aiName: string; onClose: () => void }): React.JSX.Element {
+  const { act, busy, setPage, settings } = useApp()
+  const [turns, setTurns] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const [sources, setSources] = useState<SiteLogSource[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [input, setInput] = useState('')
+  const end = useRef<HTMLDivElement>(null)
+  const ask = async (history: { role: 'user' | 'assistant'; content: string }[]): Promise<void> => {
+    setError(null)
+    try {
+      const r = await window.laramac.invoke('sites:doctor', site.name, history)
+      setSources(r.sources)
+      setTurns([...history, { role: 'assistant', content: r.reply }])
+    } catch (err) {
+      setError((err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    }
+    requestAnimationFrame(() => end.current?.scrollIntoView({ block: 'end' }))
+  }
+  useEffect(() => {
+    void act('doctor', () => ask([]))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const thinking = busy.has('doctor')
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass snap-dialog push-dialog doctor" role="dialog" aria-label={`Explain errors in ${site.name}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="snap-head">
+          <div>
+            <h2 className="page-title">
+              <Stethoscope size={18} style={{ verticalAlign: -3, marginRight: 8 }} />
+              What is wrong with {site.name}?
+            </h2>
+            <p className="page-desc" style={{ marginTop: 4 }}>
+              Your local model reads this site’s recent logs and explains them. Passwords, tokens and keys are blanked first, and nothing leaves your Mac unless your model server is elsewhere.
+            </p>
+          </div>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </div>
+        {sources.length > 0 && (
+          <div className="doctor-sources">
+            <span className="hint">Read:</span>
+            {sources.map((s) => (
+              <button key={s.path} className="tag" title={s.path} onClick={() => window.laramac.invoke('sites:open-log', site.name, s.path)}>
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="doctor-thread">
+          {turns.map((t, i) =>
+            t.role === 'user' ? (
+              <div key={i} className="bubble bubble-user">
+                {t.content}
+              </div>
+            ) : (
+              <Answer key={i} text={t.content} />
+            )
+          )}
+          {thinking && (
+            <div className="doctor-wait">
+              <Loader2 size={16} className="spin" /> Reading the logs and asking {settings?.llm.model || 'your model'}… local models can take a minute.
+            </div>
+          )}
+          {error && (
+            <div className="errbox" style={{ gridColumn: 'auto' }}>
+              {error}
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    onClose()
+                    setPage('tools')
+                  }}
+                >
+                  <Wrench size={13} /> Check model servers in Tools
+                </button>
+              </div>
+            </div>
+          )}
+          <div ref={end} />
+        </div>
+        <div className="doctor-input">
+          <input
+            className="input"
+            placeholder="Ask a follow-up, like “show me the exact change”"
+            value={input}
+            disabled={thinking}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && input.trim() && !thinking) {
+                const next = [...turns, { role: 'user' as const, content: input.trim() }]
+                setTurns(next)
+                setInput('')
+                void act('doctor', () => ask(next))
+              }
+            }}
+          />
+          <button className="btn" disabled={thinking} onClick={() => void act('doctor', () => ask([]))}>
+            Read again
+          </button>
+          <button className="btn btn-primary" onClick={() => window.laramac.invoke('sites:open-claude', site.path)}>
+            <Sparkles size={14} /> Fix with {aiName}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
   wordpress: 'WordPress',
@@ -165,7 +321,7 @@ const kindLabel: Record<SiteInfo['kind'], string> = {
 }
 
 export default function Sites(): React.JSX.Element {
-  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject, setImportOpen } = useApp()
+  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject, setImportOpen, setPage } = useApp()
   const [query, setQuery] = useState('')
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
@@ -175,6 +331,7 @@ export default function Sites(): React.JSX.Element {
   const [deployFor, setDeployFor] = useState<SiteInfo | null>(null)
   const [pushFor, setPushFor] = useState<SiteInfo | null>(null)
   const [logsFor, setLogsFor] = useState<SiteInfo | null>(null)
+  const [doctorFor, setDoctorFor] = useState<SiteInfo | null>(null)
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -218,8 +375,11 @@ export default function Sites(): React.JSX.Element {
             <button className="btn" onClick={() => setImportOpen(true)}>
               <Upload size={14} /> Import a project
             </button>
-            <button className="btn btn-primary" onClick={() => setNewProject(true)}>
-              <Plus size={14} /> New project
+            <button className="btn" onClick={() => setNewProject(true)}>
+              <Plus size={14} /> WordPress or PHP
+            </button>
+            <button className="btn btn-primary" onClick={() => setPage('starters')}>
+              <Rocket size={14} /> Browse starters
             </button>
           </div>
         </div>
@@ -310,6 +470,9 @@ export default function Sites(): React.JSX.Element {
                 >
                   <Terminal size={18} />
                 </IconBtn>
+                <IconBtn label={`Explain errors in ${site.name}`} title="Explain errors (AI)" onClick={() => setDoctorFor(site)}>
+                  <Stethoscope size={18} />
+                </IconBtn>
                 <IconBtn label={`Push ${site.name} to GitHub`} title="Push to GitHub" onClick={() => setPushFor(site)}>
                   <GitBranch size={18} />
                 </IconBtn>
@@ -345,6 +508,7 @@ export default function Sites(): React.JSX.Element {
       )}
       {snapFor && <SnapshotsDialog site={snapFor} onClose={() => setSnapFor(null)} />}
       {deployFor && <DeployDialog site={deployFor} onClose={() => setDeployFor(null)} />}
+      {doctorFor && <SiteDoctor site={doctorFor} aiName={aiName} onClose={() => setDoctorFor(null)} />}
       {logsFor && <DevLogs site={sites.find((x) => x.name === logsFor.name) ?? logsFor} onClose={() => setLogsFor(null)} />}
       {pushFor && <PushDialog site={pushFor} onClose={() => setPushFor(null)} />}
     </>

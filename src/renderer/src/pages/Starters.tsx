@@ -16,7 +16,7 @@ function Mark({ s, size = 44 }: { s: Starter; size?: number }): React.JSX.Elemen
 }
 
 export default function Starters(): React.JSX.Element {
-  const { act, busy } = useApp()
+  const { act, busy, pendingStarter, setPendingStarter } = useApp()
   const api = window.laramac
   const [tab, setTab] = useState<'starters' | 'runtimes'>('starters')
   const [cat, setCat] = useState<StarterCategory | 'all'>('all')
@@ -31,6 +31,13 @@ export default function Starters(): React.JSX.Element {
     void api.invoke('starters:versions').then(setVersions).catch(() => undefined)
     void api.invoke('runtimes:latest').then(setLatest).catch(() => undefined)
   }, [api])
+
+  useEffect(() => {
+    if (!pendingStarter) return
+    const s = STARTERS.find((x) => x.id === pendingStarter)
+    if (s) setPicked(s)
+    setPendingStarter(null)
+  }, [pendingStarter, setPendingStarter])
 
   const has = (id: RuntimeId): boolean => runtimes.find((r) => r.id === id)?.installed ?? false
   const shown = useMemo(() => {

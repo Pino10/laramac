@@ -68,6 +68,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'mcpEnabled':
       case 'hostLocalhostFolders':
       case 'hostDotLocalhost':
+      case 'tourDone':
         out[key] = bool(value, key)
         break
       case 'glassStyle':

@@ -51,6 +51,7 @@ export default function Sidebar(): React.JSX.Element {
               <button
                 key={it.id}
                 className="nav-item"
+                data-tour={it.id}
                 aria-current={page === it.id ? 'page' : undefined}
                 onClick={() => setPage(it.id)}
               >
