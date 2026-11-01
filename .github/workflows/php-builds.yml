@@ -1,0 +1,117 @@
+name: Build latest PHP
+
+# Keeps Laramac's PHP up to date. Every day this checks php.net for the newest release of each
+# supported PHP version and, if Laramac does not have it yet, builds a static PHP (CLI and FPM)
+# for Apple Silicon and Intel with static-php-cli, then publishes it to the "php-builds" release.
+# The app prefers these builds and falls back to static-php.dev when one is not ready.
+
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      minors:
+        description: 'PHP versions to check, comma separated'
+        default: '8.5,8.4,8.3,8.2'
+      force:
+        description: 'Rebuild even if the build already exists'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  # A broad set, close to static-php.dev's "bulk" builds, so frameworks work out of the box.
+  EXTENSIONS: 'apcu,bcmath,bz2,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,ftp,gd,gmp,iconv,intl,mbregex,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,shmop,simplexml,soap,sockets,sodium,sqlite3,sysvmsg,sysvsem,sysvshm,tokenizer,xml,xmlreader,xmlwriter,xsl,zip,zlib'
+  RELEASE_TAG: php-builds
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - name: Work out which PHP releases are missing
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINORS: ${{ inputs.minors || '8.5,8.4,8.3,8.2' }}
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          existing=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          include='[]'
+          for minor in ${MINORS//,/ }; do
+            version=$(curl -fsSL "https://www.php.net/releases/?json&version=$minor" | jq -r .version)
+            [ -z "$version" ] || [ "$version" = "null" ] && continue
+            for arch in aarch64 x86_64; do
+              name="php-$version-fpm-macos-$arch.tar.gz"
+              if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing"; then
+                runner=$([ "$arch" = aarch64 ] && echo macos-latest || echo macos-15-intel)
+                include=$(jq -c --arg v "$version" --arg m "$minor" --arg a "$arch" --arg r "$runner" '. + [{version:$v, minor:$m, arch:$a, runner:$r}]' <<<"$include")
+                echo "Needs a build: PHP $version for $arch"
+              else
+                echo "Already built: PHP $version for $arch"
+              fi
+            done
+          done
+          echo "matrix={\"include\":$include}" >> "$GITHUB_OUTPUT"
+          echo "any=$([ "$include" = '[]' ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - name: Get static-php-cli
+        run: |
+          curl -fsSL -o spc "https://dl.static-php.dev/static-php-cli/spc-bin/nightly/spc-macos-${{ matrix.arch }}"
+          chmod +x spc
+          ./spc --version
+
+      - name: Install build tools
+        run: ./spc doctor --auto-fix
+
+      - name: Download PHP ${{ matrix.version }} and libraries
+        run: ./spc download --with-php=${{ matrix.version }} --for-extensions="$EXTENSIONS" --prefer-pre-built
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Build
+        run: ./spc build "$EXTENSIONS" --build-cli --build-fpm
+
+      - name: Check the result
+        run: |
+          php=buildroot/bin/php
+          built=$($php -r 'echo PHP_VERSION;')
+          echo "Built PHP $built"
+          [ "$built" = "${{ matrix.version }}" ] || { echo "Expected ${{ matrix.version }}"; exit 1; }
+          $php -m
+          buildroot/bin/php-fpm -v
+          # Only system libraries may be linked dynamically.
+          if otool -L $php buildroot/bin/php-fpm | grep -E '/opt/homebrew|/usr/local'; then
+            echo "Linked against Homebrew"; exit 1
+          fi
+
+      - name: Package
+        run: |
+          v=${{ matrix.version }}; a=${{ matrix.arch }}
+          tar -czf "php-$v-cli-macos-$a.tar.gz" -C buildroot/bin php
+          tar -czf "php-$v-fpm-macos-$a.tar.gz" -C buildroot/bin php-fpm
+          buildroot/bin/php -m | grep -v '^\[' | grep -v '^$' > "php-$v-extensions-macos-$a.txt"
+          shasum -a 256 php-$v-*-macos-$a.* > "php-$v-macos-$a.sha256"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+              --title "PHP builds" --notes "Static PHP builds used by Laramac, rebuilt automatically when php.net publishes a new release."
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            php-${{ matrix.version }}-*-macos-${{ matrix.arch }}.*
