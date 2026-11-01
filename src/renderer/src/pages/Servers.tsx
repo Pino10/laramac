@@ -186,7 +186,8 @@ export default function Servers(): React.JSX.Element {
                       port: s.port,
                       user: s.user,
                       auth: s.auth,
-                      keyPath: s.keyPath
+                      keyPath: s.keyPath,
+                      protocol: s.protocol
                     })
                   }
                 >
@@ -194,6 +195,7 @@ export default function Servers(): React.JSX.Element {
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <span className="tag tag-accent">{s.protocol === 'sftp' ? 'SSH' : s.protocol.toUpperCase()}</span>
                 <span className="tag">
                   {s.auth === 'agent' ? 'SSH agent' : s.auth === 'key' ? 'Key file' : s.hasPassword ? 'Password in Keychain' : 'Password'}
                 </span>
@@ -206,9 +208,13 @@ export default function Servers(): React.JSX.Element {
                 )}
               </div>
               <div className="card-foot">
-                <button className="btn" onClick={() => openWorkspace(s, 'terminal')}>
-                  <SquareTerminal size={14} /> Terminal
-                </button>
+                {s.protocol === 'sftp' ? (
+                  <button className="btn" onClick={() => openWorkspace(s, 'terminal')}>
+                    <SquareTerminal size={14} /> Terminal
+                  </button>
+                ) : (
+                  <span />
+                )}
                 <button className="btn btn-primary" onClick={() => openWorkspace(s, 'files')}>
                   <Folder size={14} /> Files
                 </button>
@@ -278,20 +284,24 @@ function Workspace({
         }
       >
         <div className="seg-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'terminal'} onClick={() => onTab('terminal')}>
-            <SquareTerminal size={14} /> Terminal
-          </button>
+          {server.protocol === 'sftp' && (
+            <button role="tab" aria-selected={tab === 'terminal'} onClick={() => onTab('terminal')}>
+              <SquareTerminal size={14} /> Terminal
+            </button>
+          )}
           <button role="tab" aria-selected={tab === 'files'} onClick={() => onTab('files')}>
             <Folder size={14} /> Files
           </button>
         </div>
-        <button
-          className="btn btn-quiet"
-          title="Open in the macOS Terminal app"
-          onClick={() => act(`ssh-${server.id}`, () => api().invoke('ssh:terminal', server.id))}
-        >
-          <ExternalLink size={14} /> Terminal app
-        </button>
+        {server.protocol === 'sftp' && (
+          <button
+            className="btn btn-quiet"
+            title="Open in the macOS Terminal app"
+            onClick={() => act(`ssh-${server.id}`, () => api().invoke('ssh:terminal', server.id))}
+          >
+            <ExternalLink size={14} /> Terminal app
+          </button>
+        )}
         <button className="btn" onClick={onClose}>
           <X size={14} /> Disconnect
         </button>
@@ -413,6 +423,43 @@ function TerminalPane({
       /* hidden */
     }
     const input = term.onData((d) => sidRef.current && void api().invoke('shell:write', sidRef.current, d))
+    // PuTTY-style clipboard: selecting copies, right-click pastes. ⌘C and ⌘V work too.
+    const paste = async (): Promise<void> => {
+      const text = await api().invoke('clipboard:read')
+      if (text && sidRef.current) term.paste(text)
+    }
+    const copySelection = (): void => {
+      const sel = term.getSelection()
+      if (sel) void api().invoke('clipboard:write', sel)
+    }
+    const selection = term.onSelectionChange(copySelection)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown' || !e.metaKey) return true
+      const k = e.key.toLowerCase()
+      if (k === 'v') {
+        void paste()
+        e.preventDefault()
+        return false
+      }
+      if (k === 'c' && term.hasSelection()) {
+        copySelection()
+        return false
+      }
+      if (k === 'a') {
+        term.selectAll()
+        return false
+      }
+      if (k === 'k') {
+        term.clear()
+        return false
+      }
+      return true
+    })
+    const onContext = (e: MouseEvent): void => {
+      e.preventDefault()
+      void paste()
+    }
+    host.current!.addEventListener('contextmenu', onContext)
     const offData = api().on('shell:data', (p) => p.session === sidRef.current && term.write(p.data))
     const offExit = api().on('shell:exit', (p) => {
       if (p.session !== sidRef.current) return
@@ -431,6 +478,7 @@ function TerminalPane({
     return () => {
       ro.disconnect()
       input.dispose()
+      selection.dispose()
       offData()
       offExit()
       if (sidRef.current) void api().invoke('shell:close', sidRef.current)
@@ -490,6 +538,7 @@ function TerminalPane({
         <span className="mono" style={{ color: 'inherit' }}>
           {server.user}@{server.host}
         </span>
+        <span className="term-tip">Select to copy, right-click to paste</span>
         <span style={{ marginLeft: 'auto' }}>
           {state === 'live' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'ended' ? 'Session ended' : 'Not connected'}
         </span>
@@ -531,6 +580,34 @@ function ServerDialog({
           {initial.id ? 'Edit server' : 'Add a server'}
         </h2>
         <div className="field">
+          <span className="field-label">Connect with</span>
+          <div className="seg" role="radiogroup" aria-label="Protocol" style={{ alignSelf: 'flex-start' }}>
+            {(['sftp', 'ftps', 'ftp'] as const).map((p) => (
+              <button
+                key={p}
+                role="radio"
+                aria-checked={(v.protocol ?? 'sftp') === p}
+                onClick={() =>
+                  set({
+                    protocol: p,
+                    auth: p === 'sftp' ? v.auth : 'password',
+                    port: v.port === 22 || v.port === 21 ? (p === 'sftp' ? 22 : 21) : v.port
+                  })
+                }
+              >
+                {p === 'sftp' ? 'SSH and SFTP' : p.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <span className="hint">
+            {(v.protocol ?? 'sftp') === 'sftp'
+              ? 'Terminal and files. Most VPS and cloud servers.'
+              : v.protocol === 'ftps'
+                ? 'Files over encrypted FTP. Most shared hosting with cPanel offers this.'
+                : 'Plain FTP sends your password unencrypted. Use FTPS if your host supports it.'}
+          </span>
+        </div>
+        <div className="field">
           <label htmlFor="sv-name">Name</label>
           <input id="sv-name" className="input" autoFocus placeholder="Production" value={v.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
@@ -551,7 +628,7 @@ function ServerDialog({
         <div className="field">
           <span className="field-label">Sign in with</span>
           <div className="seg" role="radiogroup" aria-label="Sign in with" style={{ alignSelf: 'flex-start' }}>
-            {(['agent', 'key', 'password'] as const).map((a) => (
+            {((v.protocol ?? 'sftp') === 'sftp' ? (['agent', 'key', 'password'] as const) : (['password'] as const)).map((a) => (
               <button key={a} role="radio" aria-checked={v.auth === a} onClick={() => set({ auth: a })}>
                 {a === 'agent' ? 'SSH agent' : a === 'key' ? 'Key file' : 'Password'}
               </button>

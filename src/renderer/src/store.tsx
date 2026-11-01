@@ -17,7 +17,7 @@ export interface Toast {
   text: string
 }
 
-export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'servers' | 'tools' | 'packages' | 'assistant' | 'settings'
+export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'servers' | 'tools' | 'packages' | 'assistant' | 'settings' | 'updates'
 
 interface AppCtx {
   page: Page

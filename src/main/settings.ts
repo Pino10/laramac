@@ -29,6 +29,8 @@ const defaults = (): AppSettings => ({
   notifications: true,
   autoUpdateCheck: true,
   mcpEnabled: false,
+  hostLocalhostFolders: true,
+  hostDotLocalhost: true,
   aiTool: 'claude',
   siteConfig: {},
   llm: { baseUrl: 'http://127.0.0.1:11434/v1', model: '' }

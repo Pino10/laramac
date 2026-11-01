@@ -1,16 +1,18 @@
 Laramac is a free, open-source local development environment for macOS.
 
-## New in 0.9
-- **Floating glass design.** Rounded Liquid Glass panels, pill buttons, a floating sidebar, and motion that responds to you: pages settle in, cards lift, dialogs come forward.
-- **Snapshots.** Save a site's files and database together in one click, restore any snapshot (your current state is saved first, so you can undo), or export it and import it on another Mac.
-- **Claude Code works with Laramac.** Connect it in one click from Tools. It can then list your sites, start and stop services, switch PHP, create and query databases, read logs and take snapshots.
-- **Packages.** See everything Laramac installed with its size, and remove what you no longer use.
-- **One-line install.** `curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash` installs or updates without the "Open Anyway" step.
-- **Editors open your project.** Cursor and VS Code open the site as a folder in a new window, with the file tree ready.
-- **Clearer site buttons.** Full-size round buttons with a label when you hover.
+## New in 0.10
+- **Your projects work as they are.** Database host `localhost` now reaches MySQL (PHP on a Mac looks for a socket file there, which caused "SQLSTATE[HY000] [2002] No such file or directory"). `127.0.0.1` and `localhost:3306` work too, and `/tmp/mysql.sock` points at Laramac's MySQL for other tools.
+- **Laragon-style addresses.** Every project also opens at `http://localhost/name`, `http://127.0.0.1/name` and `http://name.localhost`.
+- **Your own site names.** Settings › Addresses lets you add names like `shop.local` or `api.shop.test` to any site.
+- **Deploy.** Send a site to your hosting over SFTP, FTPS or FTP from the Sites page. Only new and changed files go up, and `.env`, `node_modules` and `.git` stay on your Mac.
+- **FTP and FTPS servers.** Add shared hosting accounts under Servers and browse their files.
+- **Copy and paste in the terminal.** Select to copy, right-click to paste, or use ⌘C and ⌘V.
+- **Updates page.** The changelog for every version, and update in one click.
+- **More Liquid Glass.** Clearer panels, a lens-like sheen and lit edges.
 
 ## Download
-- **Apple Silicon:** Laramac-0.9.0-arm64.dmg
-- **Intel:** Laramac-0.9.0-x64.dmg
+- **Apple Silicon:** Laramac-0.10.0-arm64.dmg
+- **Intel:** Laramac-0.10.0-x64.dmg
 
-Or install from Terminal with the one-line command above.
+Or install and update from Terminal without the "Open Anyway" step:
+`curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash`

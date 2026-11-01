@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import type { ServiceImpl } from './types'
@@ -17,6 +17,30 @@ export const mysqldPath = (version: string): string => join(baseDir(version), 'b
 export const mysqlClientPath = (version: string): string => join(baseDir(version), 'bin', 'mysql')
 const myCnf = (): string => join(dirs.conf(), 'my.cnf')
 const socketPath = (): string => join(dirs.run(), 'mysql.sock')
+
+/**
+ * Many tools (the mysql command, Sequel Ace, older scripts) look for MySQL at
+ * /tmp/mysql.sock. Point that at Laramac's MySQL, unless another MySQL owns it.
+ */
+export function linkSharedSocket(target: string, shared = '/tmp/mysql.sock'): 'linked' | 'kept' | 'taken' {
+  try {
+    const st = lstatSync(shared)
+    if (!st.isSymbolicLink()) return 'taken'
+    const current = readlinkSync(shared)
+    if (current === target) return 'kept'
+    // Replace our own old link or a dangling one; never someone else's live socket.
+    if (existsSync(current) && !current.includes('.laramac') && !current.includes('Laramac')) return 'taken'
+    unlinkSync(shared)
+  } catch {
+    /* nothing there yet */
+  }
+  try {
+    symlinkSync(target, shared)
+    return 'linked'
+  } catch {
+    return 'taken'
+  }
+}
 
 export function installedMysqlVersions(): string[] {
   if (!existsSync(dirs.mysql())) return []
@@ -152,6 +176,7 @@ export const mysql: ServiceImpl = {
       3306,
       60000
     )
+    linkSharedSocket(socketPath())
   },
 
   stop: () => proc.stop(12000)

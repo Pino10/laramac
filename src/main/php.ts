@@ -180,7 +180,8 @@ export function writePhpConfig(minor: string, sendmail?: string): void {
       sessionDir: sessions,
       extensions: installedExtensions(minor),
       custom,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      mysqlSocket: join(dirs.run(), 'mysql.sock')
     })
   )
   writeFileSync(

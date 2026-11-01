@@ -66,6 +66,8 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'allowLan':
       case 'autoUpdateCheck':
       case 'mcpEnabled':
+      case 'hostLocalhostFolders':
+      case 'hostDotLocalhost':
         out[key] = bool(value, key)
         break
       case 'defaultPhp':

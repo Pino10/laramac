@@ -87,3 +87,94 @@ describe('MCP server for AI tools', () => {
     }
   })
 })
+
+describe('host names', () => {
+  it('cleans extra site names and rewrites only its own block of /etc/hosts', async () => {
+    const { cleanAlias, needsHostsEntry, withHostsBlock } = await import('../src/main/hosts')
+    expect(cleanAlias(' Shop.Local. ')).toBe('shop.local')
+    for (const bad of ['localhost', 'shop', '-a.test', 'a b.test', 'x.test;rm', '1.2.3.4', 'evil.test\n127.0.0.1 bank.com']) {
+      expect(() => cleanAlias(bad)).toThrow()
+    }
+    expect(needsHostsEntry('shop.local', 'test')).toBe(true)
+    expect(needsHostsEntry('api.shop.test', 'test')).toBe(false)
+    expect(needsHostsEntry('shop.localhost', 'test')).toBe(false)
+
+    const original = '127.0.0.1\tlocalhost\n255.255.255.255\tbroadcasthost\n::1 localhost\n'
+    const once = withHostsBlock(original, ['shop.local', 'radio.dev.internal'])
+    expect(once).toContain('127.0.0.1 shop.local\n::1 shop.local')
+    expect(once.startsWith(original.trimEnd())).toBe(true)
+    // Rewriting replaces the block instead of adding another, and removing all names removes it.
+    expect(withHostsBlock(once, ['shop.local', 'radio.dev.internal'])).toBe(once)
+    expect(withHostsBlock(once, [])).toBe(original)
+  })
+
+  it('links /tmp/mysql.sock to Laramac only when nobody else owns it', async () => {
+    const { mkdtempSync, symlinkSync, writeFileSync, readlinkSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { linkSharedSocket } = await import('../src/main/svc/mysql')
+    const dir = mkdtempSync(join(tmpdir(), 'lm-sock-'))
+    const ours = join(dir, '.laramac-run-mysql.sock')
+    writeFileSync(ours, '')
+    expect(linkSharedSocket(ours, join(dir, 'a.sock'))).toBe('linked')
+    expect(readlinkSync(join(dir, 'a.sock'))).toBe(ours)
+    expect(linkSharedSocket(ours, join(dir, 'a.sock'))).toBe('kept')
+    writeFileSync(join(dir, 'real.sock'), '')
+    expect(linkSharedSocket(ours, join(dir, 'real.sock'))).toBe('taken')
+    const other = join(dir, 'homebrew-mysql.sock')
+    writeFileSync(other, '')
+    symlinkSync(other, join(dir, 'b.sock'))
+    expect(linkSharedSocket(ours, join(dir, 'b.sock'))).toBe('taken')
+    symlinkSync(join(dir, 'gone.sock'), join(dir, 'c.sock'))
+    expect(linkSharedSocket(ours, join(dir, 'c.sock'))).toBe('linked')
+  })
+})
+
+const PYFTP = (await import('child_process')).spawnSync('python3', ['-c', 'import pyftpdlib']).status === 0
+describe.skipIf(!PYFTP)('FTP servers', () => {
+  it('browses and deploys over FTP with a Keychain password', async () => {
+    const { spawn } = await import('child_process')
+    const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const ssh = await import('../src/main/ssh')
+    const { deploy, cleanRemotePath } = await import('../src/main/deploy')
+    const { waitForPort } = await import('../src/main/process')
+    freshEnv()
+    const home = mkdtempSync(join(tmpdir(), 'lm-ftp-'))
+    const port = 2121
+    const server = spawn('python3', ['-m', 'pyftpdlib', '-p', String(port), '-u', 'deploy', '-P', 'hunter2-long', '-d', home, '-w', '-i', '127.0.0.1'], { stdio: 'ignore' })
+    try {
+      expect(await waitForPort(port, 10000)).toBe(true)
+      const crypto = { available: () => true, encrypt: (s: string) => `enc:${s}`, decrypt: (s: string) => s.slice(4) }
+      const id = ssh.saveServer({ name: 'Shared host', host: '127.0.0.1', port, user: 'deploy', auth: 'password', password: 'hunter2-long', protocol: 'ftp' }, crypto)[0].id
+      expect(ssh.listServers()[0]).toMatchObject({ protocol: 'ftp', hasPassword: true })
+
+      const site = mkdtempSync(join(tmpdir(), 'lm-ftp-site-'))
+      mkdirSync(join(site, 'assets'))
+      writeFileSync(join(site, 'index.php'), 'hello ftp')
+      writeFileSync(join(site, 'assets', 'app.css'), 'body{}')
+      writeFileSync(join(site, '.env'), 'x')
+      const fs = await ssh.openFs(id, null, crypto)
+      try {
+        const res = await deploy(fs, site, cleanRemotePath('public_html/'), {}, () => undefined)
+        expect(res.uploaded).toBe(2)
+        expect(readFileSync(join(home, 'public_html', 'assets', 'app.css'), 'utf8')).toBe('body{}')
+        expect(existsSync(join(home, 'public_html', '.env'))).toBe(false)
+        expect((await deploy(fs, site, 'public_html', {}, () => undefined)).uploaded).toBe(0)
+      } finally {
+        fs.close()
+      }
+
+      const conn = await ssh.connectSftp(id, null, crypto)
+      expect(conn.status).toBe('connected')
+      if (conn.status === 'connected') {
+        const listing = await ssh.listDir(conn.session, 'public_html')
+        expect(listing.entries.map((e) => `${e.type}:${e.name}`)).toEqual(['dir:assets', 'file:index.php'])
+        ssh.disconnect(conn.session)
+      }
+      expect(() => cleanRemotePath('/')).toThrow()
+      expect(() => cleanRemotePath('www/../../etc')).toThrow()
+    } finally {
+      server.kill()
+    }
+  })
+})

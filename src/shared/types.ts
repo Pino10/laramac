@@ -34,6 +34,10 @@ export interface SiteConfig {
   /** PHP minor version like "8.3", or undefined to use the default. */
   php?: string
   secure?: boolean
+  /** Extra names for this site, such as shop.local or api.shop.test. */
+  aliases?: string[]
+  /** Where Deploy sends this site. */
+  deploy?: DeployTarget
 }
 
 export interface SiteInfo {
@@ -48,6 +52,8 @@ export interface SiteInfo {
   /** PHP minor version actually used, or null when none is installed. */
   php: string | null
   shareUrl?: string
+  /** Other addresses that open this site. */
+  aliases: string[]
 }
 
 export interface PhpVersionInfo {
@@ -97,6 +103,13 @@ export interface UpdateInfo {
   url: string
 }
 
+export interface ReleaseNote {
+  version: string
+  notes: string
+  publishedAt: string
+  url: string
+}
+
 export interface ResetOptions {
   /** Preferences and per-site settings. */
   settings: boolean
@@ -133,6 +146,8 @@ export interface SshServer {
   host: string
   port: number
   user: string
+  /** How Laramac talks to it. FTP and FTPS have files only, no terminal. */
+  protocol: 'sftp' | 'ftp' | 'ftps'
   auth: 'agent' | 'key' | 'password'
   keyPath?: string
   hasPassword: boolean
@@ -146,6 +161,7 @@ export interface SshServerInput {
   host: string
   port: number
   user: string
+  protocol?: 'sftp' | 'ftp' | 'ftps'
   auth: 'agent' | 'key' | 'password'
   keyPath?: string
   /** Only sent when changed; stored encrypted with the macOS Keychain. */
@@ -162,6 +178,20 @@ export interface SftpEntry {
 export interface SftpListing {
   path: string
   entries: SftpEntry[]
+}
+
+export interface DeployResult {
+  uploaded: number
+  skipped: number
+  bytes: number
+  seconds: number
+}
+
+export interface DeployTarget {
+  serverId: string
+  remotePath: string
+  /** Extra names or paths to leave out, like uploads or *.sql. */
+  excludes?: string[]
 }
 
 export interface McpStatus {
@@ -237,6 +267,10 @@ export interface AppSettings {
   autoUpdateCheck: boolean
   /** Lets Claude Code and other AI tools work with Laramac over MCP. */
   mcpEnabled: boolean
+  /** Serve every project at http://localhost/<folder> and http://127.0.0.1/<folder>. */
+  hostLocalhostFolders: boolean
+  /** Also answer <name>.localhost for every site. */
+  hostDotLocalhost: boolean
   /** Which AI coding tool the per-site button opens. */
   aiTool: string
   siteConfig: Record<string, SiteConfig>
@@ -344,6 +378,7 @@ export interface Channels {
   'app:info': { args: []; result: AppInfo }
   'app:check-update': { args: []; result: UpdateInfo | null }
   'app:install-update': { args: []; result: void }
+  'app:changelog': { args: []; result: ReleaseNote[] }
   'app:reset': { args: [ResetOptions]; result: void }
   'settings:choose-www': { args: []; result: AppSettings | null }
   'php:edit-ini': { args: [string]; result: void }
@@ -368,6 +403,9 @@ export interface Channels {
   'shell:write': { args: [string, string]; result: void }
   'shell:resize': { args: [string, number, number]; result: void }
   'shell:close': { args: [string]; result: void }
+  'deploy:run': { args: [string, DeployTarget, boolean, string | null]; result: DeployResult }
+  'clipboard:read': { args: []; result: string }
+  'clipboard:write': { args: [string]; result: void }
   'snapshots:list': { args: [string]; result: SnapshotInfo[] }
   'snapshots:create': { args: [string, string]; result: SnapshotInfo[] }
   'snapshots:restore': { args: [string, string]; result: SnapshotInfo[] }

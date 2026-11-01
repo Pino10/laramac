@@ -1235,3 +1235,234 @@ html[data-material='vibrancy'] .sidebar {
   align-items: center;
   margin-top: 10px;
 }
+
+/* ---------- Site names ---------- */
+.alias-row {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: center;
+}
+.alias-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chip-static,
+.chip-own {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  background: var(--sel);
+  color: var(--ink-2);
+  user-select: text;
+}
+.chip-own {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  padding-right: 4px;
+}
+.chip-own button {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+.chip-own button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.alias-add {
+  display: flex;
+  gap: 8px;
+}
+.alias-add .input {
+  flex: 1;
+  min-width: 0;
+}
+.term-tip {
+  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ---------- Updates ---------- */
+.nav-dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.update-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: var(--r-xl);
+}
+.update-hero strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+}
+.update-hero span:not(.update-mark) {
+  color: var(--ink-2);
+}
+.update-mark {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+.update-mark[data-new='true'] {
+  color: #fff;
+  background: var(--accent);
+}
+.changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.release {
+  padding: 18px 22px 8px;
+  border-radius: var(--r-lg);
+}
+.release header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.release-version {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.release[data-current='true'] {
+  box-shadow:
+    0 0 0 1.5px var(--accent),
+    var(--float);
+}
+.release .notes {
+  max-height: none;
+}
+
+/* ---------- Deploy ---------- */
+.deploy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+}
+.deploy-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 4px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  background: var(--ok-soft);
+  color: var(--ink);
+}
+.deploy-result strong {
+  color: var(--ok);
+}
+
+/* ---------- Liquid Glass, turned up ----------
+ * Thinner tint so more of what is behind shows through, a stronger blur and
+ * colour lift, a sheen across the top like light on a lens, and lit edges:
+ * bright along the top, a faint glint along the bottom.
+ */
+:root {
+  --glass: rgba(255, 255, 255, 0.5);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-sheen: rgba(255, 255, 255, 0.55);
+  --blur: saturate(210%) blur(36px);
+  --wash-a: rgba(110, 140, 255, 0.24);
+  --wash-b: rgba(255, 150, 190, 0.18);
+  --wash-c: rgba(90, 210, 200, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass: rgba(40, 42, 56, 0.48);
+    --glass-strong: rgba(50, 53, 68, 0.72);
+    --glass-sheen: rgba(255, 255, 255, 0.07);
+    --wash-a: rgba(80, 110, 255, 0.26);
+    --wash-b: rgba(190, 80, 170, 0.16);
+    --wash-c: rgba(40, 170, 160, 0.12);
+  }
+}
+.glass,
+.panel,
+.group,
+.sidebar,
+html[data-material='liquid-glass'] .sidebar,
+html[data-material='vibrancy'] .sidebar {
+  background:
+    linear-gradient(180deg, var(--glass-sheen) 0%, transparent 38%),
+    var(--glass);
+  box-shadow:
+    0 0 0 0.5px var(--glass-hair),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
+    inset 1px 0 0 rgba(255, 255, 255, 0.22),
+    var(--float);
+}
+@media (prefers-color-scheme: dark) {
+  .glass,
+  .panel,
+  .group,
+  .sidebar,
+  html[data-material='liquid-glass'] .sidebar,
+  html[data-material='vibrancy'] .sidebar {
+    box-shadow:
+      0 0 0 0.5px var(--glass-hair),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+      var(--float);
+  }
+}
+/* Rows inside glass stay clear so the panel reads as one piece of glass. */
+.group .row,
+.panel .row {
+  background: transparent;
+}
+.card:hover,
+.server-card:hover {
+  box-shadow:
+    0 0 0 0.5px var(--glass-hair),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    var(--float-hi);
+}
+.btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent),
+    var(--glass-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+@media (prefers-color-scheme: dark) {
+  .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
+    background: var(--glass-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
+.btn-primary {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 60%),
+    var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px -8px color-mix(in srgb, var(--accent) 80%, transparent);
+}

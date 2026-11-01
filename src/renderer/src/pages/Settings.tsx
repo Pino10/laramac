@@ -4,6 +4,74 @@ import type { AppSettings, ResetOptions } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
 
+function SiteNames(): React.JSX.Element | null {
+  const { sites, settings, act, busy, setSites, notify } = useApp()
+  const api = window.laramac
+  const [draft, setDraft] = useState<Record<string, string>>({})
+  if (!settings || sites.length === 0) return null
+  const save = async (name: string, aliases: string[]): Promise<void> => {
+    const next = await act(`alias-${name}`, () => api.invoke('sites:set-config', name, { aliases }))
+    if (next) {
+      setSites(next)
+      setDraft((d) => ({ ...d, [name]: '' }))
+    }
+  }
+  return (
+    <>
+      <h2 className="section-title">
+        Extra names for your sites <small>Any name works, like shop.local or api.shop.test. macOS asks for your password once to add it.</small>
+      </h2>
+      <div className="panel">
+        {sites.map((site) => {
+          const own = settings.siteConfig[site.name]?.aliases ?? []
+          const value = draft[site.name] ?? ''
+          return (
+            <div key={site.name} className="row alias-row">
+              <div className="row-main">
+                <div className="row-title">{site.name}</div>
+                <div className="alias-chips">
+                  <span className="chip-static">{site.domain}</span>
+                  {site.aliases
+                    .filter((a) => !own.includes(a))
+                    .map((a) => (
+                      <span key={a} className="chip-static">
+                        {a}
+                      </span>
+                    ))}
+                  {own.map((a) => (
+                    <span key={a} className="chip-own">
+                      {a}
+                      <button aria-label={`Remove ${a}`} onClick={() => save(site.name, own.filter((x) => x !== a))}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <form
+                className="alias-add"
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const v = value.trim()
+                  if (!v) return
+                  await save(site.name, [...own, v])
+                  notify({ kind: 'info', text: `${site.name} now also opens at http://${v.toLowerCase()}` })
+                }}
+              >
+                <input className="input" placeholder="Add a name" value={value} onChange={(e) => setDraft((d) => ({ ...d, [site.name]: e.target.value }))} aria-label={`Extra name for ${site.name}`} />
+                <button className="btn btn-tonal btn-sm" disabled={!value.trim() || busy.has(`alias-${site.name}`)}>
+                  Add
+                </button>
+              </form>
+            </div>
+          )
+        })}
+      </div>
+      <p className="footnote">HTTPS covers your .{settings.tld} addresses. Extra names open over plain http.</p>
+    </>
+  )
+}
+
 export default function Settings(): React.JSX.Element {
   const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify } = useApp()
   const api = window.laramac
@@ -68,6 +136,39 @@ export default function Settings(): React.JSX.Element {
           <Switch on={settings.allowLan} label="Open to other devices" onChange={() => updateSettings({ allowLan: !settings.allowLan })} />
         </div>
       </div>
+
+      <h2 className="section-title">Addresses</h2>
+      <div className="panel">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Projects at localhost/folder</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Every project also opens at http://localhost/name and http://127.0.0.1/name, the way Laragon and XAMPP do.
+            </div>
+          </div>
+          <Switch on={settings.hostLocalhostFolders} label="Projects at localhost/folder" onChange={() => updateSettings({ hostLocalhostFolders: !settings.hostLocalhostFolders })} />
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">name.localhost addresses</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Every site also answers at http://name.localhost. Browsers know these without any setup.
+            </div>
+          </div>
+          <Switch on={settings.hostDotLocalhost} label="name.localhost addresses" onChange={() => updateSettings({ hostDotLocalhost: !settings.hostDotLocalhost })} />
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Database host names</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Projects can connect to MySQL with localhost, 127.0.0.1 or localhost:3306, and nothing in their config needs changing. MariaDB is on
+              127.0.0.1:3307.
+            </div>
+          </div>
+          <span className="tag tag-ok">Always on</span>
+        </div>
+      </div>
+      <SiteNames />
 
       <h2 className="section-title">Web servers</h2>
       <div className="panel">

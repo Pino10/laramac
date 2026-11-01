@@ -1,7 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { existsSync } from 'fs'
 import { cancelImport, importSql, inspect, runImport } from './importer'
 import * as dbadmin from './dbadmin'
+import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
+import { cleanRemotePath, deploy } from './deploy'
 import { listPackages, removePackage } from './packages'
 import * as snapshots from './snapshots'
 import { MCP_PORT, mcpToken, mcpUrl, startMcpServer, type McpTool } from './mcp'
@@ -10,7 +12,7 @@ import { execFile } from 'child_process'
 import { readdirSync } from 'fs'
 import { dirs } from './paths'
 import { homedir } from 'os'
-import { checkForUpdate, installUpdate } from './updater'
+import { checkForUpdate, installUpdate, releaseNotes } from './updater'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
 import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
@@ -259,6 +261,22 @@ function cleanSiteConfig(cfg: unknown): SiteConfig {
     else if (key === 'secure') {
       if (typeof c.secure !== 'boolean') throw new ValidationError('HTTPS must be on or off.')
       out.secure = c.secure
+    } else if (key === 'deploy') {
+      const d = c.deploy as Record<string, unknown> | null
+      if (!d || typeof d.serverId !== 'string' || !/^[a-f0-9]{12}$/.test(d.serverId)) throw new ValidationError('Choose a server.')
+      const excludes = Array.isArray(d.excludes) ? d.excludes.filter((x): x is string => typeof x === 'string' && /^[\w.*\/ -]{1,80}$/.test(x)).slice(0, 30) : []
+      try {
+        out.deploy = { serverId: d.serverId, remotePath: cleanRemotePath(d.remotePath), excludes }
+      } catch (err) {
+        throw new ValidationError((err as Error).message)
+      }
+    } else if (key === 'aliases') {
+      if (!Array.isArray(c.aliases) || c.aliases.length > 20) throw new ValidationError('Up to 20 extra names per site.')
+      try {
+        out.aliases = [...new Set(c.aliases.map(cleanAlias))]
+      } catch (err) {
+        throw new ValidationError((err as Error).message)
+      }
     } else throw new ValidationError(`Unknown site setting: ${key}`)
   }
   return out
@@ -307,7 +325,13 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
-    if (next.allowLan !== before.allowLan || next.httpPort !== before.httpPort) void services.reloadWeb()
+    if (
+      next.allowLan !== before.allowLan ||
+      next.httpPort !== before.httpPort ||
+      next.hostLocalhostFolders !== before.hostLocalhostFolders ||
+      next.hostDotLocalhost !== before.hostDotLocalhost
+    )
+      void services.reloadWeb()
     notifySitesChanged()
     return next
   })
@@ -329,7 +353,17 @@ function registerIpc(): void {
     const clean = cleanSiteConfig(cfg)
     if (clean.php && !installedMinors().includes(clean.php)) throw new ValidationError(`PHP ${clean.php} is not installed.`)
     if (clean.secure) await ensureSiteCert(site.domain)
+    if (clean.aliases) {
+      const others = scanSites().filter((x) => x.name !== site.name)
+      const taken = clean.aliases.find((a) => others.some((o) => o.domain === a || o.aliases.includes(a)))
+      if (taken) throw new ValidationError(`${taken} already belongs to another site.`)
+    }
     setSiteConfig(site.name, clean)
+    if (clean.aliases) {
+      const { tld, siteConfig } = getSettings()
+      const all = Object.values(siteConfig).flatMap((cfg) => cfg.aliases ?? [])
+      await syncHostsFile(all.filter((n) => needsHostsEntry(n, tld)))
+    }
     notifySitesChanged()
     return listSites()
   })
@@ -479,6 +513,7 @@ function registerIpc(): void {
     if (info) send('update:available', info)
     return info
   })
+  handle('app:changelog', () => releaseNotes())
   handle('app:install-update', () => jobs.run('Updating Laramac', (update) => installUpdate(update)))
   handle('app:reset', async (opts) => {
     const o = (opts ?? {}) as ResetOptions
@@ -583,6 +618,31 @@ function registerIpc(): void {
   })
   handle('shell:resize', (sid, cols, rows) => ssh.resizeShell(String(sid), Number(cols), Number(rows)))
   handle('shell:close', (sid) => ssh.closeShell(String(sid)))
+  // The page has no clipboard permission of its own; the terminal reads and writes through here.
+  handle('deploy:run', async (path, target, force, passphrase) => {
+    const p = sitePath(path)
+    const site = scanSites().find((x) => x.path === p)!
+    const clean = cleanSiteConfig({ deploy: target }).deploy!
+    const srv = ssh.listServers().find((x) => x.id === clean.serverId)
+    if (!srv) throw new ValidationError('That server is no longer saved.')
+    setSiteConfig(site.name, { deploy: clean })
+    const result = await jobs.run(`Deploying ${site.name} to ${srv.name}`, async (update) => {
+      update(null, `Connecting to ${srv.name}`)
+      const fs = await ssh.openFs(srv.id, typeof passphrase === 'string' ? passphrase : null, keychain)
+      try {
+        return await deploy(fs, p, clean.remotePath, { force: force === true, excludes: clean.excludes }, update)
+      } finally {
+        fs.close()
+      }
+    })
+    activity.push('success', `${site.name} deployed to ${srv.name}`, `${result.uploaded} files sent, ${result.skipped} already up to date`)
+    return result
+  })
+  handle('clipboard:read', async () => String(await clipboard.readText()).slice(0, 1_000_000))
+  handle('clipboard:write', (text) => {
+    if (typeof text !== 'string' || text.length > 1_000_000) throw new ValidationError('Invalid text.')
+    clipboard.writeText(text)
+  })
 
   // ---- MCP: Claude Code and other agents
   const serviceIds = services.list().map((x) => x.id)

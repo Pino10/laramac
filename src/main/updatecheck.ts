@@ -1,4 +1,4 @@
-import type { UpdateInfo } from '../shared/types'
+import type { ReleaseNote, UpdateInfo } from '../shared/types'
 import { compareVersions } from './versions'
 
 export interface Release {
@@ -8,6 +8,14 @@ export interface Release {
   published_at: string
   html_url: string
   assets: { name: string; browser_download_url: string }[]
+}
+
+/** Every app release, newest first, for the changelog. */
+export function changelog(releases: Release[]): ReleaseNote[] {
+  return releases
+    .filter((r) => !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name))
+    .map((r) => ({ version: r.tag_name.slice(1), notes: r.body ?? '', publishedAt: r.published_at, url: r.html_url }))
+    .sort((a, b) => compareVersions(b.version, a.version))
 }
 
 export const dmgArch = (): string => (process.arch === 'arm64' ? 'arm64' : 'x64')

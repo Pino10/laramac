@@ -19,10 +19,13 @@
 
 **Sites**
 - Every folder in `~/Laramac/www` becomes `https://<folder>.test`, with wildcard subdomains.
+- Works with the conventions projects already use: `http://localhost/<folder>`, `http://127.0.0.1/<folder>`, `<folder>.localhost`, and any extra names you add, like `shop.local`.
+- Database hosts `localhost`, `127.0.0.1` and `localhost:3306` all reach MySQL, so configs from Laragon, XAMPP or MAMP work unchanged.
 - Trusted local HTTPS for every site.
 - New WordPress, Laravel or PHP projects in one click.
 - Import from Laragon, a server backup or a teammate: a `.zip`, `.tar.gz`, folder or `.sql` dump. Files, database and config are set up for you.
 - Share any site with a public link through Cloudflare Tunnel or ngrok.
+- **Deploy** a site to your hosting over SFTP, FTPS or FTP. Only new and changed files are sent; `.env`, `node_modules` and `.git` stay local.
 
 **PHP**
 - PHP 8.0 to 8.5, side by side, chosen per site.
@@ -44,7 +47,7 @@
 - Mailpit catches every email your apps send. PHP's `mail()` is wired to it.
 
 **Servers**
-- Save your remote servers and open a full SSH terminal inside Laramac.
+- Save your remote servers (SSH, FTPS or FTP) and open a full SSH terminal inside Laramac. Select to copy, right-click to paste.
 - Browse, upload, download, rename and delete files over SFTP.
 
 **AI tools**
@@ -57,7 +60,7 @@
 - **Packages** shows everything Laramac installed with its size, so you can remove what you no longer use.
 - ⌘K command bar for every site, service and action. ⌘1 to ⌘9 switch pages.
 - Menu bar controls, macOS notifications and an activity list.
-- Updates install from inside the app. Settings, PHP versions, databases and sites are kept.
+- Updates install from inside the app, and **Updates** shows the changelog for every version. Settings, PHP versions, databases and sites are kept.
 - **Settings › Reset** clears software, data or settings without uninstalling. Your projects are never touched.
 - Native Liquid Glass on macOS 26 and later, light and dark.
 

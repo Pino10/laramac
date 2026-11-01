@@ -40,7 +40,7 @@ export function setSiteConfig(name: string, patch: SiteConfig): void {
 /** Every folder directly inside the www directory becomes `<folder>.<tld>`. */
 export function scanSites(): SiteInfo[] {
   const root = ensureWww()
-  const { tld, httpPort, httpsPort } = getSettings()
+  const { tld, httpPort, httpsPort, hostDotLocalhost } = getSettings()
   const installed = installedMinors()
   const fallback = defaultMinor()
   const sites: SiteInfo[] = []
@@ -60,6 +60,7 @@ export function scanSites(): SiteInfo[] {
     const kind = detectKind(full)
     const domain = `${s}.${tld}`
     const php = cfg.php && installed.includes(cfg.php) ? cfg.php : fallback
+    const aliases = [...(hostDotLocalhost ? [`${s}.localhost`] : []), ...(cfg.aliases ?? [])].filter((a, i, all) => a !== domain && all.indexOf(a) === i)
     const port = (p: number, def: number): string => (p === def ? '' : `:${p}`)
 
     sites.push({
@@ -71,7 +72,8 @@ export function scanSites(): SiteInfo[] {
       httpsUrl: `https://${domain}${port(httpsPort, 443)}`,
       kind,
       secure: !!cfg.secure,
-      php
+      php,
+      aliases
     })
   }
 

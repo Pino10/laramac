@@ -62,7 +62,9 @@ async function writeNginxConf(): Promise<void> {
       accessLog: join(dirs.logs(), 'nginx-access.log'),
       fastcgiParamsFile: paramsFile,
       tempDir: tmp,
-      allowLan: settings.allowLan
+      allowLan: settings.allowLan,
+      // Only the main web server owns localhost; the second one would clash on 127.0.0.1.
+      localhost: settings.primaryServer === 'nginx' ? hosts.localhost : null
     })
   )
 }
@@ -169,7 +171,8 @@ async function writeApacheConf(layout: ApacheLayout): Promise<void> {
       errorLog: join(dirs.logs(), 'apache-error.log'),
       accessLog: join(dirs.logs(), 'apache-access.log'),
       serverRoot: layout.serverRoot,
-      allowLan: settings.allowLan
+      allowLan: settings.allowLan,
+      localhost: settings.primaryServer === 'apache' ? hosts.localhost : null
     })
   )
 }

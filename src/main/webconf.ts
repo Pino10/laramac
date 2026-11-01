@@ -2,16 +2,17 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import type { SiteInfo } from '../shared/types'
 import { dirs } from './paths'
-import { getSettings } from './settings'
+import { ensureWww, getSettings } from './settings'
 import { scanSites } from './sites'
 import { defaultMinor } from './php'
-import { phpPortFor, type ExtraHost, type SiteConf } from './configgen'
+import { phpPortFor, type ExtraHost, type LocalhostRoot, type SiteConf } from './configgen'
 import { certFor, ensureSiteCert } from './ssl'
 
 export interface HostConfs {
   sites: SiteConf[]
   extras: ExtraHost[]
   siteInfos: SiteInfo[]
+  localhost: LocalhostRoot | null
 }
 
 export const mailpitBinary = (): string => join(dirs.mailpit(), 'mailpit')
@@ -34,7 +35,8 @@ export async function buildHostConfs(): Promise<HostConfs> {
       kind: s.kind,
       phpPort: s.php ? phpPortFor(s.php) : null,
       secure: s.secure,
-      cert
+      cert,
+      aliases: s.aliases
     })
   }
 
@@ -59,5 +61,6 @@ export async function buildHostConfs(): Promise<HostConfs> {
     extras.push({ domain: `mail.${tld}`, secure: false, proxyTo: 'http://127.0.0.1:8025' })
   }
 
-  return { sites, extras, siteInfos }
+  const localhost = getSettings().hostLocalhostFolders ? { root: ensureWww(), phpPort: fallback ? phpPortFor(fallback) : null } : null
+  return { sites, extras, siteInfos, localhost }
 }

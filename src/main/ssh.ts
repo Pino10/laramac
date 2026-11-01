@@ -2,7 +2,9 @@ import { createHash, randomBytes } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, posix } from 'path'
-import { Client, type ClientChannel, type ConnectConfig, type SFTPWrapper } from 'ssh2'
+import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
+import { Client as FtpClient } from 'basic-ftp'
+import { ftpFs, sftpFs, type RemoteFs } from './remotefs'
 import { StringDecoder } from 'string_decoder'
 import type { SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
 import { dirs } from './paths'
@@ -43,7 +45,7 @@ function save(list: Stored[]): void {
 
 const publicView = (s: Stored): SshServer => {
   const { passwordEnc, ...rest } = s
-  return { ...rest, hasPassword: !!passwordEnc }
+  return { ...rest, protocol: s.protocol ?? 'sftp', hasPassword: !!passwordEnc }
 }
 
 export function listServers(): SshServer[] {
@@ -59,6 +61,8 @@ export function validateServer(input: SshServerInput): void {
   if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535) throw new Error('Ports are 1 to 65535.')
   if (!USER.test(input.user ?? '')) throw new Error('That user name is not valid.')
   if (!['agent', 'key', 'password'].includes(input.auth)) throw new Error('Choose how to sign in.')
+  if (input.protocol !== undefined && !['sftp', 'ftp', 'ftps'].includes(input.protocol)) throw new Error('Choose SFTP, FTP or FTPS.')
+  if ((input.protocol === 'ftp' || input.protocol === 'ftps') && input.auth !== 'password') throw new Error('FTP servers sign in with a password.')
   if (input.auth === 'key' && (!input.keyPath || input.keyPath.includes('\0'))) throw new Error('Choose a key file.')
 }
 
@@ -72,6 +76,7 @@ export function saveServer(input: SshServerInput, crypto: Crypto): SshServer[] {
     host: input.host.trim(),
     port: input.port,
     user: input.user.trim(),
+    protocol: input.protocol ?? 'sftp',
     auth: input.auth,
     keyPath: input.auth === 'key' ? input.keyPath : undefined,
     // A different host or port is a different machine: forget the pinned key.
@@ -119,8 +124,7 @@ export function fingerprintOf(key: Buffer): string {
 // ---------------------------------------------------------------- SFTP sessions
 
 interface Session {
-  client: Client
-  sftp: SFTPWrapper
+  fs: RemoteFs
 }
 const sessions = new Map<string, Session>()
 
@@ -181,6 +185,12 @@ async function openClient(id: string, passphrase: string | null, crypto: Crypto)
 }
 
 export async function connectSftp(id: string, passphrase: string | null, crypto: Crypto): Promise<SftpConnectResult> {
+  if (server(id).protocol === 'ftp' || server(id).protocol === 'ftps') {
+    const fs = await connectFtp(id, crypto)
+    const sid = randomBytes(8).toString('hex')
+    sessions.set(sid, { fs })
+    return { status: 'connected', session: sid, home: await fs.realpath('.') }
+  }
   const opened = await openClient(id, passphrase, crypto)
   if (!('client' in opened)) return opened
   const { client } = opened
@@ -191,7 +201,7 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
         return reject(err)
       }
       const sid = randomBytes(8).toString('hex')
-      sessions.set(sid, { client, sftp })
+      sessions.set(sid, { fs: sftpFs(sftp, () => client.end()) })
       sftp.realpath('.', (e, home) => resolve({ status: 'connected', session: sid, home: e ? '/' : home }))
     })
   })
@@ -264,70 +274,82 @@ export function closeShell(sid: string): void {
   sh.client.end()
 }
 
-const typeOf = (mode: number): SftpEntry['type'] => {
-  const t = mode & 0o170000
-  return t === 0o040000 ? 'dir' : t === 0o100000 ? 'file' : t === 0o120000 ? 'link' : 'other'
-}
-
-export function listDir(sid: string, path: string): Promise<SftpListing> {
-  const { sftp } = session(sid)
-  return new Promise((resolve, reject) => {
-    sftp.realpath(path, (e, real) => {
-      if (e) return reject(new Error(`Cannot open ${path}.`))
-      sftp.readdir(real, (err, list) => {
-        if (err) return reject(new Error(`Cannot read ${real}: ${err.message}`))
-        const entries = list
-          .map((f) => ({
-            name: f.filename,
-            type: typeOf(f.attrs.mode),
-            size: f.attrs.size,
-            modified: f.attrs.mtime * 1000
-          }))
-          .sort((a, b) => ((a.type === 'dir') !== (b.type === 'dir') ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name)))
-        resolve({ path: real, entries })
-      })
-    })
-  })
+export async function listDir(sid: string, path: string): Promise<SftpListing> {
+  const { fs } = session(sid)
+  const real = await fs.realpath(path)
+  return { path: real, entries: await fs.list(real) }
 }
 
 /** Downloads files into `localDir`. Remote names are reduced to a plain file name so nothing lands outside it. */
 export async function download(sid: string, remotePaths: string[], localDir: string): Promise<number> {
-  const { sftp } = session(sid)
+  const { fs } = session(sid)
   let n = 0
   for (const remote of remotePaths) {
     const name = basename(posix.basename(remote)).replace(/^\.+$/, '')
     if (!name) continue
-    await new Promise<void>((res, rej) => sftp.fastGet(remote, join(localDir, name), (err) => (err ? rej(err) : res())))
+    await fs.get(remote, join(localDir, name))
     n++
   }
   return n
 }
 
 export async function upload(sid: string, localFiles: string[], remoteDir: string): Promise<number> {
-  const { sftp } = session(sid)
-  for (const local of localFiles) {
-    await new Promise<void>((res, rej) => sftp.fastPut(local, posix.join(remoteDir, basename(local)), (err) => (err ? rej(err) : res())))
-  }
+  const { fs } = session(sid)
+  for (const local of localFiles) await fs.put(local, posix.join(remoteDir, basename(local)))
   return localFiles.length
 }
-
-const op = (fn: (cb: (err?: Error | null) => void) => void): Promise<void> => new Promise((res, rej) => fn((err) => (err ? rej(err) : res())))
 
 const safeName = (name: string): string => {
   if (!name || name.includes('/') || name === '.' || name === '..') throw new Error('Use a plain name without slashes.')
   return name
 }
 
-export const mkdir = (sid: string, dir: string, name: string): Promise<void> => op((cb) => session(sid).sftp.mkdir(posix.join(dir, safeName(name)), cb))
+export const mkdir = async (sid: string, dir: string, name: string): Promise<void> => session(sid).fs.mkdir(posix.join(dir, safeName(name)))
 
-export const rename = (sid: string, from: string, toName: string): Promise<void> =>
-  op((cb) => session(sid).sftp.rename(from, posix.join(posix.dirname(from), safeName(toName)), cb))
+export const rename = async (sid: string, from: string, toName: string): Promise<void> => session(sid).fs.rename(from, posix.join(posix.dirname(from), safeName(toName)))
 
-export const remove = (sid: string, path: string, isDir: boolean): Promise<void> =>
-  op((cb) => (isDir ? session(sid).sftp.rmdir(path, cb) : session(sid).sftp.unlink(path, cb)))
+export const remove = async (sid: string, path: string, isDir: boolean): Promise<void> => session(sid).fs.remove(path, isDir)
+
+/** Opens a server's files for Deploy, over SFTP or FTP. */
+export async function openFs(id: string, passphrase: string | null, crypto: Crypto): Promise<RemoteFs> {
+  const s = server(id)
+  if (s.protocol === 'ftp' || s.protocol === 'ftps') return connectFtp(id, crypto)
+  const opened = await openClient(id, passphrase, crypto)
+  if (!('client' in opened)) throw new Error(`Open ${s.name} under Servers once to confirm its identity, then deploy again.`)
+  const { client } = opened
+  return new Promise((resolve, reject) =>
+    client.sftp((err, sftp) => {
+      if (err) {
+        client.end()
+        return reject(err)
+      }
+      resolve(sftpFs(sftp, () => client.end()))
+    })
+  )
+}
+
+async function connectFtp(id: string, crypto: Crypto): Promise<RemoteFs> {
+  const s = server(id)
+  if (!s.passwordEnc) throw new Error('No password is saved for this server.')
+  const client = new FtpClient(30000)
+  try {
+    await client.access({
+      host: s.host,
+      port: s.port,
+      user: s.user,
+      password: crypto.decrypt(s.passwordEnc),
+      secure: s.protocol === 'ftps'
+    })
+  } catch (err) {
+    client.close()
+    const msg = (err as Error).message
+    throw new Error(/530/.test(msg) ? 'The server refused the sign-in.' : /TLS|SSL|AUTH/i.test(msg) && s.protocol === 'ftps' ? `This server does not offer FTPS: ${msg}` : msg)
+  }
+  return ftpFs(client)
+}
 
 export function disconnect(sid: string): void {
-  sessions.get(sid)?.client.end()
+  sessions.get(sid)?.fs.close()
   sessions.delete(sid)
 }
 

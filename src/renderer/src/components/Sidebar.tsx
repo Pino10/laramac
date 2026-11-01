@@ -1,4 +1,4 @@
-import { Database, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
+import { ArrowDownToLine, Database, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
 
@@ -18,14 +18,15 @@ export const NAV: Item[][] = [
   ],
   [
     { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={16} /> },
-    { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> }
+    { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> },
+    { id: 'updates', label: 'Updates', icon: <ArrowDownToLine size={16} /> }
   ]
 ]
 
 export const PAGE_ORDER: Page[] = NAV.flat().map((i) => i.id)
 
 export default function Sidebar(): React.JSX.Element {
-  const { page, setPage, services, sites } = useApp()
+  const { page, setPage, services, sites, update } = useApp()
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
   const failing = services.some((s) => s.status === 'error')
@@ -52,9 +53,13 @@ export default function Sidebar(): React.JSX.Element {
               >
                 {it.icon}
                 {it.label}
-                <span className="nav-key" aria-hidden>
-                  ⌘{PAGE_ORDER.indexOf(it.id) + 1}
-                </span>
+                {it.id === 'updates' && update ? (
+                  <span className="nav-dot" aria-label="Update available" />
+                ) : PAGE_ORDER.indexOf(it.id) < 9 ? (
+                  <span className="nav-key" aria-hidden>
+                    ⌘{PAGE_ORDER.indexOf(it.id) + 1}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

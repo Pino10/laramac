@@ -11,6 +11,14 @@ export interface SiteConf {
   phpPort: number | null
   secure: boolean
   cert?: { cert: string; key: string }
+  /** More names that serve this site: name.localhost and any you add. */
+  aliases?: string[]
+}
+
+/** Serves every project folder at http://localhost/<folder>, the way Laragon does. */
+export interface LocalhostRoot {
+  root: string
+  phpPort: number | null
 }
 
 /** Extra virtual hosts the app provides itself (phpMyAdmin, Mailpit). */
@@ -101,6 +109,7 @@ export interface NginxOptions {
   tempDir: string
   /** When false, only this Mac may connect (tunnels connect locally, so they still work). */
   allowLan?: boolean
+  localhost?: LocalhostRoot | null
 }
 
 function nginxListen(secure: boolean, o: NginxOptions): string {
@@ -134,13 +143,33 @@ function nginxPhpBlock(phpPort: number | null, o: NginxOptions): string {
 export function generateNginxConf(o: NginxOptions): string {
   const servers: string[] = []
 
+  if (o.localhost) {
+    servers.push(`
+server {
+    listen ${o.httpPort} default_server;
+    server_name localhost 127.0.0.1 [::1];
+    root "${o.localhost.root}";
+    index index.php index.html index.htm;
+    autoindex on;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+${nginxPhpBlock(o.localhost.phpPort, o)}
+
+    location ~ /\\.(?!well-known) {
+        deny all;
+    }
+}`)
+  }
+
   for (const site of o.sites) {
     const secure = site.secure && !!site.cert
     const fallback = usesFrontController(site.kind) ? '/index.php?$query_string' : '=404'
     servers.push(`
 server {
 ${nginxListen(secure, o)}
-    server_name ${site.domain} *.${site.domain};
+    server_name ${site.domain} *.${site.domain}${(site.aliases ?? []).map((a) => ` ${a}`).join('')};
     root "${site.docRoot}";
     index index.php index.html index.htm;
 ${nginxSsl(site.cert, secure)}
@@ -231,6 +260,7 @@ export interface ApacheOptions {
   /** Directory Apache treats as its server root; used for relative paths only. */
   serverRoot: string
   allowLan?: boolean
+  localhost?: LocalhostRoot | null
 }
 
 const APACHE_MODULES: [string, string][] = [
@@ -270,7 +300,8 @@ export function generateApacheConf(o: ApacheOptions): string {
     phpPort: number | null,
     cert: { cert: string; key: string } | undefined,
     secure: boolean,
-    port: number
+    port: number,
+    extraNames: string[] = []
   ): string => {
     const handler =
       phpPort === null
@@ -287,7 +318,7 @@ export function generateApacheConf(o: ApacheOptions): string {
       : ''
     return `
 <VirtualHost *:${port}>
-    ServerName ${domain}${alias ? `\n    ServerAlias *.${domain}` : ''}
+    ServerName ${domain}${alias ? `\n    ServerAlias *.${domain}` : ''}${extraNames.length ? `\n    ServerAlias ${extraNames.join(' ')}` : ''}
     DocumentRoot "${root}"
     DirectoryIndex index.php index.html${ssl}
     <Directory "${root}">
@@ -305,13 +336,16 @@ export function generateApacheConf(o: ApacheOptions): string {
     root: string,
     phpPort: number | null,
     cert: { cert: string; key: string } | undefined,
-    secure: boolean
+    secure: boolean,
+    extraNames: string[] = []
   ): void => {
-    blocks.push(vhost(domain, alias, root, phpPort, undefined, false, o.port))
+    blocks.push(vhost(domain, alias, root, phpPort, undefined, false, o.port, extraNames))
     if (secure && cert) blocks.push(vhost(domain, alias, root, phpPort, cert, true, o.httpsPort))
   }
 
-  for (const s of o.sites) emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure)
+  // The first virtual host answers any name Apache does not recognise, so localhost goes first.
+  if (o.localhost) emit('localhost', false, o.localhost.root, o.localhost.phpPort, undefined, false, ['127.0.0.1', '[::1]'])
+  for (const s of o.sites) emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure, s.aliases ?? [])
   for (const e of o.extras) {
     if (e.root) emit(e.domain, false, e.root, e.phpPort ?? null, e.cert, e.secure)
   }
@@ -377,6 +411,8 @@ export interface PhpIniOptions {
   /** Your own lines, appended last so they win. */
   custom?: string
   timezone?: string
+  /** MySQL's socket, so 'localhost' in a project's config reaches Laramac's MySQL. */
+  mysqlSocket?: string
 }
 
 /**
@@ -443,7 +479,18 @@ export function generatePhpIni(o: PhpIniOptions): string {
   ]
 
   if (has('mysqli') || has('pdo_mysql')) {
-    lines.push('', '[MySQL]', 'mysqli.default_host = 127.0.0.1', 'mysqli.default_port = 3306', 'pdo_mysql.default_socket =')
+    // PHP treats the host "localhost" as "use the socket file" rather than TCP, so point every
+    // MySQL extension at Laramac's socket. Then 'localhost', '127.0.0.1' and 'localhost:3306' all work.
+    const sock = o.mysqlSocket ? `"${o.mysqlSocket}"` : ''
+    lines.push(
+      '',
+      '[MySQL]',
+      'mysqli.default_host = 127.0.0.1',
+      'mysqli.default_port = 3306',
+      `mysqli.default_socket = ${sock}`,
+      `pdo_mysql.default_socket = ${sock}`,
+      `mysql.default_socket = ${sock}`
+    )
   }
   if (o.extensions?.includes('apcu')) {
     lines.push('', '[APCu]', 'apc.enabled = 1', 'apc.shm_size = 128M', 'apc.enable_cli = 0')

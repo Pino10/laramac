@@ -16,6 +16,7 @@ import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 import Servers from './pages/Servers'
 import Packages from './pages/Packages'
+import Updates from './pages/Updates'
 import UpdateBanner from './components/UpdateBanner'
 
 function Shell(): React.JSX.Element {
@@ -64,7 +65,7 @@ function Shell(): React.JSX.Element {
           </header>
           <div className="scroll">
             <div className="main-inner" key={page}>
-              <UpdateBanner />
+              {page !== 'updates' && <UpdateBanner />}
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
               {page === 'php' && <Php />}
@@ -72,6 +73,7 @@ function Shell(): React.JSX.Element {
               {page === 'servers' && <Servers />}
               {page === 'tools' && <Tools />}
               {page === 'packages' && <Packages />}
+              {page === 'updates' && <Updates />}
               {page === 'assistant' && <Assistant />}
               {page === 'settings' && <Settings />}
             </div>

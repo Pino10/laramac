@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Camera, Code, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, X } from 'lucide-react'
-import type { SiteInfo, SnapshotInfo } from '@shared/types'
+import { Camera, Code, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, UploadCloud, X } from 'lucide-react'
+import type { DeployResult, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
@@ -24,6 +24,7 @@ export default function Sites(): React.JSX.Element {
   const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
   const aiName = AI_NAMES[settings?.aiTool ?? 'claude'] ?? 'AI tool'
   const [snapFor, setSnapFor] = useState<SiteInfo | null>(null)
+  const [deployFor, setDeployFor] = useState<SiteInfo | null>(null)
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -138,6 +139,9 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn label={`${aiName} in ${site.name}`} title={`Open ${aiName} here`} onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
                   <Terminal size={18} />
                 </IconBtn>
+                <IconBtn label={`Deploy ${site.name}`} title="Deploy to a server" onClick={() => setDeployFor(site)}>
+                  <UploadCloud size={18} />
+                </IconBtn>
                 <IconBtn label={`Snapshots of ${site.name}`} title="Snapshots" onClick={() => setSnapFor(site)}>
                   <History size={18} />
                 </IconBtn>
@@ -166,6 +170,7 @@ export default function Sites(): React.JSX.Element {
         </div>
       )}
       {snapFor && <SnapshotsDialog site={snapFor} onClose={() => setSnapFor(null)} />}
+      {deployFor && <DeployDialog site={deployFor} onClose={() => setDeployFor(null)} />}
     </>
   )
 }
@@ -293,6 +298,132 @@ function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => voi
             </div>
           ))}
         </div>
+      </div>
+      {askDialog}
+    </div>
+  )
+}
+
+function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+  const { settings, act, busy, notify, setPage, jobs } = useApp()
+  const api = window.laramac
+  const saved = settings?.siteConfig[site.name]?.deploy
+  const [servers, setServers] = useState<SshServer[] | null>(null)
+  const [serverId, setServerId] = useState(saved?.serverId ?? '')
+  const [remotePath, setRemotePath] = useState(saved?.remotePath ?? '')
+  const [excludes, setExcludes] = useState((saved?.excludes ?? []).join(', '))
+  const [force, setForce] = useState(false)
+  const [result, setResult] = useState<DeployResult | null>(null)
+  const [ask, askDialog] = useAsk()
+  const key = `deploy-${site.name}`
+  const job = jobs.find((j) => j.label.startsWith(`Deploying ${site.name}`) && j.status === 'running')
+
+  useEffect(() => {
+    void api.invoke('ssh:list').then((list) => {
+      setServers(list)
+      if (!serverId && list[0]) setServerId(list[0].id)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api])
+
+  const server = servers?.find((x) => x.id === serverId)
+  const run = async (): Promise<void> => {
+    let pass: string | null = null
+    if (server?.auth === 'key') {
+      const p = await ask({ title: `Connect to ${server.name}`, label: 'Key passphrase (leave empty if it has none)', secret: true, confirm: 'Deploy' })
+      if (p === null) return
+      pass = p || null
+    }
+    const target = {
+      serverId,
+      remotePath,
+      excludes: excludes
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean)
+    }
+    const res = await act(key, () => api.invoke('deploy:run', site.path, target, force, pass))
+    if (res) {
+      setResult(res)
+      notify({ kind: 'info', text: `${site.name} is on ${server?.name}.` })
+    }
+  }
+
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass snap-dialog" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="snap-head">
+          <div>
+            <h2 className="page-title" style={{ fontSize: 20 }}>
+              Deploy {site.name}
+            </h2>
+            <p className="page-desc" style={{ marginTop: 4 }}>
+              Upload this site to a server over SFTP or FTP. Only new and changed files are sent, and nothing on the server is deleted.
+            </p>
+          </div>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </div>
+
+        {servers?.length === 0 ? (
+          <div className="empty-state" style={{ padding: '28px 8px' }}>
+            <strong>Add a server first</strong>
+            <span>Save your hosting account or VPS under Servers, with SFTP, FTPS or FTP.</span>
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: 10 }}
+              onClick={() => {
+                onClose()
+                setPage('servers')
+              }}
+            >
+              Go to Servers
+            </button>
+          </div>
+        ) : (
+          <div className="deploy-form">
+            <div className="field">
+              <label htmlFor="dp-server">Server</label>
+              <select id="dp-server" className="input" value={serverId} onChange={(e) => setServerId(e.target.value)}>
+                {servers?.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name} ({x.protocol === 'sftp' ? 'SFTP' : x.protocol.toUpperCase()}, {x.user}@{x.host})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="dp-path">Folder on the server</label>
+              <input id="dp-path" className="input mono" placeholder="/var/www/mysite or public_html" value={remotePath} onChange={(e) => setRemotePath(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="dp-ex">Also leave out</label>
+              <input id="dp-ex" className="input mono" placeholder="uploads, *.sql, storage/app" value={excludes} onChange={(e) => setExcludes(e.target.value)} />
+              <span className="hint">Always left out: node_modules, .git, .env, .DS_Store, editor folders and logs. Your server keeps its own .env and config.</span>
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> Upload every file, even unchanged ones
+            </label>
+            {result && !job && (
+              <div className="deploy-result">
+                <strong>Deployed</strong>
+                <span>
+                  {result.uploaded} {result.uploaded === 1 ? 'file' : 'files'} sent ({formatBytes(result.bytes)}), {result.skipped} already up to date, in {result.seconds}s.
+                </span>
+              </div>
+            )}
+            {job && <div className="deploy-result">{job.label}{job.percent !== null ? `, ${job.percent}%` : ''}</div>}
+            <div className="end" style={{ marginTop: 6 }}>
+              <button className="btn" onClick={onClose}>
+                Close
+              </button>
+              <button className="btn btn-primary" disabled={!serverId || !remotePath.trim() || busy.has(key)} onClick={run}>
+                <UploadCloud size={15} /> {busy.has(key) ? 'Deploying…' : 'Deploy'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {askDialog}
     </div>

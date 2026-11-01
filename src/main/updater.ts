@@ -3,11 +3,11 @@ import { execFile } from 'child_process'
 import { existsSync, mkdtempSync, renameSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
-import type { UpdateInfo } from '../shared/types'
+import type { ReleaseNote, UpdateInfo } from '../shared/types'
 import { USER_AGENT, downloadFile, sha256File } from './download'
 import { dirs } from './paths'
 import { BINARIES_REPO, hashFor } from './versions'
-import { dmgArch, pickUpdate, type Release } from './updatecheck'
+import { changelog, dmgArch, pickUpdate, type Release } from './updatecheck'
 
 function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((res, rej) =>
@@ -17,13 +17,24 @@ function run(cmd: string, args: string[]): Promise<string> {
 
 let pending: { info: UpdateInfo; dmg: string; sums: string } | null = null
 
-export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  const res = await fetch(`https://api.github.com/repos/${BINARIES_REPO}/releases?per_page=30`, {
+let lastReleases: Release[] = []
+
+async function fetchReleases(): Promise<Release[]> {
+  const res = await fetch(`https://api.github.com/repos/${BINARIES_REPO}/releases?per_page=50`, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' }
   })
   if (!res.ok) throw new Error(`GitHub answered ${res.status} while checking for updates.`)
-  pending = pickUpdate((await res.json()) as Release[], app.getVersion())
+  lastReleases = (await res.json()) as Release[]
+  return lastReleases
+}
+
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  pending = pickUpdate(await fetchReleases(), app.getVersion())
   return pending?.info ?? null
+}
+
+export async function releaseNotes(): Promise<ReleaseNote[]> {
+  return changelog(lastReleases.length ? lastReleases : await fetchReleases())
 }
 
 /** The .app bundle this process runs from. */

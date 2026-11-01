@@ -265,6 +265,36 @@ describe.skipIf(!SSHD)('SFTP against a real OpenSSH server', () => {
     expect(ended).toBe(res.session)
   })
 
+  it('deploys a site over SFTP, sending only new and changed files', async () => {
+    const { deploy } = await import('../src/main/deploy')
+    const site = join(dir, 'deploy-src')
+    mkdirSync(join(site, 'node_modules', 'x'), { recursive: true })
+    mkdirSync(join(site, 'includes'), { recursive: true })
+    writeFileSync(join(site, 'index.php'), '<?php echo 1;')
+    writeFileSync(join(site, 'includes', 'config.php'), '<?php return [];')
+    writeFileSync(join(site, '.env'), 'SECRET=local')
+    writeFileSync(join(site, 'node_modules', 'x', 'big.js'), 'x')
+    const remote = join(dir, 'deploy-dst', 'public_html')
+    const fs = await ssh.openFs(id, null, crypto)
+    try {
+      const first = await deploy(fs, site, remote, {}, () => undefined)
+      expect(first.uploaded).toBe(2)
+      expect(readFileSync(join(remote, 'includes', 'config.php'), 'utf8')).toBe('<?php return [];')
+      expect(existsSync(join(remote, '.env'))).toBe(false)
+      expect(existsSync(join(remote, 'node_modules'))).toBe(false)
+
+      const again = await deploy(fs, site, remote, {}, () => undefined)
+      expect(again).toMatchObject({ uploaded: 0, skipped: 2 })
+
+      writeFileSync(join(site, 'index.php'), '<?php echo "two";')
+      const changed = await deploy(fs, site, remote, {}, () => undefined)
+      expect(changed.uploaded).toBe(1)
+      expect(readFileSync(join(remote, 'index.php'), 'utf8')).toBe('<?php echo "two";')
+    } finally {
+      fs.close()
+    }
+  })
+
   it('refuses to connect if the server identity changes', async () => {
     ssh.trustHostKey(id, 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     await expect(ssh.connectSftp(id, null, crypto)).rejects.toThrow(/identity changed/)
