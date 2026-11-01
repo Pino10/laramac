@@ -47,7 +47,8 @@ jobs:
             [ -z "$version" ] || [ "$version" = "null" ] && continue
             for arch in aarch64 x86_64; do
               name="php-$version-fpm-macos-$arch.tar.gz"
-              if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing"; then
+              sums="php-$version-macos-$arch.sha256"
+              if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing" || ! grep -qx "$sums" <<<"$existing"; then
                 runner=$([ "$arch" = aarch64 ] && echo macos-latest || echo macos-15-intel)
                 include=$(jq -c --arg v "$version" --arg m "$minor" --arg a "$arch" --arg r "$runner" '. + [{version:$v, minor:$m, arch:$a, runner:$r}]' <<<"$include")
                 echo "Needs a build: PHP $version for $arch"
@@ -115,4 +116,5 @@ jobs:
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
               --title "PHP builds" --notes "Static PHP builds used by Laramac, rebuilt automatically when php.net publishes a new release."
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            php-${{ matrix.version }}-*-macos-${{ matrix.arch }}.*
+            php-${{ matrix.version }}-*-macos-${{ matrix.arch }}.* \
+            php-${{ matrix.version }}-macos-${{ matrix.arch }}.sha256

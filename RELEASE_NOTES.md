@@ -15,11 +15,12 @@ Laramac is a free, open-source local development environment for macOS, inspired
 - **Interface.** Uses the full window in full screen, a new notification bell whose list scrolls, and a fresher Liquid Glass look.
 
 ## Fixed
+- 0.6.1: Laramac only installs one of its own PHP builds when the build's checksum list is published, and checks every download against it.
 - MySQL now installs the newest 8.4 build from Oracle's CDN and recovers from an interrupted first start.
 
 ## Download
-- **Apple Silicon (M1 and later):** Laramac-0.6.0-arm64.dmg
-- **Intel:** Laramac-0.6.0-x64.dmg
+- **Apple Silicon (M1 and later):** Laramac-0.6.1-arm64.dmg
+- **Intel:** Laramac-0.6.1-x64.dmg
 
 The app is not notarized by Apple yet, so confirm the first launch: open Laramac, click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**. From 0.6 on, updates install from inside the app.
 

@@ -127,10 +127,12 @@ export function parseLaramacPhpAssets(assets: ReleaseAsset[], arch = phpArch()):
     if (!m) continue
     const v = m[1]
     const cli = byName.get(`php-${v}-cli-macos-${arch}.tar.gz`)
-    if (!cli) continue
+    const sums = byName.get(`php-${v}-macos-${arch}.sha256`)
+    // Only offer a build whose checksum list was published with it.
+    if (!cli || !sums) continue
     const minor = minorOf(v)
     if (out[minor] && compareVersions(out[minor].version, v) >= 0) continue
-    out[minor] = { version: v, cliUrl: cli, fpmUrl: a.browser_download_url, sumsUrl: byName.get(`php-${v}-macos-${arch}.sha256`) ?? null, source: 'laramac' }
+    out[minor] = { version: v, cliUrl: cli, fpmUrl: a.browser_download_url, sumsUrl: sums, source: 'laramac' }
   }
   return out
 }

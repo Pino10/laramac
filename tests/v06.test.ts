@@ -102,6 +102,12 @@ describe('PHP builds and checksums', () => {
     expect(builds['8.5']).toMatchObject({ version: '8.5.12', source: 'laramac', sumsUrl: 'https://x/php-8.5.12-macos-aarch64.sha256' })
   })
 
+  it('never offers a Laramac PHP build without its checksum list', () => {
+    const u = (n: string): { name: string; browser_download_url: string } => ({ name: n, browser_download_url: `https://x/${n}` })
+    const builds = parseLaramacPhpAssets([u('php-8.5.12-cli-macos-aarch64.tar.gz'), u('php-8.5.12-fpm-macos-aarch64.tar.gz')], 'aarch64')
+    expect(builds).toEqual({})
+  })
+
   it('finds a file in a checksum list', () => {
     const a = 'a'.repeat(64)
     const b = 'b'.repeat(64)
