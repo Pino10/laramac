@@ -1,4 +1,4 @@
-import { Activity as Pulse, Check, Database, Globe, Mail, Plus, Sparkles, Terminal, Upload } from 'lucide-react'
+import { ArrowUpRight, Database, Mail, Plus, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
@@ -6,81 +6,28 @@ import ServiceRow from '../components/ServiceRow'
 
 const groups: { id: ServiceGroup; title: string }[] = [
   { id: 'web', title: 'Web servers' },
-  { id: 'runtime', title: 'Runtime' },
+  { id: 'runtime', title: 'PHP' },
   { id: 'database', title: 'Databases' },
   { id: 'mail', title: 'Mail' }
 ]
 
-function headline(running: number, installed: number, failing: boolean, ready: boolean): { title: React.ReactNode; sub: string } {
-  if (!ready || installed === 0)
-    return {
-      title: (
-        <>
-          Set up your <em>stack</em>.
-        </>
-      ),
-      sub: 'One click below installs everything you need, or pick pieces from the lists.'
-    }
-  if (failing)
-    return {
-      title: (
-        <>
-          Something needs <em>a look</em>.
-        </>
-      ),
-      sub: 'A service could not start. The details are below.'
-    }
-  if (running === 0)
-    return {
-      title: (
-        <>
-          Everything is <em>resting</em>.
-        </>
-      ),
-      sub: 'Start all to bring your sites up.'
-    }
-  if (running === installed)
-    return {
-      title: (
-        <>
-          Everything is <em>running</em>.
-        </>
-      ),
-      sub: 'Your sites are live on this Mac.'
-    }
-  return {
-    title: (
-      <>
-        {running} of {installed} services <em>running</em>.
-      </>
-    ),
-    sub: 'Start the rest when you need them.'
-  }
-}
-
-function greeting(): string {
-  const h = new Date().getHours()
-  const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-  const day = new Date().toLocaleDateString(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long'
-  })
-  return `${part} · ${day}`
+function summary(running: number, installed: number, failing: string | null, off: string[]): { title: string; sub: string } {
+  if (failing) return { title: `${failing} needs attention`, sub: 'It could not start. The reason is shown in its row below.' }
+  if (running === 0) return { title: 'Everything is stopped', sub: 'Start all to bring your sites back up.' }
+  if (running === installed) return { title: 'Everything is running', sub: 'Your sites are live on this Mac.' }
+  return { title: `${running} of ${installed} services running`, sub: `${off.join(', ')} ${off.length === 1 ? 'is' : 'are'} off.` }
 }
 
 export default function Dashboard(): React.JSX.Element {
-  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites, php, setPage } = useApp()
+  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, php } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
-  const failing = services.some((s) => s.status === 'error')
+  const failing = services.find((s) => s.status === 'error')?.name ?? null
   const installing = jobs.some((j) => j.status === 'running')
   const tld = settings?.tld ?? 'test'
   const mailpit = services.find((s) => s.id === 'mailpit')
-  // Ready means a web server and PHP are installed; until then the welcome card leads.
   const ready = services.some((s) => s.group === 'web' && s.status !== 'not-installed') && services.some((s) => s.id === 'php' && s.status !== 'not-installed')
-  const { title, sub } = headline(running, installed.length, failing, ready)
 
   const setup = tools
     ? [
@@ -88,7 +35,7 @@ export default function Dashboard(): React.JSX.Element {
           done: tools.dnsReady,
           key: 'dns',
           title: `Turn on .${tld} addresses`,
-          hint: `So your browser can open names like ${sites[0]?.domain ?? `myblog.${tld}`}. macOS asks for your password once.`,
+          hint: `Lets your browser open names like myblog.${tld}. macOS asks for your password once.`,
           action: 'Turn on',
           run: () => api.invoke('tools:setup-dns').then(setTools)
         },
@@ -96,7 +43,7 @@ export default function Dashboard(): React.JSX.Element {
           done: tools.caTrusted,
           key: 'ca',
           title: 'Trust local HTTPS',
-          hint: `Browsers will accept certificates Laramac makes. They only work for .${tld} names.`,
+          hint: `Browsers accept the certificates Laramac makes. They only work for .${tld} names.`,
           action: 'Trust',
           run: () => api.invoke('tools:trust-ca').then(setTools)
         }
@@ -111,27 +58,103 @@ export default function Dashboard(): React.JSX.Element {
     const next = await act('tool-phpmyadmin', () => api.invoke('tools:install', 'phpmyadmin'))
     if (next) {
       setTools(next)
-      notify({
-        kind: 'info',
-        text: 'phpMyAdmin is installed. Start MySQL, PHP and Nginx, then open it.'
-      })
+      notify({ kind: 'info', text: 'phpMyAdmin is installed. Start MySQL, PHP and Apache, then open it.' })
     }
   }
 
+  const runSetup = async (): Promise<void> => {
+    const report = await act('setup', () => api.invoke('setup:recommended'))
+    setServices(await api.invoke('services:list'))
+    if (!report) return
+    notify(
+      report.failed.length
+        ? { kind: 'error', text: `Set up ${report.done.length} of ${report.done.length + report.failed.length}. ${report.failed.map((f) => `${f.step}: ${f.error}`).join(' ')}` }
+        : { kind: 'info', text: 'Your stack is ready.' }
+    )
+  }
+
+  if (!ready) {
+    const latest = php[0]?.latest
+    return (
+      <div className="onboard">
+        <h1 className="page-title">Set up your stack</h1>
+        <p className="page-desc">
+          Laramac installs everything a PHP site needs, starts it, and gives every folder in your projects folder its own https://name.{tld} address.
+        </p>
+        <ol className="plan">
+          <li>
+            <strong>PHP {latest}</strong>
+            <span>The newest release, with all common extensions</span>
+          </li>
+          <li>
+            <strong>Apache</strong>
+            <span>Serves your sites, with .htaccess support</span>
+          </li>
+          <li>
+            <strong>MySQL 8.4</strong>
+            <span>Plus phpMyAdmin, signed in for you</span>
+          </li>
+          <li>
+            <strong>Mailpit</strong>
+            <span>Catches every email your apps send</span>
+          </li>
+          <li>
+            <strong>.{tld} addresses and HTTPS</strong>
+            <span>macOS asks for your password twice</span>
+          </li>
+        </ol>
+        <div className="onboard-actions">
+          <button className="btn btn-primary btn-lg" disabled={busy.has('setup') || installing} onClick={runSetup}>
+            {busy.has('setup') ? 'Setting up…' : 'Set up my stack'}
+          </button>
+          <span className="hint">
+            {tools && !tools.homebrew ? (
+              <>
+                Apache installs with{' '}
+                <button className="link" onClick={() => api.invoke('tools:open-external', 'https://brew.sh')}>
+                  Homebrew
+                </button>
+                . Everything else downloads directly.
+              </>
+            ) : (
+              'Or install pieces one by one below.'
+            )}
+          </span>
+        </div>
+        {groups.map((g) => {
+          const items = services.filter((s) => s.group === g.id)
+          if (items.length === 0) return null
+          return (
+            <section key={g.id}>
+              <h2 className="section-title">{g.title}</h2>
+              <div className="group">
+                {items.map((s) => (
+                  <ServiceRow key={s.id} service={s} />
+                ))}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const { title, sub } = summary(
+    running,
+    installed.length,
+    failing,
+    installed.filter((s) => s.status !== 'running').map((s) => s.name)
+  )
+
   return (
     <>
-      <div className="hero">
+      <div className="page-head">
         <div>
-          <div className="eyebrow">{greeting()}</div>
-          <h1 className="hero-title">{title}</h1>
-          <p className="hero-sub">{sub}</p>
+          <h1 className="page-title">{title}</h1>
+          <p className="page-desc">{sub}</p>
         </div>
         <div className="page-actions">
-          <button
-            className="btn"
-            disabled={busy.has('stop-all') || running === 0}
-            onClick={() => act('stop-all', () => api.invoke('services:stop-all').then(setServices))}
-          >
+          <button className="btn" disabled={busy.has('stop-all') || running === 0} onClick={() => act('stop-all', () => api.invoke('services:stop-all').then(setServices))}>
             Stop all
           </button>
           <button
@@ -139,206 +162,87 @@ export default function Dashboard(): React.JSX.Element {
             disabled={busy.has('start-all') || installing || installed.length === 0 || running === installed.length}
             onClick={() => act('start-all', () => api.invoke('services:start-all').then(setServices))}
           >
-            {busy.has('start-all') ? 'Starting' : 'Start all'}
+            {busy.has('start-all') ? 'Starting…' : 'Start all'}
           </button>
         </div>
       </div>
 
-      {!ready && (
-        <div className="welcome glass">
-          <div>
-            <div className="card-title" style={{ fontSize: 17 }}>
-              <Sparkles size={16} style={{ color: 'var(--accent)' }} /> Set up everything in one click
-            </div>
-            <p className="dim" style={{ margin: '6px 0 0', maxWidth: '62ch' }}>
-              Laramac installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on .{tld} addresses with trusted HTTPS. macOS asks
-              for your password twice along the way.
-            </p>
-            <div className="welcome-steps">
-              {['PHP ' + (php[0]?.latest ?? ''), 'Apache', 'MySQL', 'phpMyAdmin', 'Mailpit', `.${tld} + HTTPS`].map((s) => (
-                <span key={s} className="step-chip">
-                  <Check size={12} /> {s}
-                </span>
-              ))}
-            </div>
-            {tools && !tools.homebrew && (
-              <p className="hint" style={{ marginTop: 10 }}>
-                Apache installs with Homebrew. Get it free at{' '}
-                <button className="link" onClick={() => api.invoke('tools:open-external', 'https://brew.sh')}>
-                  brew.sh
-                </button>
-                ; everything else installs without it.
-              </p>
-            )}
+      {setup.map((step) => (
+        <div key={step.key} className="callout">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong>{step.title}</strong>
+            <span>{step.hint}</span>
           </div>
-          <button
-            className="btn btn-primary"
-            style={{ height: 40, padding: '0 18px', fontSize: 13.5 }}
-            disabled={busy.has('setup') || installing}
-            onClick={async () => {
-              const report = await act('setup', () => api.invoke('setup:recommended'))
-              setServices(await api.invoke('services:list'))
-              if (report) {
-                notify(
-                  report.failed.length
-                    ? {
-                        kind: 'error',
-                        text: `Set up ${report.done.length} of ${report.done.length + report.failed.length}. ${report.failed.map((f) => `${f.step}: ${f.error}`).join(' ')}`
-                      }
-                    : { kind: 'info', text: 'Your stack is ready.' }
-                )
-              }
-            }}
-          >
-            {busy.has('setup') ? 'Setting up' : 'Set up my stack'}
+          <button className="btn" disabled={busy.has(step.key)} onClick={() => act(step.key, step.run)}>
+            {busy.has(step.key) ? 'Waiting for macOS…' : step.action}
           </button>
         </div>
-      )}
-
-      {ready &&
-        setup.map((step) => (
-          <div key={step.key} className="notice glass">
-            <div className="notice-body">
-              <div className="notice-title">{step.title}</div>
-              <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-                {step.hint}
-              </div>
-            </div>
-            <button className="btn" disabled={busy.has(step.key)} onClick={() => act(step.key, step.run)}>
-              {busy.has(step.key) ? 'Waiting for macOS' : step.action}
-            </button>
-          </div>
-        ))}
-
-      {ready && (
-        <div className="stats">
-          <button className="stat glass" style={{ ['--hue' as string]: '#e8532b' }} onClick={() => setPage('sites')}>
-            <div className="stat-label">
-              <Globe size={14} /> Sites
-            </div>
-            <div className="stat-value">{sites.length}</div>
-            <div className="stat-sub">
-              {sites[0] ? `${sites[0].domain}${sites.length > 1 ? ` and ${sites.length - 1} more` : ''}` : 'Add a folder to start'}
-            </div>
-          </button>
-          <div className="stat glass" style={{ ['--hue' as string]: '#10a36b' }}>
-            <div className="stat-label">
-              <Pulse size={14} /> Services
-            </div>
-            <div className="stat-value">
-              {running}
-              <small>of {installed.length}</small>
-            </div>
-            <div className="meter">
-              <span
-                style={{
-                  width: `${installed.length ? (running / installed.length) * 100 : 0}%`
-                }}
-              />
-            </div>
-          </div>
-          <button className="stat glass" style={{ ['--hue' as string]: '#6f74b8' }} onClick={() => setPage('php')}>
-            <div className="stat-label">
-              <Terminal size={14} /> PHP
-            </div>
-            <div className="stat-value">{php.find((p) => p.isDefault)?.minor ?? '–'}</div>
-            <div className="stat-sub">
-              {php.filter((p) => p.installed).length} installed
-              {php.some((p) => p.updateAvailable) ? ' · update ready' : ''}
-            </div>
-          </button>
-          <button className="stat glass" style={{ ['--hue' as string]: '#5b45d6' }} onClick={() => setPage('databases')}>
-            <div className="stat-label">
-              <Database size={14} /> Databases
-            </div>
-            <div className="stat-value">
-              {services.filter((s) => s.group === 'database' && s.status === 'running').length}
-              <small>running</small>
-            </div>
-            <div className="stat-sub">
-              {services
-                .filter((s) => s.group === 'database' && s.status !== 'not-installed')
-                .map((s) => s.name)
-                .join(', ') || 'None installed yet'}
-            </div>
-          </button>
-        </div>
-      )}
+      ))}
 
       <StackMap />
 
-      <div className="launch" style={{ marginTop: 12 }}>
-        <button className="tile glass tile-primary" onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
-          <span className="tile-icon">
-            <Database size={16} />
-          </span>
-          <span>
-            <span className="tile-name" style={{ display: 'block' }}>
-              phpMyAdmin
-            </span>
-            <span className="tile-sub">{busy.has('tool-phpmyadmin') ? 'Installing' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</span>
-          </span>
-        </button>
-        <button
-          className="tile glass"
-          style={{ ['--hue' as string]: '#3d7cf0' }}
-          onClick={() =>
-            mailpit?.status === 'running'
-              ? api.invoke('sites:open-url', 'http://127.0.0.1:8025')
-              : notify({
-                  kind: 'info',
-                  text: 'Start Mailpit first. It is under Mail below.'
-                })
-          }
-        >
-          <span className="tile-icon">
-            <Mail size={16} />
-          </span>
-          <span>
-            <span className="tile-name" style={{ display: 'block' }}>
-              Mail inbox
-            </span>
-            <span className="tile-sub">{mailpit?.status === 'running' ? 'Catching mail' : 'Mailpit is off'}</span>
-          </span>
-        </button>
-        <button className="tile glass" style={{ ['--hue' as string]: '#e8532b' }} onClick={() => setNewProject(true)}>
-          <span className="tile-icon">
-            <Plus size={16} />
-          </span>
-          <span>
-            <span className="tile-name" style={{ display: 'block' }}>
-              New project
-            </span>
-            <span className="tile-sub">WordPress, Laravel or PHP</span>
-          </span>
-        </button>
-        <button className="tile glass" style={{ ['--hue' as string]: '#0f7891' }} onClick={() => setImportOpen(true)}>
-          <span className="tile-icon">
-            <Upload size={16} />
-          </span>
-          <span>
-            <span className="tile-name" style={{ display: 'block' }}>
-              Import
-            </span>
-            <span className="tile-sub">From Laragon, a zip or a .sql</span>
-          </span>
-        </button>
+      <div className="overview-split">
+        <div>
+          {groups.map((g) => {
+            const items = services.filter((s) => s.group === g.id)
+            if (items.length === 0) return null
+            return (
+              <section key={g.id}>
+                <h2 className="section-title">{g.title}</h2>
+                <div className="group">
+                  {items.map((s) => (
+                    <ServiceRow key={s.id} service={s} />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+        <aside>
+          <h2 className="section-title">Shortcuts</h2>
+          <div className="group">
+            <button className="action-row" onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
+              <Database size={16} />
+              <span>
+                <strong>phpMyAdmin</strong>
+                <small>{busy.has('tool-phpmyadmin') ? 'Installing…' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</small>
+              </span>
+              <ArrowUpRight size={14} className="action-go" />
+            </button>
+            <button
+              className="action-row"
+              onClick={() =>
+                mailpit?.status === 'running'
+                  ? api.invoke('sites:open-url', 'http://127.0.0.1:8025')
+                  : notify({ kind: 'info', text: 'Start Mailpit first. It is under Mail.' })
+              }
+            >
+              <Mail size={16} />
+              <span>
+                <strong>Mail inbox</strong>
+                <small>{mailpit?.status === 'running' ? 'Catching mail on port 1025' : 'Mailpit is off'}</small>
+              </span>
+              <ArrowUpRight size={14} className="action-go" />
+            </button>
+            <button className="action-row" onClick={() => setNewProject(true)}>
+              <Plus size={16} />
+              <span>
+                <strong>New project</strong>
+                <small>WordPress, Laravel or plain PHP</small>
+              </span>
+              <span className="kbd">⌘N</span>
+            </button>
+            <button className="action-row" onClick={() => setImportOpen(true)}>
+              <Upload size={16} />
+              <span>
+                <strong>Import</strong>
+                <small>From Laragon, a zip or a .sql dump</small>
+              </span>
+              <span className="kbd">⌘I</span>
+            </button>
+          </div>
+        </aside>
       </div>
-
-      {groups.map((g) => {
-        const items = services.filter((s) => s.group === g.id)
-        if (items.length === 0) return null
-        return (
-          <section key={g.id}>
-            <h2 className="section-title">{g.title}</h2>
-            <div className="panel">
-              {items.map((s) => (
-                <ServiceRow key={s.id} service={s} />
-              ))}
-            </div>
-          </section>
-        )
-      })}
     </>
   )
 }

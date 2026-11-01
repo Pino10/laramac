@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { existsSync } from 'fs'
-import { cancelImport, inspect, runImport } from './importer'
+import { cancelImport, importSql, inspect, runImport } from './importer'
+import * as dbadmin from './dbadmin'
+import { homedir } from 'os'
 import { checkForUpdate, installUpdate } from './updater'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
@@ -8,7 +10,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni } from './php'
 import { safeStorage } from 'electron'
-import type { ResetOptions, SshServerInput, UpdateInfo } from '../shared/types'
+import type { DatabaseInfo, ResetOptions, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -176,8 +178,8 @@ function hardenWebContents(): void {
 }
 
 function createTray(): void {
-  // A bridge drawn for the menu bar: 36 px for Retina, black on clear so macOS can tint it.
-  const icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAADG0lEQVR4AeyWSahOYRjHD64prpCScSEyZFoaMywszCRJKSxIhq2l2V5kzUbsJJkyJKEspCQrCywkIa55yu93Oufz3tM53zm37nW/xXf7/9/ned/3eZ/3/73TuT2jBvtrCirbkOYKddYKLSbRt4T6uJVgbIfGVd2yCUzfN+F4bFV0eFxVQf0CBf0Dv8wdEAT0CfxCt6qgSUGG+YFf5s4LAsIcQXN7t6qg6cGwRfhVxrUQZywmxoy4LCmqJO5BjjDZUOprYRnWETAYppiJYy5MMaoIcovCs2C2AxS9YBHsO5LpHEh9NqyLKoJW52SYQtt2WIRddIyDWazKNmTrZYK8UZsygx4l9cPYITALt+lQ0vggsanZimNOTD7KBO1k2DD4GaY4jfMOKuYi1q3AxBhEeRm2wjfwDEzxFcdc27CFqCfIX7I3GXklsZovFFugmENxD/oiL8Heh7Og2EzhK42JcTUuo8ichW9SPUE7SOAveo29BUPcpHIH/oDT4A3ohJ6t7/i3oTGYGox5S20ELDx/RYJ8xA4yUHhbfukEHIXv7duIPQdfwZdQ37YF+GNhCMUfTRo8f5MTv53JEzSciOvQq+4vPYlfhMd0bICujmdH/wn1Ihyn4y70rF3DugOYf8gKWkjXQ+gKPMOuhL9hGfzwhoe7KP4nHSvgczgaOtdcbA2pIA/wCVrd95FYl/cp9iPsbLwnoauouDH4nsVj2PgDriB/nQFecZ/2C3S6/F0hhtQxPlBegs7jnHvw1dCiIA/sJxpcxmVYX1OvNm6XwrdtKTOsgS+gGv4oyDPirZhIo6ox/xXnmc25Pb+xIOqR++r7od8d9AFVQ+QKKcCl24+T0sdOpvXl9KXwlvjxtL6bwhhjpX7Ylx1nvzRW6qdUQyzI785ZEu8LOBXfAWlbmFg/nVRrTBhvG8MjrbH6Ut9YGcZbl2podYXaiNZiuhVqaLNQxXoK/+nKo22n6PfweyP1batCY6uOU0O8ZcwVebvSvcyzft39H7k3wfp5MXltxlYdp4aaIOZpDKRb1hhqUNEUxCLURXOF6i5PFEV/AQAA//9jWAhTAAAABklEQVQDAHpknEkvynRIAAAAAElFTkSuQmCC', 'base64'), { scaleFactor: 2 })
+  // The Laramac mark for the menu bar: 36 px for Retina, black on clear so macOS can tint it.
+  const icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAACL0lEQVR4AeyWu0odURSGJwkkXSDkBZImL5EipEsTkiqQkECKFGly8Q30CbwWFlqJIKIo2thp40vY2NkqFqJ4/b593IetZ+bM4IygMvL/s9a+/WvNmllnfJzdsb82obIH0laorVBZBcrWH8Q7NMhdnifcwW8M96pCj7jtT/A71MfUghrfUPgIC9GvQsOcWoYz8Cesi18IzMIVOAJzUZSQh/8lJ3YT/6buXnJQbWMkUx03L6G3LE3CiHUc7wpTC4ucVgsTYAxjhUG8XE/oNQur8AkUW1w+wzNYF2qopaZaxjCWMR0Hpgk9Z2YNvoDCx/QBZx82BbXUVFtNYxnT2I6zmJDWF/hNmM2yU6zdsI1tGmqqbQy1jWlsc+gm9JWV9zDiN84mvC2obYyob+wvDkJWOP7yYgKOuB7D28YJAYyFCfAd61ZojqnYAc/wp2FPBzDXFNSeQsxYmMzYCzqxQmZX2gEeaIB2ld1llyln1xnbHLoVcqG0A9xUk3aTXWV3KWW32XXGdnwlISf6doAbcviSuY0Cpp8cn4bdZFexPb+T3eRiyrwO8KOY7kn9pwzeFfAV8xE/cOwmTIBdZqwwiJe8hFzzhRvTueTBpa1jDpPDo/jGwFxFUULu+s9F/sEuwbqYR+Av9MM6gM1Fv4T8bfJOJjipjwnwfRnCq0L3sjVAjXE8K6+P24t+CfXu7swYxH9jq9C9nVMVr1USqijVzLY2obI6thVqK1RWgbL1O/cOXQAAAP//w9eH2QAAAAZJREFUAwAE2mpJKQw2xgAAAABJRU5ErkJggg==', 'base64'), { scaleFactor: 2 })
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Laramac')
@@ -574,6 +576,85 @@ function registerIpc(): void {
   })
   handle('shell:resize', (sid, cols, rows) => ssh.resizeShell(String(sid), Number(cols), Number(rows)))
   handle('shell:close', (sid) => ssh.closeShell(String(sid)))
+
+  // ---- Databases (MySQL and MariaDB)
+  const dbEngine = (e: unknown): 'mysql' | 'mariadb' => {
+    if (e === 'mysql' || e === 'mariadb') return e
+    throw new ValidationError('Unknown database engine.')
+  }
+  const dbTarget = (engine: 'mysql' | 'mariadb'): dbadmin.DbTarget => {
+    const client = engine === 'mariadb' ? mariadbClient() : activeMysql() ? mysqlClientPath(activeMysql()!) : null
+    if (!client) throw new Error(`${engine === 'mysql' ? 'MySQL' : 'MariaDB'} is not installed.`)
+    const s = services.list().find((x) => x.id === engine)
+    if (s?.status !== 'running') throw new Error(`Start ${s?.name ?? engine} first.`)
+    return { engine, client, port: engine === 'mysql' ? 3306 : 3307 }
+  }
+  const listAllDbs = async (): Promise<DatabaseInfo[]> => {
+    const out: DatabaseInfo[] = []
+    for (const engine of ['mysql', 'mariadb'] as const) {
+      const s = services.list().find((x) => x.id === engine)
+      if (s?.status !== 'running') continue
+      try {
+        out.push(...(await dbadmin.listDatabases(dbTarget(engine))))
+      } catch {
+        /* server still starting */
+      }
+    }
+    return out
+  }
+  handle('db:list', () => listAllDbs())
+  handle('db:create', async (engine, name) => {
+    await dbadmin.createDatabase(dbTarget(dbEngine(engine)), dbadmin.checkName(String(name)))
+    activity.push('success', `Created database ${name}`)
+    return listAllDbs()
+  })
+  handle('db:drop', async (engine, name) => {
+    await dbadmin.dropDatabase(dbTarget(dbEngine(engine)), dbadmin.checkName(String(name)))
+    activity.push('info', `Deleted database ${name}`)
+    return listAllDbs()
+  })
+  handle('db:export', async (engine, name) => {
+    const t = dbTarget(dbEngine(engine))
+    const db = dbadmin.checkName(String(name))
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')
+    const res = await dialog.showSaveDialog(mainWindow!, {
+      title: `Back up ${db}`,
+      defaultPath: join(homedir(), 'Downloads', `${db}-${stamp}.sql.gz`),
+      filters: [
+        { name: 'Compressed SQL', extensions: ['gz'] },
+        { name: 'SQL', extensions: ['sql'] }
+      ]
+    })
+    if (res.canceled || !res.filePath) return null
+    await jobs.run(`Backing up ${db}`, async (update) => {
+      update(null, `Backing up ${db}`)
+      await dbadmin.exportDatabase(t, db, res.filePath!)
+    })
+    activity.push('success', `Backed up ${db}`, res.filePath)
+    return res.filePath
+  })
+  handle('db:import', async (engine, name) => {
+    const t = dbTarget(dbEngine(engine))
+    const db = dbadmin.checkName(String(name))
+    const res = await dialog.showOpenDialog(mainWindow!, {
+      title: `Import into ${db}`,
+      buttonLabel: 'Import',
+      properties: ['openFile'],
+      filters: [{ name: 'SQL dump', extensions: ['sql', 'gz'] }]
+    })
+    if (res.canceled || !res.filePaths[0]) return null
+    const file = res.filePaths[0]
+    await jobs.run(`Importing into ${db}`, (update) =>
+      importSql(file, { client: t.client, engine: t.engine, port: t.port, database: db }, (p) => update(p, `Importing ${file.split('/').pop()}`))
+    )
+    activity.push('success', `Imported into ${db}`)
+    return listAllDbs()
+  })
+  handle('db:open', async (engine, name) => {
+    const db = dbadmin.checkName(String(name))
+    const server = dbEngine(engine) === 'mysql' ? 1 : 2
+    await shell.openExternal(`http://phpmyadmin.${getSettings().tld}/index.php?route=/database/structure&server=${server}&db=${encodeURIComponent(db)}`)
+  })
 
   handle('activity:list', () => activity.list())
   handle('activity:clear', () => activity.clear())

@@ -36,7 +36,6 @@ export default function Sidebar(): React.JSX.Element {
         <img className="brand-icon" src={icon} alt="" draggable={false} />
         <span>
           Laramac
-          <small>Local web, made easy</small>
         </span>
       </div>
       <nav className="nav" aria-label="Main">

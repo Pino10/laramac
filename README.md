@@ -1,111 +1,112 @@
-# Laramac
+<p align="center">
+  <img src="build/icon.png" width="128" alt="Laramac">
+</p>
 
-A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
+<h1 align="center">Laramac</h1>
 
-**Status: v0.7.0, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+<p align="center">A fast, free local development environment for macOS.<br>PHP, Apache, MySQL and everything around them, in one app.</p>
 
-## What it does
+<p align="center">
+  <a href="https://github.com/Pino10/laramac/releases/latest">Download</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#security">Security</a>
+</p>
 
-- **Sites:** every folder in `~/Laramac/www` becomes `https://<folder>.test`, with wildcard subdomains.
-- **PHP:** always the newest release of every version from 8.0 to 8.5. A daily workflow builds each new php.net release for both Mac architectures with [static-php-cli](https://github.com/crazywhalecc/static-php-cli), and Laramac offers the update as soon as it is ready. Every build has its extensions compiled in, and Laramac writes a php.ini tuned for local development and for that PHP version. Your own lines go in **Edit php.ini** and always win.
-- **Web servers:** Apache is the main server (80/443, `.htaccess` works). Nginx runs beside it on 8080/8443, or swap them in Settings.
-- **Databases:** MySQL 8.4 (newest build for your Mac), MariaDB, PostgreSQL (any major version), Redis, Memcached, MongoDB and Meilisearch, side by side on their own ports, none needing a password. Admin tools: phpMyAdmin (auto sign-in) and Adminer.
-- **Mail:** Mailpit catches everything your apps send. PHP's `mail()` is wired to it.
-- **HTTPS:** a local certificate authority issues certificates per site. One click to trust it in your keychain.
-- **Public links:** share a site with Cloudflare Tunnel (no account) or ngrok.
-- **Import:** bring in a site from Laragon, a server backup or a teammate. Choose a .zip, .tar.gz, folder or .sql dump: Laramac finds the project and its database, asks a few questions, puts the files in your projects folder, loads the dump into MySQL or MariaDB, and points `wp-config.php` or `.env` at it. ⌘I opens it.
-- **New projects:** blank PHP, WordPress (database created and configured), or Laravel (via Composer, `.env` wired to MySQL and Mailpit).
-- **Editors:** open any site in Cursor or VS Code.
-- **AI:** connect any local model (Ollama, LM Studio, or any OpenAI-compatible server). The assistant proposes actions and you press the button. Install and launch AI tools from **Tools**, as Mac apps or on the command line: Claude Code, Codex, OpenCode, vMLX, LM Studio, Ollama, OpenClaw and Gemini CLI. Pick one to open from every site.
-- **Interface:** designed for macOS 27 Golden Gate (sidebar to the window edge, native Liquid Glass that follows the system transparency slider, Reduce Transparency respected). A live map of your stack on the Overview, where connections carry a moving current when both ends are running. Native Liquid Glass on macOS 26 (vibrancy on earlier versions), Poppins, light and dark themes.
-- **SSH and SFTP:** save servers, work in a full SSH terminal inside Laramac, and browse files WinSCP-style: upload, download, rename, new folder and delete. Host keys are pinned on first connect and passwords are kept in the macOS Keychain.
-- **Updates:** Laramac checks for new versions, shows what changed, and updates itself in place after verifying the download. Your settings, PHP versions, databases and sites stay as they are, because they live outside the app.
-- **Reset:** Settings > Reset clears software, data, settings or system changes without uninstalling. Your projects are never touched.
-- **Keyboard:** ⌘K opens a command bar for every site, service and action. ⌘1 to ⌘8 switch pages, ⌘N starts a new project.
-- **Notifications:** macOS notifications and an in-app activity list for finished installs, shared links and services that stop unexpectedly.
-- **Menu bar:** start and stop everything, open phpMyAdmin, the mail inbox or your projects folder.
+---
 
-## Install
+## Features
 
-Download the DMG for your Mac from [Releases](https://github.com/Pino10/laramac/releases) (`arm64` for Apple Silicon, `x64` for Intel) and drag Laramac to Applications.
+**Sites**
+- Every folder in `~/Laramac/www` becomes `https://<folder>.test`, with wildcard subdomains.
+- Trusted local HTTPS for every site.
+- New WordPress, Laravel or PHP projects in one click.
+- Import from Laragon, a server backup or a teammate: a `.zip`, `.tar.gz`, folder or `.sql` dump. Files, database and config are set up for you.
+- Share any site with a public link through Cloudflare Tunnel or ngrok.
 
-Laramac is ad-hoc signed but not notarized by Apple (that needs a paid developer account), so macOS asks you to confirm the first launch:
+**PHP**
+- PHP 8.0 to 8.5, side by side, chosen per site.
+- Always the newest releases, built for Apple Silicon and Intel, offered as updates as soon as php.net publishes them.
+- All common extensions built in, with a `php.ini` tuned for each version. Add your own settings with **Edit php.ini**.
+- Composer included.
 
-1. Open Laramac. macOS says it cannot verify the developer. Click **Done**.
-2. Open **System Settings > Privacy & Security**, scroll down and click **Open Anyway** next to Laramac, then confirm.
+**Web servers**
+- Apache on ports 80 and 443, with full `.htaccess` support.
+- Nginx alongside on 8080 and 8443, or make it the main server in Settings.
 
-If macOS says Laramac "is damaged" (builds before 0.5.1 were not signed), run this once in Terminal:
+**Databases**
+- MySQL 8.4, MariaDB, PostgreSQL, Redis, Memcached, MongoDB and Meilisearch, each on its own port.
+- Create, back up, restore and delete databases from the app.
+- phpMyAdmin with automatic sign-in, and Adminer.
 
-```sh
-xattr -cr /Applications/Laramac.app && codesign --force --deep --sign - /Applications/Laramac.app
-```
+**Mail**
+- Mailpit catches every email your apps send. PHP's `mail()` is wired to it.
 
-## First run
+**Servers**
+- Save your remote servers and open a full SSH terminal inside Laramac.
+- Browse, upload, download, rename and delete files over SFTP.
 
-1. On the Dashboard, press **Set up** under "Open .test domains" (asks for your password once; it writes `/etc/resolver/test`).
-2. Press **Trust** under "Trust local HTTPS" if you want HTTPS sites without browser warnings.
-3. Press **Set up my stack** on the Overview: it installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, and starts them.
-4. Create a project from **Sites > New project**.
+**AI tools**
+- Install and open Claude Code, Codex, OpenCode, vMLX, LM Studio, Ollama, OpenClaw and Gemini CLI, as Mac apps or in the terminal.
+- Open any site in your chosen tool with one click.
+- A built-in assistant that runs on your own local model.
 
-Projects live in `~/Laramac/www` (if you already have `~/www`, Laramac keeps using it). It is outside Documents on purpose, because Documents is often synced to iCloud, which fights with `node_modules`, `vendor` and database files. Change it in Settings.
+**Everyday**
+- ⌘K command bar for every site, service and action. ⌘1 to ⌘8 switch pages.
+- Menu bar controls, macOS notifications and an activity list.
+- Updates install from inside the app. Settings, PHP versions, databases and sites are kept.
+- **Settings › Reset** clears software, data or settings without uninstalling. Your projects are never touched.
+- Native Liquid Glass on macOS 26 and later, light and dark.
 
-Everything Laramac downloads lives in `~/.laramac`, and settings are in `~/.laramac/settings.json`. Updating replaces only the app, so all of it survives updates.
+## Getting started
 
-### How `.test` domains work
+1. Download the DMG for your Mac from [Releases](https://github.com/Pino10/laramac/releases/latest) (`arm64` for Apple Silicon, `x64` for Intel) and drag Laramac to Applications.
+2. Open Laramac. The first time, macOS asks you to confirm: click **Done**, open **System Settings › Privacy & Security**, and click **Open Anyway**.
+3. On the Overview, press **Set up my stack**. Laramac installs PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on `.test` addresses with HTTPS.
+4. Create a project from **Sites › New project**, or drop a folder into `~/Laramac/www`.
 
-Laramac runs a tiny DNS server on `127.0.0.1:53535` that answers every `*.test` name with `127.0.0.1`, and one file, `/etc/resolver/test`, tells macOS to ask it. No dnsmasq and no `/etc/hosts` edits.
+Apache, Nginx, Redis, MariaDB and Memcached install through [Homebrew](https://brew.sh). Everything else downloads directly.
 
-## Nginx and Apache
+### Where things live
 
-Until the "Build server binaries" workflow has been run on this repo's Actions tab, Laramac installs Nginx and Redis with Homebrew. After it publishes self-contained builds, those two need nothing else. Apache, MariaDB and Memcached always use Homebrew.
+| What | Where |
+| --- | --- |
+| Your projects | `~/Laramac/www` (an existing `~/www` is used if you have one) |
+| PHP, databases, downloads | `~/.laramac` |
+| Settings | `~/.laramac/settings.json` |
 
-PHP, MySQL, PostgreSQL, MongoDB, Mailpit, phpMyAdmin, Adminer, Composer, Cloudflare Tunnel and ngrok are downloaded directly and need no Homebrew.
+Updating Laramac replaces only the app, so all of this stays.
 
-## Develop
+### How `.test` addresses work
 
-```sh
-npm install
-npm run dev         # run the app with hot reload
-npm run typecheck
-npm test            # on Linux with nginx, apache2 and php-fpm installed, also runs end-to-end server tests
-npm run dist        # build a DMG (macOS only)
-```
-
-Releases are built by GitHub Actions: push a tag like `v0.2.0` and DMGs are attached to the release.
-
-### Layout
-
-- `src/main`: Electron main process. `configgen.ts` turns state into Nginx, Apache, PHP-FPM and MySQL config and has no Electron imports, so it is easy to test. `svc/` has one file per service.
-- `src/renderer`: the React interface.
-- `src/shared`: types shared by both sides, including the typed IPC channel map.
-- `tests`: unit tests plus end-to-end tests against real servers.
+Laramac runs a small DNS server on `127.0.0.1:53535` that answers every `*.test` name with `127.0.0.1`. One file, `/etc/resolver/test`, tells macOS to ask it. No `/etc/hosts` edits.
 
 ## Security
 
-Laramac runs servers on your Mac, so it is built to stay closed by default:
+- **Only your Mac can reach your sites**, unless you turn on "Open to other devices". Databases, PHP and Mailpit listen on `127.0.0.1` only.
+- **The local certificate authority is limited to `.test` names**, so it can never vouch for a real website.
+- **The interface is sandboxed.** Every request it makes is validated before anything runs.
+- **Admin rights are used once**, to write `/etc/resolver/test`.
+- **Every download is verified.** PHP builds, PostgreSQL, Composer and app updates are checked against published SHA-256 checksums, and updates are signature-checked before they install.
+- **SSH host keys are pinned** on first connect, and saved passwords are kept in the macOS Keychain.
+- **Imports are checked** for unsafe archives, and SQL dumps cannot run commands on your Mac.
 
-- **Only this Mac can reach your sites.** Nginx and Apache refuse requests from other machines. Turn on "Open to other devices" in Settings to test from a phone. Every database, PHP-FPM, Mailpit and the DNS server listen on 127.0.0.1 only.
-- **The local certificate authority can only vouch for your local suffix.** It carries an X.509 name constraint, so even a leaked key could not impersonate a real website. Keys are readable only by you.
-- **The interface cannot drive the system directly.** The page runs sandboxed with context isolation, a strict Content Security Policy, no navigation and no permissions. Every request it makes is checked in the main process: settings are validated field by field, paths must be your own sites, versions must be plain numbers, and only web addresses can be opened.
-- **Admin rights are used once,** to write `/etc/resolver/<suffix>`. The suffix is limited to reserved names (`test`, `internal`, `lan`, `example`) and checked again before the command runs.
-- **Downloads use HTTPS.** PHP, PostgreSQL and Composer are also checked against published SHA-256 checksums. App updates are checked against the release's SHA256SUMS.txt, then the new app's signature and bundle id are verified before it replaces the old one.
-- **SSH:** host keys are trusted on first use and pinned; a changed key is refused. Saved passwords are encrypted with the macOS Keychain.
-- **Electron's own security switches** are set in the build: the app cannot be run as a plain Node.js process, and `NODE_OPTIONS` and debugging flags are ignored.
-- Settings (which can hold your ngrok token) are saved with owner-only permissions.
-- **Imports are unpacked privately first.** Archive entries that climb out of their folder are refused, links and special files are left out, and size and file-count limits apply. SQL dumps are fed through a filter that refuses client commands (`\!`, `system`, `source`, `tee`, `pager`) and drops statements that switch databases or change users, and the client runs with `--commands=OFF` (MySQL) or `--sandbox` (MariaDB) and `--local-infile=0`. Composer scripts from imported projects only run if you tick the box.
+Please report security issues privately through GitHub security advisories.
 
-The test suite includes attacks: a forged certificate for a real domain, path-traversal version strings, shell metacharacters in settings, requests from another machine on the network, zip-slip and tar traversal archives, symlink archives, and SQL dumps that try to run shell commands. Imports are tested end to end against a real MariaDB server.
+## Development
 
-Report security problems privately through GitHub's security advisories for this repository.
+```sh
+npm install
+npm run dev        # run with hot reload
+npm run typecheck
+npm test
+npm run dist       # build a DMG (macOS)
+```
 
-## Known limits
-
-- Node projects are listed but not proxied yet.
-- PostgreSQL has no `psql` command (the prebuilt binaries omit it). Use Adminer or your own client.
-- MongoDB is the Community Edition under the SSPL, which is free for local development.
-- Apache and Nginx share sites but run on different ports.
-- A new PHP release takes about an hour to be built after php.net publishes it.
-- Firefox keeps its own certificate store, so HTTPS sites may need the CA imported there by hand (`~/.laramac/certs/laramac-ca.pem`).
+- `src/main`: Electron main process. `configgen.ts` generates Apache, Nginx, PHP and MySQL config. `svc/` has one file per service.
+- `src/renderer`: the React interface.
+- `src/shared`: types shared by both, including the typed IPC map.
+- `tests`: unit tests and end-to-end tests against real servers.
 
 ## Contributing
 
@@ -113,4 +114,4 @@ Issues and pull requests are welcome.
 
 ## License
 
-MIT
+MIT. Not affiliated with Laragon or Laravel.

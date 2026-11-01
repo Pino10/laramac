@@ -50,12 +50,6 @@ function Shell(): React.JSX.Element {
   return (
     <>
       <div className="canvas" aria-hidden />
-      <div className="aurora" aria-hidden>
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
       <div className="shell">
         <Sidebar />
         <main className="main">

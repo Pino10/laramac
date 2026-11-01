@@ -1,0 +1,98 @@
+import { execFile, spawn } from 'child_process'
+import { createWriteStream, existsSync, renameSync, rmSync } from 'fs'
+import { basename, dirname, join } from 'path'
+import { createGzip } from 'zlib'
+import { pipeline } from 'stream/promises'
+import type { DatabaseInfo } from '../shared/types'
+
+/**
+ * Everyday database chores for MySQL and MariaDB: list, create, drop, back up.
+ * Every name is checked against a strict pattern before it reaches SQL, and
+ * every command runs through the client with argument arrays, never a shell.
+ */
+export interface DbTarget {
+  engine: 'mysql' | 'mariadb'
+  client: string
+  port: number
+}
+
+const SYSTEM = new Set(['information_schema', 'performance_schema', 'mysql', 'sys'])
+export const DB_NAME = /^[A-Za-z0-9_]{1,64}$/
+
+export function checkName(name: string): string {
+  if (!DB_NAME.test(name)) throw new Error('Database names may use letters, numbers and underscores (up to 64).')
+  if (SYSTEM.has(name.toLowerCase())) throw new Error(`${name} belongs to the database server and cannot be changed here.`)
+  return name
+}
+
+const base = (t: DbTarget): string[] => ['--host=127.0.0.1', `--port=${t.port}`, '--user=root', '--default-character-set=utf8mb4']
+
+function query(t: DbTarget, sql: string): Promise<string[][]> {
+  return new Promise((resolve, reject) => {
+    execFile(t.client, [...base(t), '-N', '-B', '-e', sql], { maxBuffer: 16 * 1024 * 1024 }, (err, out, stderr) => {
+      if (err) return reject(new Error(String(stderr || err.message).trim().split('\n').pop()))
+      resolve(
+        String(out)
+          .split('\n')
+          .filter(Boolean)
+          .map((l) => l.split('\t'))
+      )
+    })
+  })
+}
+
+export async function listDatabases(t: DbTarget): Promise<DatabaseInfo[]> {
+  const rows = await query(
+    t,
+    `SELECT s.SCHEMA_NAME, COUNT(tb.TABLE_NAME), COALESCE(SUM(tb.DATA_LENGTH + tb.INDEX_LENGTH), 0), COALESCE(SUM(tb.TABLE_ROWS), 0)
+     FROM information_schema.SCHEMATA s LEFT JOIN information_schema.TABLES tb ON tb.TABLE_SCHEMA = s.SCHEMA_NAME
+     GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME`
+  )
+  return rows
+    .filter(([name]) => !SYSTEM.has(name.toLowerCase()))
+    .map(([name, tables, bytes, rows]) => ({ engine: t.engine, name, tables: Number(tables), bytes: Number(bytes), rows: Number(rows) }))
+}
+
+export async function createDatabase(t: DbTarget, name: string): Promise<void> {
+  await query(t, `CREATE DATABASE \`${checkName(name)}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+}
+
+export async function dropDatabase(t: DbTarget, name: string): Promise<void> {
+  await query(t, `DROP DATABASE \`${checkName(name)}\``)
+}
+
+/** The dump tool that ships next to the client. */
+export function dumpTool(t: DbTarget): string {
+  const dir = dirname(t.client)
+  for (const name of t.engine === 'mariadb' ? ['mariadb-dump', 'mysqldump'] : ['mysqldump']) {
+    if (existsSync(join(dir, name))) return join(dir, name)
+  }
+  throw new Error(`The ${t.engine === 'mariadb' ? 'mariadb-dump' : 'mysqldump'} tool was not found next to the database client.`)
+}
+
+/** Writes a complete backup (tables, data, routines, triggers, events) to `dest`, gzipped when it ends in .gz. */
+export async function exportDatabase(t: DbTarget, name: string, dest: string): Promise<void> {
+  checkName(name)
+  const tmp = join(dirname(dest), `.${basename(dest)}.part`)
+  const child = spawn(
+    dumpTool(t),
+    [...base(t), '--single-transaction', '--routines', '--triggers', '--events', '--hex-blob', '--no-tablespaces', '--databases', name],
+    { stdio: ['ignore', 'pipe', 'pipe'] }
+  )
+  let stderr = ''
+  child.stderr.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-4000)))
+  const exited = new Promise<number>((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+  try {
+    if (dest.endsWith('.gz')) await pipeline(child.stdout, createGzip(), createWriteStream(tmp, { mode: 0o600 }))
+    else await pipeline(child.stdout, createWriteStream(tmp, { mode: 0o600 }))
+    const code = await exited
+    if (code !== 0) throw new Error(`The backup failed: ${stderr.trim().split('\n').pop() ?? 'unknown error'}`)
+    renameSync(tmp, dest)
+  } catch (err) {
+    rmSync(tmp, { force: true })
+    throw err
+  }
+}

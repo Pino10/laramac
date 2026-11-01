@@ -54,11 +54,10 @@ export const SERVICE_LOOK: Record<string, [string, string]> = {
 }
 
 export function ServiceIcon({ id, status }: { id: string; status: ServiceStatus }): React.JSX.Element {
-  const [letters, hue] = SERVICE_LOOK[id] ?? [id.slice(0, 2), '#8a8f9c']
+  const [letters] = SERVICE_LOOK[id] ?? [id.slice(0, 2)]
   return (
-    <span className="svc-icon" style={{ ['--hue' as string]: hue }} data-off={status === 'not-installed'} aria-hidden>
+    <span className="svc-icon" data-s={status} aria-hidden>
       {letters}
-      {status !== 'not-installed' && <Lamp status={status} />}
     </span>
   )
 }

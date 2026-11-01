@@ -164,6 +164,14 @@ export interface SftpListing {
   entries: SftpEntry[]
 }
 
+export interface DatabaseInfo {
+  engine: 'mysql' | 'mariadb'
+  name: string
+  tables: number
+  bytes: number
+  rows: number
+}
+
 export type SshShellResult = { status: 'connected'; session: string } | { status: 'unknown-host'; fingerprint: string }
 
 export type SftpConnectResult =
@@ -329,6 +337,12 @@ export interface Channels {
   'shell:write': { args: [string, string]; result: void }
   'shell:resize': { args: [string, number, number]; result: void }
   'shell:close': { args: [string]; result: void }
+  'db:list': { args: []; result: DatabaseInfo[] }
+  'db:create': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }
+  'db:drop': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }
+  'db:export': { args: ['mysql' | 'mariadb', string]; result: string | null }
+  'db:import': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] | null }
+  'db:open': { args: ['mysql' | 'mariadb', string]; result: void }
 }
 
 export type ChannelName = keyof Channels

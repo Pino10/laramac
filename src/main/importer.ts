@@ -544,7 +544,15 @@ function runClient(t: SqlTarget, args: string[], input?: NodeJS.ReadableStream, 
 /** Creates the database (if needed) and loads the dump into it. Returns how many lines were skipped. */
 export async function importSql(file: string, t: SqlTarget, onProgress?: (pct: number) => void): Promise<number> {
   if (!/^[A-Za-z0-9_]{1,64}$/.test(t.database)) throw new ImportError('Database names may use letters, numbers and underscores.')
-  await runClient(t, ['-e', `CREATE DATABASE IF NOT EXISTS \`${t.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`])
+  // Remember whether the database is new, so a failed import can remove it again
+  // instead of leaving an empty database behind.
+  let created = false
+  try {
+    await runClient(t, ['-e', `CREATE DATABASE \`${t.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`])
+    created = true
+  } catch (err) {
+    if (!/exists/i.test(String((err as Error).message))) throw err
+  }
 
   const total = statSync(file).size
   let read = 0
@@ -555,7 +563,12 @@ export async function importSql(file: string, t: SqlTarget, onProgress?: (pct: n
   })
   const filter = new DumpFilter()
   const source = /\.gz$/i.test(file) ? raw.pipe(createGunzip()).pipe(filter) : raw.pipe(filter)
-  await runClient(t, [t.database], source)
+  try {
+    await runClient(t, [t.database], source)
+  } catch (err) {
+    if (created) await runClient(t, ['-e', `DROP DATABASE IF EXISTS \`${t.database}\``]).catch(() => undefined)
+    throw err
+  }
   return filter.skipped
 }
 

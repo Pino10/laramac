@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { Readable } from 'stream'
@@ -15,6 +15,7 @@ import {
   runImport,
   scan
 } from '../src/main/importer'
+import * as dbadmin from '../src/main/dbadmin'
 import { waitForPort } from '../src/main/process'
 import { freshEnv } from './helpers'
 
@@ -253,6 +254,65 @@ describe.skipIf(!MARIADBD || process.platform !== 'linux')('real import into Mar
     expect(q('SELECT COUNT(*) FROM shop.products')).toBe('3')
     expect(q("SHOW DATABASES LIKE 'somewhere_else'")).toBe('')
     expect(q('SHOW TRIGGERS FROM shop').length).toBeGreaterThan(0)
+  })
+
+  it('imports a HeidiSQL or phpMyAdmin style dump with a column called source', async () => {
+    const dump = join(data, 'radio.sql')
+    writeFileSync(
+      dump,
+      [
+        '-- HeidiSQL dump',
+        '/*!40101 SET NAMES utf8 */;',
+        '/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;',
+        'CREATE DATABASE IF NOT EXISTS `imperial_radio` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;',
+        'USE `imperial_radio`;',
+        'CREATE TABLE IF NOT EXISTS `plays` (',
+        '  `id` int(11) NOT NULL AUTO_INCREMENT,',
+        '  source VARCHAR(10) NOT NULL,',
+        '  `title` varchar(100) DEFAULT NULL,',
+        '  PRIMARY KEY (`id`)',
+        ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
+        'INSERT INTO `plays` (`id`, source, `title`) VALUES',
+        "\t(1, 'live', 'Morning -- show'),",
+        "\t(2, 'tee', 'It\\'s #1'),",
+        "\t(3, 'source', 'C:\\\\laragon\\\\www');",
+        '/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;',
+        ''
+      ].join('\r\n')
+    )
+    await importSql(dump, { client: CLIENT, engine: 'mariadb', port: 3307, database: 'radio' })
+    expect(q('SELECT COUNT(*) FROM radio.plays')).toBe('3')
+    expect(q('SELECT title FROM radio.plays WHERE id = 2')).toBe("It's #1")
+    expect(q('SELECT title FROM radio.plays WHERE id = 3')).toBe('C:\\\\laragon\\\\www')
+  })
+
+  it('removes a new database again when its import fails', async () => {
+    const dump = join(data, 'broken.sql')
+    writeFileSync(dump, 'CREATE TABLE ok (id int);\nINSERT INTO missing_table VALUES (1);\n')
+    await expect(importSql(dump, { client: CLIENT, engine: 'mariadb', port: 3307, database: 'broken_db' })).rejects.toThrow()
+    expect(q("SHOW DATABASES LIKE 'broken_db'")).toBe('')
+  })
+
+  it('lists, creates, backs up, restores and deletes databases', async () => {
+    const t = { engine: 'mariadb' as const, client: CLIENT, port: 3307 }
+    await dbadmin.createDatabase(t, 'notes_app')
+    q('CREATE TABLE notes_app.notes (id int primary key, body text); INSERT INTO notes_app.notes VALUES (1,"a"),(2,"b");')
+    const list = await dbadmin.listDatabases(t)
+    const notes = list.find((d) => d.name === 'notes_app')
+    expect(notes).toMatchObject({ engine: 'mariadb', tables: 1 })
+    expect(list.some((d) => d.name === 'mysql' || d.name === 'information_schema')).toBe(false)
+
+    const backup = join(data, 'notes.sql.gz')
+    await dbadmin.exportDatabase(t, 'notes_app', backup)
+    expect(statSync(backup).size).toBeGreaterThan(100)
+
+    await dbadmin.dropDatabase(t, 'notes_app')
+    expect(q("SHOW DATABASES LIKE 'notes_app'")).toBe('')
+    await importSql(backup, { client: CLIENT, engine: 'mariadb', port: 3307, database: 'notes_restored' })
+    expect(q('SELECT COUNT(*) FROM notes_restored.notes')).toBe('2')
+
+    await expect(dbadmin.createDatabase(t, 'bad`name')).rejects.toThrow(/letters, numbers/)
+    await expect(dbadmin.dropDatabase(t, 'mysql')).rejects.toThrow(/belongs to the database server/)
   })
 
   it('handles gzipped dumps', async () => {
