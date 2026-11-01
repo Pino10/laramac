@@ -289,7 +289,7 @@ Connect once, with your GitHub CLI sign-in or a personal access token (kept encr
 
 <img src="docs/screenshots/security.png" alt="A code review report" width="820">
 
-**Code review.** Pick a site in www, one of your GitHub repositories, or an Azure DevOps repository. Paste a token (and, for Azure DevOps, your organization) and press **Show my repositories** to pick from a list; any other Git address works too. Tokens are used once and not saved. Choose the reviewer and what to look for (security, bugs, or everything):
+**Code review.** Pick a site in www, one of your GitHub repositories, or an Azure DevOps repository. Paste a token (and, for Azure DevOps, your organization) and press **Show my repositories** to pick from a list; any other Git address works too. Each review downloads its own private copy, deleted as soon as the review finishes; only the report stays. Tokens are used once and not saved. Choose the reviewer and what to look for (security, bugs, or everything):
 
 - **Claude Code** reads the whole project itself in read-only mode: it can open and search files, but not change or run anything. It needs Claude Code's command line tool, which is separate from the Claude desktop app; **Install Claude Code** sets it up.
 - **Your model** (LM Studio, Ollama, vMLX, oMLX, or a cloud API you added) reads the most important files first, in parts, and the parts are merged into one report.

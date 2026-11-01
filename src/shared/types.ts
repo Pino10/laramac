@@ -591,6 +591,8 @@ export interface ReviewInfo {
   at: string
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
   secrets: number
+  /** Downloaded for this review only; the copy was deleted when it finished. */
+  remote?: boolean
 }
 
 export interface ReviewResult {
@@ -604,6 +606,7 @@ export interface ReviewResult {
   ms: number
   reportPath: string
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
+  remote?: boolean
 }
 
 export interface AuditFinding {

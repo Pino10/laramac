@@ -883,20 +883,28 @@ function registerIpc(): void {
         } catch {
           tok = null
         }
-        root = await review.cloneForReview(`https://github.com/${src.repo}.git`, tok, src.repo.replace('/', '-'))
+        root = await review.cloneForReview(`https://github.com/${src.repo}.git`, tok)
         name = src.repo
       } else {
         if (typeof src.url !== 'string') throw new ValidationError('Enter the repository address.')
         update(null, 'Downloading the repository')
         const nameFromUrl = src.url.replace(/\.git$/, '').split('/').filter(Boolean).pop() ?? 'repo'
-        root = await review.cloneForReview(src.url.trim(), typeof src.token === 'string' && src.token.trim() ? src.token.trim() : null, nameFromUrl)
+        root = await review.cloneForReview(src.url.trim(), typeof src.token === 'string' && src.token.trim() ? src.token.trim() : null)
         name = nameFromUrl
       }
-      return review.runReview({ root, name, reviewer, focus, modelName: st.llm.model }, update)
+      const remote = src.kind !== 'site'
+      try {
+        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, remote }, update)
+      } finally {
+        // The downloaded code exists only for this review: it vanishes as soon as the review ends.
+        if (remote) review.endReviewSession(root)
+      }
     })
     activity.push('success', `Reviewed ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings, ${result.secrets.length} keys in files.`)
     return result
   })
+  // Review sessions never outlive the app: anything left from a crash is removed at start.
+  review.cleanReviewSessions()
   dumps.dumpEvents.on('dump', (d) => send('dumps:new', d))
   const restartPhp = async (): Promise<void> => {
     // PHP-FPM reads its environment when it starts.
@@ -1014,6 +1022,7 @@ function registerIpc(): void {
   handle('review:open', async (id, what) => {
     const info = review.listReviews().find((r) => r.id === id)
     if (!info) throw new ValidationError('That review is gone.')
+    if (info.remote && what !== 'report') throw new ValidationError('The downloaded copy was deleted when the review finished. Import the project (Sites › Import) to work on it.')
     // Only folders Laramac itself reviewed: a site, or a copy in the reviews folder.
     const folder = normalize(info.folder)
     const allowed = folder.startsWith(normalize(review.reviewSourcesDir()) + '/') || scanSites().some((s) => s.path === folder)

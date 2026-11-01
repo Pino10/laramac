@@ -1,3 +1,9 @@
+## New in 0.17.1
+
+- **Private review sessions:** every code review of a GitHub, Azure DevOps or other Git repository now downloads its own private copy, and that copy is deleted the moment the review finishes, whether it succeeded or not. Only the report stays. Reviews never share or reuse code, so you can run several at once.
+- **Claude Code leaves nothing behind:** reviews run as one-off Claude Code sessions that are not saved to disk.
+- **Web scans** remove their raw results even when a scan stops early. Anything left over from a crash is cleaned up when Laramac starts.
+
 ## New in 0.17
 
 ### Import any project

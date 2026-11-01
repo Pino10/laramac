@@ -211,7 +211,7 @@ export default function Security(): React.JSX.Element {
                 </details>
               </>
             )}
-            {kind !== 'site' && <div className="hint">Laramac downloads a read-only copy into its own folder. The token is used once and not saved.</div>}
+            {kind !== 'site' && <div className="hint">Each review downloads its own private copy, and the copy is deleted the moment the review finishes. Only the report stays. The token is used once and not saved.</div>}
 
             <div className="sec-row">
               <div className="field">
@@ -269,6 +269,7 @@ export default function Security(): React.JSX.Element {
               title={result && !opened ? result.title : opened!.info.title}
               md={result && !opened ? result.markdown : opened!.md}
               id={result && !opened ? result.id : opened!.info.id}
+              remote={result && !opened ? result.remote : opened!.info.remote}
               onAgent={() => {
                 const id = result && !opened ? result.id : opened!.info.id
                 void act('review-open', () => api.invoke('review:open', id, 'agent')).then(() => notify({ kind: 'info', text: 'Your AI tool is open in the project, and the fix request is copied. Paste it in.' }))
@@ -297,9 +298,11 @@ export default function Security(): React.JSX.Element {
                       <div className="row-sub">{h.reviewer === 'claude' ? 'Claude Code' : 'Model'} · {h.focus}</div>
                     </button>
                     <Counts counts={h.counts} secrets={h.secrets} />
-                    <button className="icon-btn" data-tip="Show folder" aria-label="Show folder" onClick={() => act('review-open', () => api.invoke('review:open', h.id, 'folder'))}>
-                      <FolderOpen />
-                    </button>
+                    {!h.remote && (
+                      <button className="icon-btn" data-tip="Show folder" aria-label="Show folder" onClick={() => act('review-open', () => api.invoke('review:open', h.id, 'folder'))}>
+                        <FolderOpen />
+                      </button>
+                    )}
                     <button
                       className="icon-btn danger-text"
                       data-tip="Delete"
@@ -326,7 +329,7 @@ export default function Security(): React.JSX.Element {
   )
 }
 
-function ReportView({ title, md, id, onAgent }: { title: string; md: string; id: string; onAgent: () => void }): React.JSX.Element {
+function ReportView({ title, md, id, onAgent, remote }: { title: string; md: string; id: string; onAgent: () => void; remote?: boolean }): React.JSX.Element {
   const { act } = useApp()
   const counts = { critical: 0, high: 0, medium: 0, low: 0 }
   for (const m of md.matchAll(/^#{2,4}\s*\[(CRITICAL|HIGH|MEDIUM|LOW)\]/gim)) counts[m[1].toLowerCase() as keyof typeof counts]++
@@ -342,9 +345,15 @@ function ReportView({ title, md, id, onAgent }: { title: string; md: string; id:
           <button className="btn btn-sm" onClick={() => act('review-open', () => window.laramac.invoke('review:open', id, 'report'))}>
             <FileText size={13} /> Open report
           </button>
-          <button className="btn btn-sm btn-primary" onClick={onAgent}>
-            <Sparkles size={13} /> Fix with AI
-          </button>
+          {remote ? (
+            <span className="hint" data-tip="The downloaded code was deleted when the review finished">
+              Code deleted after review
+            </span>
+          ) : (
+            <button className="btn btn-sm btn-primary" onClick={onAgent}>
+              <Sparkles size={13} /> Fix with AI
+            </button>
+          )}
         </span>
       </div>
       <Answer text={md.replace(/^# .*\n/, '')} />

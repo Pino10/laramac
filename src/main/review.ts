@@ -5,7 +5,8 @@
  */
 import { execFile, spawn } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
-import { extname, join, relative } from 'path'
+import { dirname, extname, join, relative, sep } from 'path'
+import { randomBytes } from 'crypto'
 import type { ReviewFocus, ReviewInfo, ReviewResult, SecretHit } from '../shared/types'
 import { dirs } from './paths'
 import { chatWithLlm } from './models'
@@ -125,7 +126,7 @@ Do not change any file.
 ${FORMAT}`
 }
 
-function runClaude(cwd: string, prompt: string, onLine: (l: string) => void): Promise<string> {
+function runClaude(cwd: string, prompt: string, onLine: (l: string) => void, persistFlag = true): Promise<string> {
   const claude = findCli(['claude'])
   if (!claude) {
     const app = existsSync('/Applications/Claude.app')
@@ -139,7 +140,8 @@ function runClaude(cwd: string, prompt: string, onLine: (l: string) => void): Pr
   }
   return new Promise((resolve, reject) => {
     // Plan mode and read-only tools: Claude Code can read and search, but not edit or run anything.
-    const child = spawn(claude, ['-p', prompt, '--output-format', 'text', '--permission-mode', 'plan', '--allowedTools', 'Read,Grep,Glob'], {
+    // Its own one-off session that Claude Code does not save, so no copy of the code or findings stays behind.
+    const child = spawn(claude, ['-p', prompt, '--output-format', 'text', '--permission-mode', 'plan', '--allowedTools', 'Read,Grep,Glob', ...(persistFlag ? ['--no-session-persistence'] : [])], {
       cwd,
       env: { ...process.env, ...runtimeEnv() },
       stdio: ['ignore', 'pipe', 'pipe']
@@ -159,6 +161,8 @@ function runClaude(cwd: string, prompt: string, onLine: (l: string) => void): Pr
     child.on('exit', (code) => {
       clearTimeout(timer)
       if (code === 0 && out.trim()) resolve(out.trim())
+      // Older Claude Code versions do not know the flag; run again without it.
+      else if (persistFlag && /unknown option.*no-session-persistence/i.test(err)) runClaude(cwd, prompt, onLine, false).then(resolve, reject)
       else if (/log ?in|auth|credential|api key/i.test(err)) reject(new Error('Claude Code is not signed in. Open it once in Terminal and sign in, then try again.'))
       else reject(new Error(`Claude Code stopped without a report. ${err.trim().split('\n').slice(-3).join(' ')}`.trim()))
     })
@@ -237,7 +241,7 @@ export function countFindings(md: string): Record<'critical' | 'high' | 'medium'
 
 const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'project'
 
-export async function runReview(o: { root: string; name: string; reviewer: 'claude' | 'model'; focus: ReviewFocus; modelName: string }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
+export async function runReview(o: { root: string; name: string; reviewer: 'claude' | 'model'; focus: ReviewFocus; modelName: string; remote?: boolean }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
   const started = Date.now()
   update(5, 'Listing the source files')
   const files = listSourceFiles(o.root)
@@ -257,8 +261,8 @@ export async function runReview(o: { root: string; name: string; reviewer: 'clau
   const id = `${slugOf(o.name)}-${when.toISOString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   const reportPath = join(reviewsDir(), `${id}.md`)
   writeFileSync(reportPath, markdown)
-  writeFileSync(join(reviewsDir(), `${id}.json`), JSON.stringify({ id, title, folder: o.root, reviewer: o.reviewer, focus: o.focus, at: when.toISOString(), counts: countFindings(report), secrets: secrets.length }))
-  return { id, title, folder: o.root, reviewer: o.reviewer, markdown, secrets, files: files.length, ms: Date.now() - started, reportPath, counts: countFindings(report) }
+  writeFileSync(join(reviewsDir(), `${id}.json`), JSON.stringify({ id, title, folder: o.remote ? '' : o.root, reviewer: o.reviewer, focus: o.focus, at: when.toISOString(), counts: countFindings(report), secrets: secrets.length, remote: !!o.remote }))
+  return { id, title, folder: o.remote ? '' : o.root, remote: !!o.remote, reviewer: o.reviewer, markdown, secrets, files: files.length, ms: Date.now() - started, reportPath, counts: countFindings(report) }
 }
 
 export function listReviews(): ReviewInfo[] {
@@ -297,21 +301,41 @@ export function gitAuthHeader(url: string, token: string): string {
   return `AUTHORIZATION: basic ${Buffer.from(`${user}:${token}`).toString('base64')}`
 }
 
-/** A fresh shallow copy of a repository, only for reading. */
-export function cloneForReview(url: string, token: string | null, name: string): Promise<string> {
+/**
+ * A private session folder for one review: a fresh shallow copy of the repository, only for
+ * reading. Every review gets its own, so reviews never share or reuse code, and the caller
+ * deletes it with endReviewSession as soon as the review is done.
+ */
+export function cloneForReview(url: string, token: string | null): Promise<string> {
   if (!/^https:\/\/[^\s'"]+$/.test(url)) return Promise.reject(new Error('Use the https address of the repository.'))
-  const target = join(reviewSourcesDir(), slugOf(name))
-  rmSync(target, { recursive: true, force: true })
-  mkdirSync(reviewSourcesDir(), { recursive: true })
+  mkdirSync(reviewSourcesDir(), { recursive: true, mode: 0o700 })
+  const session = join(reviewSourcesDir(), `session-${randomBytes(8).toString('hex')}`)
+  mkdirSync(session, { mode: 0o700 })
+  const target = join(session, 'code')
   const origin = new URL(url).origin
   const args = [...(token ? ['-c', `http.${origin}/.extraheader=${gitAuthHeader(url, token)}`] : []), 'clone', '--depth', '1', '--quiet', url, target]
   return new Promise((resolve, reject) => {
     execFile('git', args, { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024 }, (err, _o, stderr) => {
       if (!err) return resolve(target)
+      endReviewSession(target)
       const msg = String(stderr || err.message)
       reject(new Error(/Authentication|403|401|could not read Username|not found/i.test(msg) ? 'The repository could not be read. Check the address, and add a token if it is private.' : `Cloning failed: ${msg.trim().split('\n').pop()}`))
     })
   })
+}
+
+/** Deletes a review session folder. Only ever removes folders inside the review sessions area. */
+export function endReviewSession(codeDir: string): void {
+  const session = dirname(codeDir)
+  const root = reviewSourcesDir()
+  if (!session.startsWith(root + sep) || !/session-[a-f0-9]{16}$/.test(session)) return
+  rmSync(session, { recursive: true, force: true })
+}
+
+/** Removes session folders left behind if Laramac quit in the middle of a review. */
+export function cleanReviewSessions(): void {
+  if (!existsSync(reviewSourcesDir())) return
+  for (const f of readdirSync(reviewSourcesDir())) rmSync(join(reviewSourcesDir(), f), { recursive: true, force: true })
 }
 
 export interface RemoteRepo {

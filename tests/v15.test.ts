@@ -231,7 +231,7 @@ describe('code review', () => {
     expect(r.countFindings('### [HIGH] SQL injection\n### [low] Style\n## Summary')).toEqual({ critical: 0, high: 1, medium: 0, low: 1 })
     expect(r.gitAuthHeader('https://dev.azure.com/org/p/_git/repo', 'PAT')).toBe(`AUTHORIZATION: basic ${Buffer.from('pat:PAT').toString('base64')}`)
     expect(r.gitAuthHeader('https://github.com/a/b.git', 'T')).toContain(Buffer.from('x-access-token:T').toString('base64'))
-    await expect(r.cloneForReview('git@github.com:a/b.git', null, 'b')).rejects.toThrow(/https/)
+    await expect(r.cloneForReview('git@github.com:a/b.git', null)).rejects.toThrow(/https/)
   })
 
   it('reviews with the chosen model and saves a report with the leaked keys', async () => {
