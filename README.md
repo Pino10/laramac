@@ -2,7 +2,7 @@
 
 A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
 
-**Status: v0.5, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+**Status: v0.5.1, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
 
 ## What it does
 
@@ -22,18 +22,20 @@ A free, open-source local development environment for macOS, inspired by [Larago
 - **Notifications:** macOS notifications and an in-app activity list for finished installs, shared links and services that stop unexpectedly.
 - **Menu bar:** start and stop everything, open phpMyAdmin, the mail inbox or your projects folder.
 
-## Install (unsigned build)
+## Install
 
-Laramac is not signed with an Apple Developer certificate, so macOS shows a warning the first time.
+Download the DMG for your Mac from [Releases](https://github.com/Pino10/laramac/releases) (`arm64` for Apple Silicon, `x64` for Intel) and drag Laramac to Applications.
 
-1. Download the DMG for your Mac from Releases (`arm64` for Apple Silicon, `x64` for Intel).
-2. Drag Laramac to Applications.
-3. Right-click Laramac, choose **Open**, then confirm.
-4. If macOS still blocks it, open **System Settings > Privacy & Security** and choose **Open Anyway**, or run:
+Laramac is ad-hoc signed but not notarized by Apple (that needs a paid developer account), so macOS asks you to confirm the first launch:
 
-   ```sh
-   xattr -dr com.apple.quarantine /Applications/Laramac.app
-   ```
+1. Open Laramac. macOS says it cannot verify the developer. Click **Done**.
+2. Open **System Settings > Privacy & Security**, scroll down and click **Open Anyway** next to Laramac, then confirm.
+
+If macOS says Laramac "is damaged" (builds before 0.5.1 were not signed), run this once in Terminal:
+
+```sh
+xattr -cr /Applications/Laramac.app && codesign --force --deep --sign - /Applications/Laramac.app
+```
 
 ## First run
 

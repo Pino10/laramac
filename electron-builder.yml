@@ -14,10 +14,13 @@ mac:
       arch:
         - arm64
         - x64
-  # Unsigned build: no Apple Developer account required.
+  # No Apple Developer account: electron-builder's own signing is skipped and
+  # scripts/adhoc-sign.cjs gives the app an ad-hoc signature instead, which Apple
+  # Silicon requires before it will run anything.
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
+afterSign: scripts/adhoc-sign.cjs
 dmg:
   title: Laramac ${version}
   artifactName: Laramac-${version}-${arch}.dmg
