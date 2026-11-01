@@ -58,7 +58,7 @@ import {
 } from './tools'
 import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
-import { detectLlms, installClaudeCode, openClaudeCode, openInEditor } from './integrations'
+import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, testLlm } from './integrations'
 import { assistantChat } from './ai'
 import { processEvents, tailFile } from './process'
 import { phpmyadminInstalled } from './webconf'
@@ -543,6 +543,10 @@ function registerIpc(): void {
 
   handle('ai:detect', () => detectLlms())
   handle('ai:chat', (messages) => assistantChat(cleanMessages(messages)))
+  handle('ai:test', (baseUrl, model) => {
+    if (typeof baseUrl !== 'string' || !/^https?:\/\/[^\s]+$/.test(baseUrl) || typeof model !== 'string' || !model || model.length > 300) throw new ValidationError('Pick a server and a model first.')
+    return testLlm(baseUrl, model)
+  })
 
   // The file picker runs in the main process, so the page can never hand us an arbitrary path.
   handle('import:choose', async () => {

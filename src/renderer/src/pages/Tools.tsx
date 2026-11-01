@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react'
 import { Cloud, Copy, Sparkles, Code, ExternalLink, Mail, Package, TerminalSquare, Waypoints } from 'lucide-react'
-import type { AiTool, McpStatus } from '@shared/types'
+import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
 import { CopyField, PageHead, Switch } from '../ui'
 
 type Installable = 'cloudflared' | 'ngrok' | 'composer'
 
+/** What the buttons do, in one line, so nobody has to guess. */
+const AI_HOW: Record<string, string> = {
+  claude: 'Terminal starts it in your home folder. The AI button on each site starts it inside that project, ready to work on its code.',
+  codex: 'Terminal starts it in your home folder. The AI button on each site starts it inside that project.',
+  opencode: 'Terminal starts it in your home folder. The AI button on each site starts it inside that project. It can use LM Studio or Ollama models too.',
+  gemini: 'Terminal starts it in your home folder. The AI button on each site starts it inside that project.',
+  openclaw: 'Terminal starts it so you can set it up and chat with it.',
+  lmstudio: 'Open LM Studio, load a model, then turn on the server in its Developer tab. The status here turns green.',
+  ollama: 'Open Ollama (it lives in the menu bar). Get a model with "ollama pull llama3.2" in Terminal. The status here turns green.',
+  vmlx: 'Open vMLX, pick a model and start serving it. Laramac looks for it on port 8000.'
+}
+const MODEL_APPS = new Set(['lmstudio', 'ollama', 'vmlx'])
+
 const AI_LETTERS: Record<string, string> = { claude: 'Cc', codex: 'Cx', opencode: 'Oc', vmlx: 'vM', lmstudio: 'LM', ollama: 'Ol', openclaw: 'Ow', gemini: 'Ge' }
 
 export default function Tools(): React.JSX.Element {
-  const { tools, settings, services, act, busy, setTools, updateSettings, notify } = useApp()
+  const { tools, settings, services, act, busy, setTools, updateSettings, notify, llms, refreshLlms, setPage } = useApp()
+  const [tests, setTests] = useState<Record<string, LlmTest>>({})
   const api = window.laramac
   const [ai, setAi] = useState<AiTool[]>([])
   const [mcp, setMcp] = useState<McpStatus | null>(null)
@@ -18,11 +32,18 @@ export default function Tools(): React.JSX.Element {
   }, [api])
 
   useEffect(() => {
-    const load = (): void => void api.invoke('ai:tools').then(setAi)
+    const load = (): void => {
+      void api.invoke('ai:tools').then(setAi)
+      refreshLlms()
+    }
     load()
+    const t = setInterval(refreshLlms, 8000)
     window.addEventListener('focus', load)
-    return () => window.removeEventListener('focus', load)
-  }, [api])
+    return () => {
+      window.removeEventListener('focus', load)
+      clearInterval(t)
+    }
+  }, [api, refreshLlms])
 
   if (!tools || !settings) return <></>
   const mailpit = services.find((s) => s.id === 'mailpit')
@@ -110,6 +131,55 @@ export default function Tools(): React.JSX.Element {
                 {isDefault && t.installed && <span className="tag tag-accent">For sites</span>}
               </div>
               <div className="ai-desc">{t.description}</div>
+              {MODEL_APPS.has(t.id) &&
+                t.installed &&
+                (() => {
+                  const server = llms.find((l) => l.toolId === t.id)
+                  const result = tests[t.id]
+                  if (!server)
+                    return (
+                      <div className="ai-live" data-s="off">
+                        <span className="llm-dot" /> Server is off. Nothing is listening yet.
+                      </div>
+                    )
+                  const model = server.loaded[0] ?? server.models[0]
+                  return (
+                    <div className="ai-live" data-s={result ? (result.ok ? 'ok' : 'bad') : 'on'}>
+                      <span className="llm-dot" />
+                      <span className="grow">
+                        {result
+                          ? result.ok
+                            ? `Working. ${model} answered in ${(result.ms / 1000).toFixed(1)} s.`
+                            : result.error
+                          : `Server on, ${server.models.length} chat ${server.models.length === 1 ? 'model' : 'models'}${server.loaded.length && server.provider !== 'vMLX' && server.provider !== 'MLX server' ? `, ${server.loaded.length} loaded` : ''}.`}
+                      </span>
+                      {model && (
+                        <>
+                          <button
+                            className="link"
+                            disabled={busy.has(`llm-${t.id}`)}
+                            onClick={async () => {
+                              const r = await act(`llm-${t.id}`, () => api.invoke('ai:test', server.baseUrl, model))
+                              if (r) setTests((x) => ({ ...x, [t.id]: r }))
+                            }}
+                          >
+                            {busy.has(`llm-${t.id}`) ? 'Testing…' : 'Test'}
+                          </button>
+                          <button
+                            className="link"
+                            onClick={async () => {
+                              await updateSettings({ llm: { baseUrl: server.baseUrl, model } })
+                              setPage('assistant')
+                            }}
+                          >
+                            Chat
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
+              {t.installed && <div className="ai-how">{AI_HOW[t.id]}</div>}
               <div className="ai-actions">
                 {t.app?.installed && (
                   <button className="btn btn-primary btn-sm" onClick={() => open('app')}>

@@ -501,9 +501,22 @@ export interface ToolsStatus {
 }
 
 export interface LocalLlm {
-  provider: 'Ollama' | 'LM Studio' | 'Custom'
+  /** Ollama, LM Studio, vMLX, or Custom. */
+  provider: string
+  /** The AI tool card this server belongs to, when known. */
+  toolId?: 'ollama' | 'lmstudio' | 'vmlx'
   baseUrl: string
+  /** Chat models only (embedding models cannot chat), loaded ones first. */
   models: string[]
+  /** Models already in memory, which answer straight away. */
+  loaded: string[]
+}
+
+export interface LlmTest {
+  ok: boolean
+  ms: number
+  reply?: string
+  error?: string
 }
 
 export interface ChatMessage {
@@ -588,6 +601,7 @@ export interface Channels {
   'tools:open-external': { args: [string]; result: void }
   'ai:detect': { args: []; result: LocalLlm[] }
   'ai:chat': { args: [ChatMessage[]]; result: string }
+  'ai:test': { args: [string, string]; result: LlmTest }
   'import:choose': { args: []; result: ImportPlan | null }
   'import:run': { args: [string, ImportAnswers]; result: ImportResult }
   'import:cancel': { args: [string]; result: void }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Send } from 'lucide-react'
-import type { ChatMessage } from '@shared/types'
+import type { LlmTest, ChatMessage } from '@shared/types'
 import { parseActions, type Action } from '@shared/actions'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
@@ -46,9 +46,19 @@ export default function Assistant(): React.JSX.Element {
   const [done, setDone] = useState<Set<string>>(new Set())
   const endRef = useRef<HTMLDivElement>(null)
 
+  const [test, setTest] = useState<LlmTest | null>(null)
   useEffect(() => {
     refreshLlms()
   }, [refreshLlms])
+  // A model that is gone, or one that cannot chat, is swapped for the first loaded chat model.
+  useEffect(() => {
+    if (!settings) return
+    const server = llms.find((l) => l.baseUrl === settings.llm.baseUrl) ?? llms[0]
+    if (server && !server.models.includes(settings.llm.model) && server.models[0]) {
+      void updateSettings({ llm: { baseUrl: server.baseUrl, model: server.models[0] } })
+    }
+    setTest(null)
+  }, [llms, settings?.llm.baseUrl, settings?.llm.model]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns])
@@ -128,7 +138,10 @@ export default function Assistant(): React.JSX.Element {
         {current ? (
           <select className="input" aria-label="Model" value={settings.llm.model} onChange={(e) => updateSettings({ llm: { ...settings.llm, model: e.target.value } })}>
             {current.models.map((m) => (
-              <option key={m}>{m}</option>
+              <option key={m} value={m}>
+                {m}
+                {current.loaded.includes(m) ? '  (loaded)' : ''}
+              </option>
             ))}
           </select>
         ) : (
@@ -144,6 +157,47 @@ export default function Assistant(): React.JSX.Element {
           <RefreshCw size={14} />
         </button>
       </PageHead>
+
+      <div className="llm-status glass" data-s={test ? (test.ok ? 'ok' : 'bad') : current ? 'found' : 'none'}>
+        <span className="llm-dot" />
+        <div className="llm-text">
+          {current ? (
+            <>
+              <strong>
+                {current.provider} at {current.baseUrl.replace('http://', '')}
+              </strong>
+              <span>
+                {test
+                  ? test.ok
+                    ? `Connected. ${settings.llm.model} answered “${test.reply || 'ready'}” in ${(test.ms / 1000).toFixed(1)} s.`
+                    : test.error
+                  : current.loaded.includes(settings.llm.model)
+                    ? `${settings.llm.model} is loaded and ready. Press Test to check it answers.`
+                    : `${settings.llm.model || 'No model chosen'} is not loaded yet, so the first answer can take a while as it loads.`}
+              </span>
+            </>
+          ) : (
+            <>
+              <strong>No model server found</strong>
+              <span>
+                LM Studio: open it, load a model, and turn on the server in the Developer tab. Ollama: open the app. vMLX: start serving a model. Then press refresh.
+              </span>
+            </>
+          )}
+        </div>
+        {current && (
+          <button
+            className="btn btn-sm"
+            disabled={busy.has('llm-test') || !settings.llm.model}
+            onClick={async () => {
+              const r = await act('llm-test', () => api.invoke('ai:test', settings.llm.baseUrl, settings.llm.model))
+              if (r) setTest(r)
+            }}
+          >
+            {busy.has('llm-test') ? 'Testing…' : 'Test'}
+          </button>
+        )}
+      </div>
 
       <div className="panel chat">
         {turns.length === 0 ? (
