@@ -78,7 +78,8 @@ jobs:
         run: ./spc doctor --auto-fix
 
       - name: Download PHP ${{ matrix.version }} and libraries
-        run: ./spc download --with-php=${{ matrix.version }} --for-extensions="$EXTENSIONS" --prefer-pre-built
+        # Libraries are built from source: the prebuilt SQLite lacks column metadata, which PHP checks for.
+        run: ./spc download --with-php=${{ matrix.version }} --for-extensions="$EXTENSIONS"
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
