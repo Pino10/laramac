@@ -1,71 +1,81 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
 import { useApp } from '../store'
+import { PageHead, Switch } from '../ui'
 
 export default function Settings(): React.JSX.Element {
   const { settings, updateSettings, tools } = useApp()
-  if (!settings) return <div />
+  if (!settings) return <></>
 
   return (
-    <div className="fade-in pb-8">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Settings</h1>
+    <>
+      <PageHead title="Settings" desc="Ports apply the next time a server starts." />
 
-      <div className="glass no-drag">
-        <TextRow label="Projects folder" hint="Folders inside become sites" value={settings.wwwPath} onSave={(v) => updateSettings({ wwwPath: v })} />
+      <h2 className="section-title" style={{ marginTop: 0 }}>
+        Sites
+      </h2>
+      <div className="panel">
+        <TextRow label="Projects folder" hint="Every folder inside becomes a site." value={settings.wwwPath} wide onSave={(v) => updateSettings({ wwwPath: v })} />
         <TextRow
           label="Domain suffix"
-          hint={tools?.dnsReady ? 'Sites open at name.suffix' : 'Changing this needs the one-time domain setup again (Dashboard)'}
+          hint={tools?.dnsReady ? 'Sites open at name.suffix.' : 'Changing it means turning on domains again from the Dashboard.'}
           value={settings.tld}
           onSave={(v) => updateSettings({ tld: v.replace(/[^a-z0-9]/gi, '').toLowerCase() || 'test' })}
         />
-        <NumberRow label="HTTP port" hint="Nginx" value={settings.httpPort} onSave={(v) => updateSettings({ httpPort: v })} />
-        <NumberRow label="HTTPS port" hint="Nginx" value={settings.httpsPort} onSave={(v) => updateSettings({ httpsPort: v })} />
-        <NumberRow label="Apache HTTP port" hint="Apache runs beside Nginx" value={settings.apachePort} onSave={(v) => updateSettings({ apachePort: v })} />
-        <NumberRow label="Apache HTTPS port" hint="Apache" value={settings.apacheHttpsPort} onSave={(v) => updateSettings({ apacheHttpsPort: v })} />
-        <Row title="PHP build" hint="Full includes intl, imagick, sodium and more. Applies to new installs.">
+      </div>
+
+      <h2 className="section-title">Ports</h2>
+      <div className="panel">
+        <NumberRow label="Nginx HTTP" value={settings.httpPort} onSave={(v) => updateSettings({ httpPort: v })} />
+        <NumberRow label="Nginx HTTPS" value={settings.httpsPort} onSave={(v) => updateSettings({ httpsPort: v })} />
+        <NumberRow label="Apache HTTP" value={settings.apachePort} onSave={(v) => updateSettings({ apachePort: v })} />
+        <NumberRow label="Apache HTTPS" value={settings.apacheHttpsPort} onSave={(v) => updateSettings({ apacheHttpsPort: v })} />
+      </div>
+
+      <h2 className="section-title">Downloads</h2>
+      <div className="panel">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">PHP build</div>
+            <div className="row-sub">Full adds intl, imagick, sodium and more. Affects new installs.</div>
+          </div>
           <select
-            className="input"
+            className="input no-drag"
+            aria-label="PHP build"
             value={settings.phpFlavor}
             onChange={(e) => updateSettings({ phpFlavor: e.target.value as AppSettings['phpFlavor'] })}
           >
-            <option value="full">Full (larger download)</option>
+            <option value="full">Full</option>
             <option value="light">Lightweight</option>
           </select>
-        </Row>
-        <TextRow label="MySQL version" hint="Applies to new installs, for example 8.4.9" value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
-        <TextRow label="ngrok authtoken" hint="Only needed when sharing with ngrok" value={settings.ngrokToken} secret onSave={(v) => updateSettings({ ngrokToken: v })} />
+        </div>
+        <TextRow label="MySQL version" hint="Affects new installs, for example 8.4.9." value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
+        <TextRow label="PostgreSQL major version" hint="Affects new installs, for example 17." value={settings.postgresMajor} onSave={(v) => updateSettings({ postgresMajor: v.replace(/\D/g, '') || '17' })} />
+      </div>
+
+      <h2 className="section-title">Connections</h2>
+      <div className="panel">
+        <TextRow label="ngrok authtoken" hint="Only needed when sharing with ngrok." value={settings.ngrokToken} secret wide onSave={(v) => updateSettings({ ngrokToken: v })} />
         <TextRow
           label="Local model address"
-          hint="Any OpenAI-compatible server, for example http://127.0.0.1:11434/v1"
+          hint="Any OpenAI-compatible server, such as http://127.0.0.1:11434/v1."
           value={settings.llm.baseUrl}
+          wide
           onSave={(v) => updateSettings({ llm: { ...settings.llm, baseUrl: v } })}
         />
-        <Row title="Liquid Glass" hint="Native effect on macOS 26, frosted blur on older versions. Restart to apply.">
-          <button
-            className={`toggle ${settings.glass ? 'on' : ''}`}
-            onClick={() => updateSettings({ glass: !settings.glass })}
-            aria-label="Toggle Liquid Glass"
-          />
-        </Row>
       </div>
-      <p className="mt-3 text-xs" style={{ color: 'var(--text-dim)' }}>
-        Port changes apply the next time a server starts.
-      </p>
-    </div>
-  )
-}
 
-function Row({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="row flex items-center justify-between gap-4 p-4">
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{title}</div>
-        <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
-          {hint}
+      <h2 className="section-title">Appearance</h2>
+      <div className="panel">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Translucent sidebar</div>
+            <div className="row-sub">Uses macOS Liquid Glass where available. Restart Laramac to apply.</div>
+          </div>
+          <Switch on={settings.glass} label="Translucent sidebar" onChange={() => updateSettings({ glass: !settings.glass })} />
         </div>
       </div>
-      {children}
-    </div>
+    </>
   )
 }
 
@@ -74,36 +84,44 @@ function TextRow({
   hint,
   value,
   onSave,
-  secret
+  secret,
+  wide
 }: {
   label: string
   hint: string
   value: string
   onSave: (v: string) => void
   secret?: boolean
+  wide?: boolean
 }): React.JSX.Element {
   const [draft, setDraft] = useState(value)
   useEffect(() => {
     setDraft(value)
   }, [value])
   const commit = (): void => {
-    if (draft !== value) onSave(draft.trim())
+    if (draft.trim() !== value) onSave(draft.trim())
   }
   return (
-    <Row title={label} hint={hint}>
+    <div className="row row-set">
+      <div className="row-main">
+        <div className="row-title">{label}</div>
+        <div className="row-sub">{hint}</div>
+      </div>
       <input
-        className="input w-64"
+        className="input no-drag"
+        style={{ width: wide ? 280 : 150 }}
+        aria-label={label}
         type={secret ? 'password' : 'text'}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
-    </Row>
+    </div>
   )
 }
 
-function NumberRow({ label, hint, value, onSave }: { label: string; hint: string; value: number; onSave: (v: number) => void }): React.JSX.Element {
+function NumberRow({ label, value, onSave }: { label: string; value: number; onSave: (v: number) => void }): React.JSX.Element {
   const [draft, setDraft] = useState(String(value))
   useEffect(() => {
     setDraft(String(value))
@@ -114,15 +132,18 @@ function NumberRow({ label, hint, value, onSave }: { label: string; hint: string
     else setDraft(String(value))
   }
   return (
-    <Row title={label} hint={hint}>
+    <div className="row row-set" style={{ minHeight: 48 }}>
+      <div className="row-title">{label}</div>
       <input
-        className="input w-24"
+        className="input num no-drag"
+        style={{ width: 86 }}
+        aria-label={label}
         inputMode="numeric"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
-    </Row>
+    </div>
   )
 }

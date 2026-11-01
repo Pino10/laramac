@@ -22,7 +22,15 @@ export const dirs = {
   run: (): string => join(ROOT, 'run'),
   certs: (): string => join(ROOT, 'certs'),
   phpmyadmin: (): string => join(ROOT, 'phpmyadmin'),
-  mailpit: (): string => join(ROOT, 'mailpit')
+  mailpit: (): string => join(ROOT, 'mailpit'),
+  adminer: (): string => join(ROOT, 'adminer'),
+  postgres: (version?: string): string =>
+    version ? join(ROOT, 'postgres', version) : join(ROOT, 'postgres'),
+  postgresData: (major: string): string => join(ROOT, 'data', `postgres-${major}`),
+  mariadbData: (): string => join(ROOT, 'data', 'mariadb'),
+  redisData: (): string => join(ROOT, 'data', 'redis'),
+  mongodb: (): string => join(ROOT, 'mongodb'),
+  mongoData: (): string => join(ROOT, 'data', 'mongodb')
 }
 
 export function ensureDirs(): void {
@@ -35,7 +43,10 @@ export function ensureDirs(): void {
     dirs.logs(),
     dirs.run(),
     dirs.certs(),
-    dirs.mailpit()
+    dirs.mailpit(),
+    dirs.postgres(),
+    dirs.redisData(),
+    dirs.mongoData()
   ]) {
     mkdirSync(d, { recursive: true })
   }

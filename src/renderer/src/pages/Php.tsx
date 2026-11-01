@@ -1,4 +1,5 @@
 import { useApp } from '../store'
+import { PageHead } from '../ui'
 
 export default function Php(): React.JSX.Element {
   const { php, settings, act, busy, setPhp, jobs } = useApp()
@@ -6,34 +7,34 @@ export default function Php(): React.JSX.Element {
   const installing = jobs.some((j) => j.status === 'running' && j.label.includes('PHP'))
 
   return (
-    <div className="fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">PHP versions</h1>
-        <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
-          Install any version, keep several side by side, and pick one per site.{' '}
-          {settings?.phpFlavor === 'full' ? 'Using the full extension set.' : 'Using the lightweight build.'}
-        </p>
-      </div>
+    <>
+      <PageHead
+        title="PHP"
+        desc={`Install any version and keep several at once. Each site picks its own. Using the ${
+          settings?.phpFlavor === 'full' ? 'full extension set' : 'lightweight build'
+        }.`}
+      />
 
       {php.length === 0 ? (
-        <div className="glass p-8 text-center text-sm" style={{ color: 'var(--text-dim)' }}>
-          Loading versions… If this stays empty, check your internet connection.
+        <div className="panel empty">
+          <strong>No versions to show</strong>
+          <span className="dim">Laramac could not reach the download server. Check your connection.</span>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="panel">
           {php.map((v) => (
-            <div key={v.minor} className="glass flex items-center gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">PHP {v.minor}</span>
-                  {v.isDefault && <span className="chip chip-ok">Default</span>}
-                  {v.installed && <span className="chip">{v.installed}</span>}
+            <div key={v.minor} className="row row-php">
+              <span style={{ fontWeight: 600 }} className="num">
+                {v.minor}
+              </span>
+              <div className="row-main">
+                <div className="row-title">
+                  {v.installed ? v.installed : v.latest}
+                  {v.isDefault && <span className="tag tag-accent">Default</span>}
                 </div>
-                <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
-                  {v.installed ? `Installed. Newest available: ${v.latest}` : `Latest: ${v.latest}`}
-                </div>
+                <div className="row-sub">{v.installed ? 'Installed' : 'Available'}</div>
               </div>
-              <div className="no-drag flex gap-2">
+              <div className="end no-drag">
                 {v.installed ? (
                   <>
                     {!v.isDefault && (
@@ -45,7 +46,7 @@ export default function Php(): React.JSX.Element {
                       </button>
                     )}
                     <button
-                      className="btn"
+                      className="btn btn-quiet"
                       disabled={busy.has(`remove-${v.minor}`)}
                       onClick={() => act(`remove-${v.minor}`, () => api.invoke('php:remove', v.minor).then(setPhp))}
                     >
@@ -54,11 +55,11 @@ export default function Php(): React.JSX.Element {
                   </>
                 ) : (
                   <button
-                    className="btn btn-primary"
+                    className="btn"
                     disabled={busy.has(`install-php-${v.minor}`) || installing}
                     onClick={() => act(`install-php-${v.minor}`, () => api.invoke('php:install', v.minor).then(setPhp))}
                   >
-                    {busy.has(`install-php-${v.minor}`) ? 'Installing…' : 'Install'}
+                    {busy.has(`install-php-${v.minor}`) ? 'Installing' : 'Install'}
                   </button>
                 )}
               </div>
@@ -66,6 +67,6 @@ export default function Php(): React.JSX.Element {
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }

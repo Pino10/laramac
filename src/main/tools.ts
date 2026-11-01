@@ -7,6 +7,7 @@ import { downloadFile, extract, makeExecutable, removeQuarantine } from './downl
 import { jobs } from './jobs'
 import { brewPrefix, goArch, isMac } from './platform'
 import {
+  ADMINER_URL,
   COMPOSER_URL,
   PHPMYADMIN_URL,
   cloudflaredUrl,
@@ -18,7 +19,7 @@ import { isResolverInstalled } from './dns'
 import { isCaTrusted } from './ssl'
 import { defaultMinor, phpBinary } from './php'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
-import { phpmyadminInstalled } from './webconf'
+import { adminerInstalled, phpmyadminInstalled } from './webconf'
 
 export const composerPhar = (): string => join(dirs.bin(), 'composer.phar')
 export const cloudflaredBinary = (): string => join(dirs.bin(), 'cloudflared')
@@ -47,6 +48,27 @@ export async function installPhpMyAdmin(): Promise<void> {
     )
     mkdirSync(join(dirs.phpmyadmin(), 'tmp'), { recursive: true })
     rmSync(staging, { recursive: true, force: true })
+  })
+}
+
+/** Adminer is one PHP file. The wrapper lets it sign in to local servers that have no password. */
+const ADMINER_WRAPPER = `<?php
+function adminer_object() {
+    class LaramacAdminer extends Adminer {
+        function login($login, $password) {
+            return true;
+        }
+    }
+    return new LaramacAdminer;
+}
+include __DIR__ . '/adminer.php';
+`
+
+export async function installAdminer(): Promise<void> {
+  await jobs.run('Installing Adminer', async (update) => {
+    mkdirSync(dirs.adminer(), { recursive: true })
+    await downloadFile(ADMINER_URL, join(dirs.adminer(), 'adminer.php'), (p) => update(p, 'Downloading Adminer'))
+    writeFileSync(join(dirs.adminer(), 'index.php'), ADMINER_WRAPPER)
   })
 }
 
@@ -118,6 +140,7 @@ export async function toolsStatus(): Promise<ToolsStatus> {
     dnsReady: isResolverInstalled(getSettings().tld),
     caTrusted: await isCaTrusted(),
     phpmyadmin: phpmyadminInstalled(),
+    adminer: adminerInstalled(),
     cloudflared: existsSync(cloudflaredBinary()),
     ngrok: existsSync(ngrokBinary()),
     composer: existsSync(composerPhar()),

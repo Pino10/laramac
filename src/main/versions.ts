@@ -119,6 +119,52 @@ export const WORDPRESS_URL = 'https://wordpress.org/latest.zip'
 /** Where prebuilt Nginx and Apache binaries are published by this repo's CI. */
 export const BINARIES_REPO = 'Pino10/laramac'
 
-export function bundledBinaryUrl(name: 'nginx' | 'httpd', arch: 'arm64' | 'amd64'): string {
+export function bundledBinaryUrl(name: 'nginx' | 'httpd' | 'redis', arch: 'arm64' | 'amd64'): string {
   return `https://github.com/${BINARIES_REPO}/releases/download/binaries/${name}-darwin-${arch}.tar.gz`
+}
+
+export const ADMINER_URL = 'https://www.adminer.org/latest.php'
+
+// ---- PostgreSQL: prebuilt binaries published to Maven Central by the zonkyio project.
+
+export function postgresArtifact(
+  platform: string = process.platform,
+  arch: string = process.arch
+): string {
+  if (platform === 'linux') return 'linux-amd64'
+  return arch === 'arm64' ? 'darwin-arm64v8' : 'darwin-amd64'
+}
+
+const MAVEN = 'https://repo1.maven.org/maven2/io/zonky/test/postgres'
+
+export function postgresJarUrl(version: string, artifact = postgresArtifact()): string {
+  const id = `embedded-postgres-binaries-${artifact}`
+  return `${MAVEN}/${id}/${version}/${id}-${version}.jar`
+}
+
+/** Reads maven-metadata.xml and returns the newest release of each PostgreSQL major version. */
+export function parseMavenVersions(xml: string): Record<string, string> {
+  const latest: Record<string, string> = {}
+  for (const m of xml.matchAll(/<version>(\d+\.\d+(?:\.\d+)?)<\/version>/g)) {
+    const v = m[1]
+    const major = v.split('.')[0]
+    if (!latest[major] || compareVersions(v, latest[major]) > 0) latest[major] = v
+  }
+  return latest
+}
+
+export async function fetchPostgresVersions(): Promise<Record<string, string>> {
+  const id = `embedded-postgres-binaries-${postgresArtifact()}`
+  const res = await fetch(`${MAVEN}/${id}/maven-metadata.xml`)
+  if (!res.ok) throw new Error(`Could not list PostgreSQL versions (${res.status})`)
+  return parseMavenVersions(await res.text())
+}
+
+// ---- MongoDB: official community tarballs.
+
+export const MONGODB_VERSION = '8.0.12'
+
+export function mongodbUrl(version = MONGODB_VERSION, arch: string = process.arch): string {
+  const a = arch === 'arm64' ? 'arm64' : 'x86_64'
+  return `https://fastdl.mongodb.org/osx/mongodb-macos-${a}-${version}.tgz`
 }

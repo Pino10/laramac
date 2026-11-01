@@ -11,6 +11,7 @@ const defaults = (): AppSettings => ({
   defaultPhp: null,
   phpFlavor: 'full',
   mysqlVersion: '8.4.9',
+  postgresMajor: '17',
   httpPort: 80,
   httpsPort: 443,
   apachePort: 8080,

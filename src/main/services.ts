@@ -1,13 +1,39 @@
 import { EventEmitter } from 'events'
-import type { ServiceId, ServiceInfo, ServiceStatus } from '../shared/types'
+import type { ServiceGroup, ServiceId, ServiceInfo, ServiceStatus } from '../shared/types'
 import type { ServiceImpl } from './svc/types'
 import { php } from './svc/php'
 import { nginx, apache } from './svc/webservers'
 import { mysql } from './svc/mysql'
 import { mailpit } from './svc/mailpit'
+import { mariadb } from './svc/mariadb'
+import { postgres } from './svc/postgres'
+import { redis } from './svc/redis'
+import { mongodb } from './svc/mongodb'
 
 /** Start order matters: mail and database first, then PHP, then the web servers. */
-const IMPLS: ServiceImpl[] = [mailpit, mysql, php, nginx, apache]
+const IMPLS: ServiceImpl[] = [mailpit, mysql, mariadb, postgres, redis, mongodb, php, nginx, apache]
+
+const GROUPS: Record<ServiceId, ServiceGroup> = {
+  nginx: 'web',
+  apache: 'web',
+  php: 'runtime',
+  mysql: 'database',
+  mariadb: 'database',
+  postgres: 'database',
+  redis: 'database',
+  mongodb: 'database',
+  mailpit: 'mail'
+}
+
+/** What an app needs to connect, shown on the Databases page. */
+const CONNECTIONS: Partial<Record<ServiceId, string>> = {
+  mysql: 'mysql://root@127.0.0.1:3306',
+  mariadb: 'mysql://root@127.0.0.1:3307',
+  postgres: 'postgresql://postgres@127.0.0.1:5432',
+  redis: 'redis://127.0.0.1:6379',
+  mongodb: 'mongodb://127.0.0.1:27017',
+  mailpit: 'smtp://127.0.0.1:1025'
+}
 
 class ServiceManager extends EventEmitter {
   private transient = new Map<ServiceId, { status: ServiceStatus; error?: string }>()
@@ -29,6 +55,8 @@ class ServiceManager extends EventEmitter {
         id: i.id,
         name: i.name,
         description: i.description,
+        group: GROUPS[i.id],
+        connection: CONNECTIONS[i.id],
         status,
         port: i.port(),
         version: i.version(),

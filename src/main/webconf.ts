@@ -16,6 +16,7 @@ export interface HostConfs {
 
 export const mailpitBinary = (): string => join(dirs.mailpit(), 'mailpit')
 export const phpmyadminInstalled = (): boolean => existsSync(join(dirs.phpmyadmin(), 'index.php'))
+export const adminerInstalled = (): boolean => existsSync(join(dirs.adminer(), 'index.php'))
 
 /** Builds the virtual host list shared by Nginx and Apache. Issues certificates for HTTPS sites. */
 export async function buildHostConfs(): Promise<HostConfs> {
@@ -43,6 +44,14 @@ export async function buildHostConfs(): Promise<HostConfs> {
       domain: `phpmyadmin.${tld}`,
       secure: false,
       root: dirs.phpmyadmin(),
+      phpPort: fallback ? phpPortFor(fallback) : null
+    })
+  }
+  if (adminerInstalled()) {
+    extras.push({
+      domain: `adminer.${tld}`,
+      secure: false,
+      root: dirs.adminer(),
       phpPort: fallback ? phpPortFor(fallback) : null
     })
   }

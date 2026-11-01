@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, Send } from 'lucide-react'
 import type { ChatMessage } from '@shared/types'
 import { parseActions, type Action } from '@shared/actions'
 import { useApp } from '../store'
+import { PageHead } from '../ui'
 
 function describe(a: Action): string {
   switch (a.action) {
@@ -16,9 +18,9 @@ function describe(a: Action): string {
     case 'stop-service':
       return `Stop ${a.id}`
     case 'create-project':
-      return `Create ${a.kind} project "${a.name}"`
+      return `Create ${a.kind} project ${a.name}`
     case 'enable-ssl':
-      return `Enable HTTPS for ${a.site}`
+      return `Turn on HTTPS for ${a.site}`
     case 'open-site':
       return `Open ${a.site}`
   }
@@ -41,10 +43,10 @@ export default function Assistant(): React.JSX.Element {
     refreshLlms()
   }, [refreshLlms])
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns])
 
-  if (!settings) return <div />
+  if (!settings) return <></>
   const current = llms.find((l) => l.baseUrl === settings.llm.baseUrl)
 
   const send = async (): Promise<void> => {
@@ -58,50 +60,55 @@ export default function Assistant(): React.JSX.Element {
   }
 
   const run = async (key: string, a: Action): Promise<void> => {
-    const ok = await act(key, async () => {
+    const result = await act(key, async () => {
       switch (a.action) {
         case 'install-php':
-          return api.invoke('php:install', a.version)
+          await api.invoke('php:install', a.version)
+          return true
         case 'set-default-php':
-          return api.invoke('php:set-default', a.version)
+          await api.invoke('php:set-default', a.version)
+          return true
         case 'install-service':
           await api.invoke('services:install', a.id)
-          return setServices(await api.invoke('services:list'))
+          setServices(await api.invoke('services:list'))
+          return true
         case 'start-service':
         case 'stop-service': {
           const running = services.find((s) => s.id === a.id)?.status === 'running'
-          if ((a.action === 'start-service') === running) return
-          return setServices(await api.invoke('services:toggle', a.id))
+          if ((a.action === 'start-service') !== running) setServices(await api.invoke('services:toggle', a.id))
+          return true
         }
         case 'create-project':
-          return setSites(await api.invoke('sites:create', a.kind, a.name))
+          setSites(await api.invoke('sites:create', a.kind, a.name))
+          return true
         case 'enable-ssl':
-          return setSites(await api.invoke('sites:set-config', a.site, { secure: true }))
+          setSites(await api.invoke('sites:set-config', a.site, { secure: true }))
+          return true
         case 'open-site': {
           const site = sites.find((s) => s.name === a.site)
-          if (!site) throw new Error(`No site named ${a.site}.`)
-          return api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)
+          if (!site) throw new Error(`There is no site named ${a.site}.`)
+          await api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)
+          return true
         }
       }
     })
-    if (ok !== undefined || a.action === 'start-service' || a.action === 'stop-service') {
+    if (result) {
       setDone((d) => new Set(d).add(key))
-      notify({ kind: 'info', text: `${describe(a)}: done` })
+      notify({ kind: 'info', text: describe(a) })
     }
   }
 
   return (
-    <div className="fade-in flex h-full flex-col">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Assistant</h1>
-        <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
-          Chat with a model running on your Mac. It proposes actions; you press the button.
-        </p>
-      </div>
+    <>
+      <PageHead
+        title="Assistant"
+        desc="Chat with a model running on your Mac. It suggests actions, and nothing runs until you press its button."
+      />
 
-      <div className="glass no-drag mb-3 flex flex-wrap items-center gap-2 p-3">
+      <div className="no-drag" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <select
           className="input"
+          aria-label="Model server"
           value={settings.llm.baseUrl}
           onChange={(e) => {
             const found = llms.find((l) => l.baseUrl === e.target.value)
@@ -118,6 +125,7 @@ export default function Assistant(): React.JSX.Element {
         {current ? (
           <select
             className="input"
+            aria-label="Model"
             value={settings.llm.model}
             onChange={(e) => updateSettings({ llm: { ...settings.llm, model: e.target.value } })}
           >
@@ -128,74 +136,68 @@ export default function Assistant(): React.JSX.Element {
         ) : (
           <input
             className="input"
-            placeholder="model name"
+            aria-label="Model name"
+            placeholder="Model name"
             value={settings.llm.model}
             onChange={(e) => updateSettings({ llm: { ...settings.llm, model: e.target.value } })}
           />
         )}
-        <button className="btn" onClick={refreshLlms}>
-          Refresh
+        <button className="btn btn-quiet btn-icon" title="Look for local models again" aria-label="Refresh models" onClick={refreshLlms}>
+          <RefreshCw size={14} />
         </button>
         {llms.length === 0 && (
-          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
-            No local model found. Start Ollama or LM Studio, or set a custom address in Settings.
-          </span>
+          <span className="row-sub">No local model found. Start Ollama or LM Studio, or set an address in Settings.</span>
         )}
       </div>
 
-      <div className="glass min-h-0 flex-1 overflow-y-auto p-4" style={{ userSelect: 'text' }}>
+      <div className="panel chat">
         {turns.length === 0 && (
-          <div className="text-sm" style={{ color: 'var(--text-dim)' }}>
-            Try: “Set up a WordPress site called shop with PHP 8.3 and HTTPS.”
+          <div className="dim" style={{ maxWidth: '52ch' }}>
+            Ask for what you want set up. For example: create a WordPress site called shop on PHP 8.3 with HTTPS.
           </div>
         )}
         {turns.map((t, i) => {
           const parsed = t.role === 'assistant' ? parseActions(t.content) : { prose: t.content, actions: [] }
           return (
-            <div key={i} className={`mb-3 flex ${t.role === 'user' ? 'justify-end' : ''}`}>
-              <div
-                className="max-w-[85%] rounded-2xl px-3 py-2 text-sm"
-                style={{ background: t.role === 'user' ? 'var(--accent)' : 'var(--glass-bg-strong)', color: t.role === 'user' ? 'white' : 'inherit' }}
-              >
-                <div className="whitespace-pre-wrap">{parsed.prose}</div>
-                {parsed.actions.map((a, j) => {
-                  const key = `${i}-${j}`
-                  return (
-                    <button
-                      key={key}
-                      className="btn mt-2 mr-2"
-                      disabled={done.has(key) || busy.has(key)}
-                      onClick={() => run(key, a)}
-                    >
-                      {done.has(key) ? '✓ ' : busy.has(key) ? '… ' : ''}
-                      {describe(a)}
-                    </button>
-                  )
-                })}
+            <div key={i} className="msg">
+              <div className="msg-who" style={{ color: t.role === 'user' ? 'var(--ink)' : 'var(--accent)' }}>
+                {t.role === 'user' ? 'You' : 'Assistant'}
               </div>
+              <div className="msg-text">{parsed.prose}</div>
+              {parsed.actions.length > 0 && (
+                <div className="msg-actions no-drag">
+                  {parsed.actions.map((a, j) => {
+                    const key = `${i}-${j}`
+                    return (
+                      <button key={key} className="btn" disabled={done.has(key) || busy.has(key)} onClick={() => run(key, a)}>
+                        {done.has(key) ? 'Done: ' : busy.has(key) ? 'Working: ' : ''}
+                        {describe(a)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
         })}
-        {busy.has('chat') && (
-          <div className="text-sm" style={{ color: 'var(--text-dim)' }}>
-            Thinking…
-          </div>
-        )}
+        {busy.has('chat') && <div className="dim">Thinking</div>}
         <div ref={endRef} />
       </div>
 
-      <div className="no-drag mt-3 flex gap-2">
+      <div className="no-drag" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <input
-          className="input flex-1"
-          placeholder="Ask Laramac to set something up…"
+          className="input"
+          style={{ flex: 1, height: 34 }}
+          aria-label="Message"
+          placeholder="Ask Laramac to set something up"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="btn btn-primary" disabled={busy.has('chat') || !input.trim()} onClick={send}>
-          Send
+        <button className="btn btn-primary" style={{ height: 34 }} disabled={busy.has('chat') || !input.trim()} onClick={send}>
+          <Send size={13} /> Send
         </button>
       </div>
-    </div>
+    </>
   )
 }

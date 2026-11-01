@@ -12,6 +12,7 @@ import { DNS_PORT, installResolver, startDnsServer, stopDnsServer } from './dns'
 import { ensureSiteCert, trustCa } from './ssl'
 import {
   installCloudflared,
+  installAdminer,
   installComposer,
   installNgrok,
   installPhpMyAdmin,
@@ -248,6 +249,7 @@ function registerIpc(): void {
   })
   handle('tools:install', async (tool) => {
     if (tool === 'phpmyadmin') await installPhpMyAdmin()
+    else if (tool === 'adminer') await installAdminer()
     else if (tool === 'cloudflared') await installCloudflared()
     else if (tool === 'ngrok') await installNgrok()
     else await installComposer()

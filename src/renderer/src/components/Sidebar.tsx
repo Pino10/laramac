@@ -1,12 +1,32 @@
-export type Page = 'dashboard' | 'sites' | 'php' | 'tools' | 'assistant' | 'settings'
+import {
+  Database,
+  Globe,
+  LayoutDashboard,
+  MessageSquare,
+  Settings as SettingsIcon,
+  Terminal,
+  Wrench
+} from 'lucide-react'
+import { useApp } from '../store'
 
-const items: { id: Page; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◧' },
-  { id: 'sites', label: 'Sites', icon: '◍' },
-  { id: 'php', label: 'PHP', icon: '⬡' },
-  { id: 'tools', label: 'Tools', icon: '✦' },
-  { id: 'assistant', label: 'Assistant', icon: '✺' },
-  { id: 'settings', label: 'Settings', icon: '⚙' }
+export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'tools' | 'assistant' | 'settings'
+
+type Item = { id: Page; label: string; icon: React.ReactNode }
+
+const groups: Item[][] = [
+  [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { id: 'sites', label: 'Sites', icon: <Globe size={16} /> }
+  ],
+  [
+    { id: 'php', label: 'PHP', icon: <Terminal size={16} /> },
+    { id: 'databases', label: 'Databases', icon: <Database size={16} /> },
+    { id: 'tools', label: 'Tools', icon: <Wrench size={16} /> }
+  ],
+  [
+    { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={16} /> },
+    { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> }
+  ]
 ]
 
 export default function Sidebar({
@@ -16,33 +36,42 @@ export default function Sidebar({
   page: Page
   onChange: (p: Page) => void
 }): React.JSX.Element {
+  const { services } = useApp()
+  const running = services.filter((s) => s.status === 'running').length
+  const installed = services.filter((s) => s.status !== 'not-installed').length
+
   return (
-    <aside className="glass m-3 mr-0 flex w-52 shrink-0 flex-col p-3">
-      <div className="drag h-9" />
-      <div className="mb-5 px-2">
-        <div className="text-lg font-semibold tracking-tight">Laramac</div>
-        <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
-          Local dev, made easy
-        </div>
+    <aside className="sidebar">
+      <div className="sidebar-top drag" />
+      <div className="brand">
+        <span className="brand-mark">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <path d="M2 1.5v9h8" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+          </svg>
+        </span>
+        Laramac
       </div>
-      <nav className="no-drag flex flex-col gap-1">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            onClick={() => onChange(it.id)}
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors"
-            style={{
-              background: page === it.id ? 'var(--glass-bg-strong)' : 'transparent',
-              boxShadow: page === it.id ? 'inset 0 1px 0 var(--glass-highlight)' : 'none'
-            }}
-          >
-            <span className="w-4 text-center opacity-80">{it.icon}</span>
-            {it.label}
-          </button>
+      <nav className="nav no-drag" aria-label="Main">
+        {groups.map((items, i) => (
+          <div key={i} className="nav">
+            {i > 0 && <div className="nav-gap" />}
+            {items.map((it) => (
+              <button
+                key={it.id}
+                className="nav-item"
+                aria-current={page === it.id ? 'page' : undefined}
+                onClick={() => onChange(it.id)}
+              >
+                {it.icon}
+                {it.label}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
-      <div className="mt-auto px-2 text-xs" style={{ color: 'var(--text-dim)' }}>
-        v0.2.0 · Free forever
+      <div className="sidebar-foot">
+        <span className="lamp" data-s={running > 0 ? 'running' : 'stopped'} />
+        {installed === 0 ? 'Nothing installed yet' : `${running} of ${installed} running`}
       </div>
     </aside>
   )

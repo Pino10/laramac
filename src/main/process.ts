@@ -99,7 +99,7 @@ export class ManagedProcess extends EventEmitter {
     }
   }
 
-  async stop(timeoutMs = 6000): Promise<void> {
+  async stop(timeoutMs = 6000, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
     const child = this.child
     if (!child || child.exitCode !== null) {
       this.child = null
@@ -112,7 +112,7 @@ export class ManagedProcess extends EventEmitter {
         clearTimeout(timer)
         resolve()
       })
-      child.kill('SIGTERM')
+      child.kill(signal)
     })
     this.child = null
   }

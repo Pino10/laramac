@@ -47,3 +47,25 @@ describe('versions', () => {
     expect(urls[1]).toContain('macos14')
   })
 })
+
+import { mongodbUrl, parseMavenVersions, postgresArtifact, postgresJarUrl } from '../src/main/versions'
+
+describe('database sources', () => {
+  it('picks the newest PostgreSQL release per major version', () => {
+    const xml = `<versions><version>16.4.0</version><version>17.5.0</version><version>17.10.0</version><version>17.6.0</version><version>18.0.0</version></versions>`
+    expect(parseMavenVersions(xml)).toEqual({ '16': '16.4.0', '17': '17.10.0', '18': '18.0.0' })
+  })
+
+  it('maps this machine to the right PostgreSQL build', () => {
+    expect(postgresArtifact('darwin', 'arm64')).toBe('darwin-arm64v8')
+    expect(postgresArtifact('darwin', 'x64')).toBe('darwin-amd64')
+    expect(postgresJarUrl('17.6.0', 'darwin-arm64v8')).toBe(
+      'https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/17.6.0/embedded-postgres-binaries-darwin-arm64v8-17.6.0.jar'
+    )
+  })
+
+  it('builds MongoDB URLs per CPU', () => {
+    expect(mongodbUrl('8.0.12', 'arm64')).toBe('https://fastdl.mongodb.org/osx/mongodb-macos-arm64-8.0.12.tgz')
+    expect(mongodbUrl('8.0.12', 'x64')).toContain('macos-x86_64')
+  })
+})

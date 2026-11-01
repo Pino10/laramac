@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Code, ExternalLink, FolderOpen, Plus, Share2, Terminal } from 'lucide-react'
 import type { SiteInfo } from '@shared/types'
 import { useApp } from '../store'
+import { PageHead, Switch } from '../ui'
 import NewProject from '../components/NewProject'
 
 const kindLabel: Record<SiteInfo['kind'], string> = {
@@ -17,146 +19,145 @@ export default function Sites(): React.JSX.Element {
   const [creating, setCreating] = useState(false)
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
-  const editorName = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
+  const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
 
   return (
-    <div className="fade-in">
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sites</h1>
-          <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
-            Every folder in <code>{settings?.wwwPath ?? '~/www'}</code> becomes a site
-          </p>
-        </div>
-        <div className="no-drag flex gap-2">
-          <button className="btn" onClick={() => api.invoke('www:reveal')}>
-            Open www
-          </button>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            New project
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHead
+        title="Sites"
+        desc={
+          <>
+            Each folder in <code>{settings?.wwwPath ?? '~/www'}</code> is served at its own address.
+          </>
+        }
+      >
+        <button className="btn" onClick={() => api.invoke('www:reveal')}>
+          <FolderOpen size={14} /> Open folder
+        </button>
+        <button className="btn btn-primary" onClick={() => setCreating(true)}>
+          <Plus size={14} /> New project
+        </button>
+      </PageHead>
 
       {sites.length === 0 ? (
-        <div className="glass p-8 text-center">
-          <div className="mb-1 text-lg font-medium">No sites yet</div>
-          <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
-            Create a project, or drop a folder into your www directory. It shows up here as{' '}
-            <code>folder.{settings?.tld ?? 'test'}</code>.
-          </p>
+        <div className="panel empty">
+          <strong>No sites yet</strong>
+          <span className="dim">Create a project, or add a folder to your www directory.</span>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="panel">
+          <div className="thead row-site">
+            <span>Site</span>
+            <span>Type</span>
+            <span>PHP</span>
+            <span>HTTPS</span>
+            <span />
+          </div>
           {sites.map((site) => (
-            <div key={site.path} className="glass p-4">
-              <div className="flex items-center gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{site.name}</span>
-                    <span className="chip">{kindLabel[site.kind]}</span>
-                    {site.secure && <span className="chip chip-ok">HTTPS</span>}
-                  </div>
-                  <div className="truncate text-xs" style={{ color: 'var(--text-dim)' }}>
-                    {site.domain}
-                  </div>
-                </div>
-                <div className="no-drag flex items-center gap-2">
-                  <select
-                    className="input"
-                    value={site.php ?? ''}
-                    disabled={installedPhp.length === 0}
-                    title="PHP version for this site"
-                    onChange={(e) =>
-                      act(`cfg-${site.name}`, () =>
-                        api.invoke('sites:set-config', site.name, { php: e.target.value }).then(setSites)
-                      )
-                    }
-                  >
-                    {installedPhp.length === 0 && <option value="">No PHP</option>}
-                    {installedPhp.map((p) => (
-                      <option key={p.minor} value={p.minor}>
-                        PHP {p.minor}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}
-                  >
-                    Open
-                  </button>
+            <div key={site.path} className="row row-site">
+              <div className="row-main">
+                <div className="row-title">{site.name}</div>
+                <div className="row-sub">
+                  {site.shareUrl ? (
+                    <button className="link no-drag" onClick={() => api.invoke('tools:open-external', site.shareUrl!)}>
+                      {site.shareUrl.replace('https://', '')}
+                    </button>
+                  ) : (
+                    site.domain
+                  )}
                 </div>
               </div>
-
-              <div className="no-drag mt-3 flex flex-wrap items-center gap-2">
-                <button className="btn" onClick={() => api.invoke('sites:open-folder', site.path)}>
-                  Folder
+              <span>
+                <span className="tag">{kindLabel[site.kind]}</span>
+              </span>
+              <select
+                className="input no-drag"
+                aria-label={`PHP version for ${site.name}`}
+                value={site.php ?? ''}
+                disabled={installedPhp.length === 0}
+                onChange={(e) =>
+                  act(`cfg-${site.name}`, () => api.invoke('sites:set-config', site.name, { php: e.target.value }).then(setSites))
+                }
+              >
+                {installedPhp.length === 0 && <option value="">None</option>}
+                {installedPhp.map((p) => (
+                  <option key={p.minor} value={p.minor}>
+                    {p.minor}
+                  </option>
+                ))}
+              </select>
+              <Switch
+                on={site.secure}
+                label={`HTTPS for ${site.name}`}
+                disabled={busy.has(`cfg-${site.name}`)}
+                onChange={async () => {
+                  if (!site.secure && tools && !tools.caTrusted) {
+                    notify({ kind: 'info', text: 'Trust local HTTPS on the Dashboard so browsers accept the certificate.' })
+                  }
+                  await act(`cfg-${site.name}`, () =>
+                    api.invoke('sites:set-config', site.name, { secure: !site.secure }).then(setSites)
+                  )
+                }}
+              />
+              <div className="end no-drag">
+                <button
+                  className="btn btn-quiet btn-icon"
+                  title="Open in browser"
+                  aria-label={`Open ${site.name} in browser`}
+                  onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}
+                >
+                  <ExternalLink size={15} />
                 </button>
                 <button
-                  className="btn"
+                  className="btn btn-quiet btn-icon"
+                  title="Show in Finder"
+                  aria-label={`Show ${site.name} in Finder`}
+                  onClick={() => api.invoke('sites:open-folder', site.path)}
+                >
+                  <FolderOpen size={15} />
+                </button>
+                <button
+                  className="btn btn-quiet btn-icon"
+                  title={`Open in ${editor}`}
+                  aria-label={`Open ${site.name} in ${editor}`}
                   onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}
                 >
-                  {editorName}
+                  <Code size={15} />
                 </button>
                 <button
-                  className="btn"
+                  className="btn btn-quiet btn-icon"
+                  title="Open Claude Code here"
+                  aria-label={`Open Claude Code in ${site.name}`}
                   onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}
                 >
-                  Claude Code
+                  <Terminal size={15} />
                 </button>
                 <button
-                  className="btn"
-                  disabled={busy.has(`cfg-${site.name}`)}
+                  className="btn btn-quiet btn-icon"
+                  aria-pressed={!!site.shareUrl}
+                  disabled={busy.has(`share-${site.name}`)}
+                  title={site.shareUrl ? 'Stop sharing' : 'Share a public link'}
+                  aria-label={site.shareUrl ? `Stop sharing ${site.name}` : `Share ${site.name}`}
                   onClick={async () => {
-                    if (!site.secure && tools && !tools.caTrusted) {
-                      notify({ kind: 'info', text: 'Use "Trust local HTTPS" on the Dashboard so browsers accept the certificate.' })
+                    if (site.shareUrl) {
+                      await act(`share-${site.name}`, () => api.invoke('sites:unshare', site.name))
+                      return
                     }
-                    await act(`cfg-${site.name}`, () =>
-                      api.invoke('sites:set-config', site.name, { secure: !site.secure }).then(setSites)
-                    )
+                    const url = await act(`share-${site.name}`, () => api.invoke('sites:share', site.name))
+                    if (url) {
+                      navigator.clipboard?.writeText(url).catch(() => undefined)
+                      notify({ kind: 'info', text: 'Public link copied to the clipboard.' })
+                    }
                   }}
                 >
-                  {site.secure ? 'Disable HTTPS' : 'Enable HTTPS'}
+                  <Share2 size={15} />
                 </button>
-                {site.shareUrl ? (
-                  <>
-                    <button className="btn" onClick={() => api.invoke('tools:open-external', site.shareUrl!)}>
-                      Public link
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={() => act(`share-${site.name}`, () => api.invoke('sites:unshare', site.name))}
-                    >
-                      Stop sharing
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="btn"
-                    disabled={busy.has(`share-${site.name}`)}
-                    onClick={async () => {
-                      const url = await act(`share-${site.name}`, () => api.invoke('sites:share', site.name))
-                      if (url) {
-                        navigator.clipboard?.writeText(url).catch(() => undefined)
-                        notify({ kind: 'info', text: `Public link copied: ${url}` })
-                      }
-                    }}
-                  >
-                    {busy.has(`share-${site.name}`) ? 'Sharing…' : 'Share'}
-                  </button>
-                )}
               </div>
-              {site.shareUrl && (
-                <div className="mt-2 text-xs" style={{ color: 'var(--ok)', userSelect: 'text' }}>
-                  Shared at {site.shareUrl}
-                </div>
-              )}
             </div>
           ))}
         </div>
       )}
       {creating && <NewProject onClose={() => setCreating(false)} />}
-    </div>
+    </>
   )
 }

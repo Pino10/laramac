@@ -1,4 +1,15 @@
-export type ServiceId = 'nginx' | 'apache' | 'php' | 'mysql' | 'mailpit'
+export type ServiceId =
+  | 'nginx'
+  | 'apache'
+  | 'php'
+  | 'mysql'
+  | 'mariadb'
+  | 'postgres'
+  | 'redis'
+  | 'mongodb'
+  | 'mailpit'
+
+export type ServiceGroup = 'web' | 'runtime' | 'database' | 'mail'
 
 export type ServiceStatus = 'not-installed' | 'stopped' | 'starting' | 'running' | 'error'
 
@@ -7,8 +18,11 @@ export interface ServiceInfo {
   name: string
   description: string
   status: ServiceStatus
+  group: ServiceGroup
   port?: number
   version?: string
+  /** How apps connect, for example "127.0.0.1:5432, user postgres". */
+  connection?: string
   error?: string
 }
 
@@ -62,6 +76,7 @@ export interface AppSettings {
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
+  postgresMajor: string
   httpPort: number
   httpsPort: number
   apachePort: number
@@ -77,6 +92,7 @@ export interface ToolsStatus {
   dnsReady: boolean
   caTrusted: boolean
   phpmyadmin: boolean
+  adminer: boolean
   cloudflared: boolean
   ngrok: boolean
   composer: boolean
@@ -126,7 +142,7 @@ export interface Channels {
   'tools:status': { args: []; result: ToolsStatus }
   'tools:setup-dns': { args: []; result: ToolsStatus }
   'tools:trust-ca': { args: []; result: ToolsStatus }
-  'tools:install': { args: ['phpmyadmin' | 'cloudflared' | 'ngrok' | 'composer']; result: ToolsStatus }
+  'tools:install': { args: ['phpmyadmin' | 'adminer' | 'cloudflared' | 'ngrok' | 'composer']; result: ToolsStatus }
   'tools:install-claude': { args: []; result: void }
   'tools:open-external': { args: [string]; result: void }
   'ai:detect': { args: []; result: LocalLlm[] }
