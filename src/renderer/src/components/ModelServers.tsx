@@ -195,7 +195,7 @@ function ServerDialog({ server, onClose, onSaved }: { server: ModelServer | null
           <label htmlFor="ms-url">Address</label>
           <input id="ms-url" className="input mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
           <span className="hint">
-            OpenAI format usually ends in /v1, like http://127.0.0.1:8000/v1. Anthropic format is the root, like http://127.0.0.1:8000 or https://api.anthropic.com.
+            Just the address and port is enough, like http://127.0.0.1:8000. Laramac adds /v1 for the OpenAI format itself. Add a path only if your server uses an unusual one.
           </span>
         </div>
         <div className="field">

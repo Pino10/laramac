@@ -287,12 +287,16 @@ Connect once, with your GitHub CLI sign-in or a personal access token (kept encr
 
 <img src="docs/screenshots/security.png" alt="A code review report" width="820">
 
-**Code review.** Pick a site in www, one of your GitHub repositories, or any Git address (Azure DevOps, GitLab, Bitbucket; add a token for private ones, used once and not saved). Choose the reviewer and what to look for (security, bugs, or everything):
+**Code review.** Pick a site in www, one of your GitHub repositories, or an Azure DevOps repository. Paste a token (and, for Azure DevOps, your organization) and press **Show my repositories** to pick from a list; any other Git address works too. Tokens are used once and not saved. Choose the reviewer and what to look for (security, bugs, or everything):
 
-- **Claude Code** reads the whole project itself in read-only mode: it can open and search files, but not change or run anything.
+- **Claude Code** reads the whole project itself in read-only mode: it can open and search files, but not change or run anything. It needs Claude Code's command line tool, which is separate from the Claude desktop app; **Install Claude Code** sets it up.
 - **Your model** (LM Studio, Ollama, vMLX, oMLX, or a cloud API you added) reads the most important files first, in parts, and the parts are merged into one report.
 
 The report gives each problem a severity, the file and line, what is wrong and how to fix it. Laramac also checks every file for leaked keys and passwords (private keys, AWS, GitHub, Stripe, Slack, Google, OpenAI and Anthropic keys, passwords written into code), without storing them. Reports are kept under Past reviews; **Fix with AI** opens your coding agent in the project with a fix request ready to paste.
+
+**Packages.** Checks every Composer and npm package a site uses against the public lists of known security problems, with the fix for each.
+
+**Before you push.** Push to GitHub checks the files it is about to send for keys and passwords, and asks you to confirm if it finds any.
 
 **Web scan.** Nuclei runs thousands of community checks against a local site (sent through your web server as that site) or an address you are allowed to test. Checks that could harm a site are left out, requests are rate limited, and anything outside your Mac asks you to confirm first. **Explain with AI** says which findings matter and how to fix them. For testing behind a login, use Burp Suite, which has its own scanner and AI.
 

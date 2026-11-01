@@ -600,6 +600,24 @@ export interface ReviewResult {
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
 }
 
+export interface AuditFinding {
+  tool: 'composer' | 'npm'
+  package: string
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  title: string
+  id?: string
+  link?: string
+  affected?: string
+  fix?: string
+}
+
+export interface AuditResult {
+  /** Which package managers were checked. */
+  checked: string[]
+  problems: string[]
+  findings: AuditFinding[]
+}
+
 export interface ScanFinding {
   template: string
   name: string
@@ -776,6 +794,9 @@ export interface Channels {
   'review:delete': { args: [string]; result: ReviewInfo[] }
   'review:open': { args: [string, 'report' | 'folder' | 'agent']; result: void }
   'scan:run': { args: [string, string | null]; result: ScanResult }
+  'audit:run': { args: [string]; result: AuditResult }
+  'review:repos': { args: ['github' | 'azure', string, string]; result: { name: string; url: string; private: boolean; project?: string }[] }
+  'sites:secret-check': { args: [string]; result: SecretHit[] }
   'scan:status': { args: []; result: { installed: boolean; version: string | null } }
   'mail:save-relay': { args: [MailRelayInput]; result: MailRelay }
   'mail:test': { args: [string]; result: void }

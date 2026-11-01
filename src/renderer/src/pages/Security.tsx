@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Bot, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
-import type { GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
+import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import type { AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 import { Answer } from '../components/Answer'
 
 type SourceKind = 'site' | 'github' | 'git'
+type Picked = { name: string; url: string; private: boolean }
 
 const SEV = ['critical', 'high', 'medium', 'low'] as const
 
@@ -38,13 +39,15 @@ function Counts({ counts, secrets }: { counts: ReviewInfo['counts']; secrets: nu
 export default function Security(): React.JSX.Element {
   const { sites, settings, act, busy, llms, setPage, notify } = useApp()
   const api = window.laramac
-  const [tab, setTab] = useState<'review' | 'scan'>('review')
+  const [tab, setTab] = useState<'review' | 'scan' | 'deps'>('review')
   const [kind, setKind] = useState<SourceKind>('site')
   const [site, setSite] = useState('')
   const [repos, setRepos] = useState<GitHubRepo[] | null>(null)
   const [repo, setRepo] = useState('')
   const [url, setUrl] = useState('')
   const [token, setToken] = useState('')
+  const [org, setOrg] = useState('')
+  const [listed, setListed] = useState<Picked[] | null>(null)
   const [reviewer, setReviewer] = useState<'claude' | 'model'>('claude')
   const [focus, setFocus] = useState<ReviewFocus>('security')
   const [result, setResult] = useState<ReviewResult | null>(null)
@@ -64,10 +67,59 @@ export default function Security(): React.JSX.Element {
 
   const model = settings?.llm.model
   const current = llms.find((l) => l.baseUrl === settings?.llm.baseUrl)
-  const canRun = kind === 'site' ? !!site : kind === 'github' ? !!repo : /^https:\/\/\S+$/.test(url.trim())
+  const connected = !!repos && repos.length > 0
+  const canRun = kind === 'site' ? !!site : kind === 'github' && connected ? !!repo : /^https:\/\/\S+$/.test(url.trim())
+  const switchKind = (k: SourceKind): void => {
+    setKind(k)
+    setListed(null)
+    setUrl('')
+  }
+  const listRepos = async (): Promise<void> => {
+    const r = await act('review-repos', () => api.invoke('review:repos', kind === 'git' ? 'azure' : 'github', token, org))
+    if (r) {
+      setListed(r)
+      setUrl(r[0]?.url ?? '')
+    }
+  }
+  const picker = (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: kind === 'git' ? '200px 1fr auto' : '1fr auto', gap: 10 }}>
+        {kind === 'git' && <input className="input mono" placeholder="Organization" value={org} onChange={(e) => setOrg(e.target.value)} aria-label="Azure DevOps organization" />}
+        <input
+          className="input mono"
+          type="password"
+          autoComplete="off"
+          placeholder={kind === 'git' ? 'Personal access token (Code: Read)' : 'GitHub token (ghp_… or github_pat_…)'}
+          value={token}
+          onChange={(e) => {
+            setToken(e.target.value)
+            setListed(null)
+          }}
+          aria-label="Access token"
+        />
+        <button className="btn" disabled={!token.trim() || (kind === 'git' && !org.trim()) || busy.has('review-repos')} onClick={listRepos}>
+          <ListChecks size={14} /> {busy.has('review-repos') ? 'Loading…' : 'Show my repositories'}
+        </button>
+      </div>
+      {listed &&
+        (listed.length === 0 ? (
+          <div className="hint">That token can’t see any repositories.</div>
+        ) : (
+          <select className="input" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Repository">
+            {listed.map((r) => (
+              <option key={r.url} value={r.url}>
+                {r.name}
+                {r.private ? ' (private)' : ''}
+              </option>
+            ))}
+          </select>
+        ))}
+    </>
+  )
 
   const run = async (): Promise<void> => {
-    const source = kind === 'site' ? { kind, site } : kind === 'github' ? { kind, repo } : { kind, url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
+    const source =
+      kind === 'site' ? { kind, site } : kind === 'github' && connected ? { kind, repo } : { kind: 'git', url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
     const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus } as never))
     if (r) {
       setResult(r)
@@ -87,6 +139,9 @@ export default function Security(): React.JSX.Element {
           <button role="tab" aria-selected={tab === 'scan'} onClick={() => setTab('scan')}>
             <Radar size={14} /> Web scan
           </button>
+          <button role="tab" aria-selected={tab === 'deps'} onClick={() => setTab('deps')}>
+            <Package size={14} /> Packages
+          </button>
         </div>
       </PageHead>
 
@@ -96,13 +151,13 @@ export default function Security(): React.JSX.Element {
             <div className="field">
               <label>What to review</label>
               <div className="seg" role="radiogroup" aria-label="Source">
-                <button role="radio" aria-checked={kind === 'site'} onClick={() => setKind('site')}>
+                <button role="radio" aria-checked={kind === 'site'} onClick={() => switchKind('site')}>
                   <Laptop size={13} /> A site in www
                 </button>
-                <button role="radio" aria-checked={kind === 'github'} onClick={() => setKind('github')}>
+                <button role="radio" aria-checked={kind === 'github'} onClick={() => switchKind('github')}>
                   <GitBranch size={13} /> GitHub repository
                 </button>
-                <button role="radio" aria-checked={kind === 'git'} onClick={() => setKind('git')}>
+                <button role="radio" aria-checked={kind === 'git'} onClick={() => switchKind('git')}>
                   <Globe2 size={13} /> Azure DevOps or any Git
                 </button>
               </div>
@@ -118,7 +173,7 @@ export default function Security(): React.JSX.Element {
               </select>
             )}
             {kind === 'github' &&
-              (repos && repos.length > 0 ? (
+              (connected ? (
                 <select className="input" value={repo} onChange={(e) => setRepo(e.target.value)} aria-label="Repository">
                   <option value="">Pick a repository</option>
                   {repos.map((r) => (
@@ -129,19 +184,32 @@ export default function Security(): React.JSX.Element {
                   ))}
                 </select>
               ) : (
-                <div className="hint">
-                  Connect GitHub on the{' '}
-                  <button className="link" onClick={() => setPage('github')}>
-                    GitHub page
-                  </button>{' '}
-                  to pick from your repositories, or use the Git address option.
-                </div>
+                <>
+                  {picker}
+                  <div className="hint">
+                    Paste a token to pick from your repositories, or connect GitHub once on the{' '}
+                    <button className="link" onClick={() => setPage('github')}>
+                      GitHub page
+                    </button>{' '}
+                    so you never paste it again.
+                  </div>
+                </>
               ))}
             {kind === 'git' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 10 }}>
-                <input className="input mono" placeholder="https://dev.azure.com/org/project/_git/repo" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Repository address" />
-                <input className="input mono" type="password" autoComplete="off" placeholder="Token, if private (PAT)" value={token} onChange={(e) => setToken(e.target.value)} aria-label="Access token" />
-              </div>
+              <>
+                {picker}
+                <details className="hint">
+                  <summary>Another Git host, or type the address yourself</summary>
+                  <input
+                    className="input mono"
+                    style={{ marginTop: 8 }}
+                    placeholder="https://dev.azure.com/org/project/_git/repo"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    aria-label="Repository address"
+                  />
+                </details>
+              </>
             )}
             {kind !== 'site' && <div className="hint">Laramac downloads a read-only copy into its own folder. The token is used once and not saved.</div>}
 
@@ -176,7 +244,15 @@ export default function Security(): React.JSX.Element {
             </div>
             <div className="hint">
               {reviewer === 'claude'
-                ? 'Claude Code reads the whole project itself, in read-only mode: it can open and search files but not change or run anything. It needs to be installed and signed in.'
+                ? (
+                  <>
+                    Claude Code reads the whole project itself, in read-only mode: it can open and search files but not change or run anything. This needs Claude Code’s command line tool (the
+                    Claude desktop app is separate).{' '}
+                    <button className="link" onClick={() => act('install-claude', () => api.invoke('ai:install-tool', 'claude', 'cli')).then(() => notify({ kind: 'info', text: 'Terminal is installing Claude Code. When it finishes, run claude once to sign in, then start the review.' }))}>
+                      <Download size={11} /> Install Claude Code
+                    </button>
+                  </>
+                )
                 : model
                   ? `${model} reads the most important files in parts (routes, controllers, login, database code first). Local models are private but slower; large projects take a while.`
                   : 'Pick a model on the Tools page first.'}
@@ -241,8 +317,10 @@ export default function Security(): React.JSX.Element {
             </>
           )}
         </>
-      ) : (
+      ) : tab === 'scan' ? (
         <WebScan />
+      ) : (
+        <Packages />
       )}
     </>
   )
@@ -378,6 +456,89 @@ function WebScan(): React.JSX.Element {
                   <span className="mono hint">{f.matched}</span>
                   {f.description && <p>{f.description}</p>}
                   {f.remediation && <p className="hint">Fix: {f.remediation}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function Packages(): React.JSX.Element {
+  const { sites, act, busy } = useApp()
+  const [site, setSite] = useState(sites[0]?.name ?? '')
+  const [res, setRes] = useState<(AuditResult & { site: string }) | null>(null)
+  return (
+    <>
+      <div className="sec-form glass">
+        <div className="hint" style={{ marginBottom: 4 }}>
+          Checks every Composer and npm package a site uses against the public lists of known security problems. Nothing is installed or changed. It reads composer.lock and
+          package-lock.json, so run composer install or npm install first.
+        </div>
+        <select className="input" value={site} onChange={(e) => setSite(e.target.value)} aria-label="Site">
+          {sites.length === 0 && <option value="">No sites yet</option>}
+          {sites.map((s) => (
+            <option key={s.name} value={s.name}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <div className="end">
+          <button
+            className="btn btn-primary"
+            disabled={!site || busy.has('audit')}
+            onClick={async () => {
+              const r = await act('audit', () => window.laramac.invoke('audit:run', site))
+              if (r) setRes({ ...r, site })
+            }}
+          >
+            <Package size={14} /> {busy.has('audit') ? 'Checking…' : 'Check packages'}
+          </button>
+        </div>
+      </div>
+      {res && (
+        <div className="report glass">
+          <div className="report-head">
+            <div>
+              <strong>
+                {res.site}:{' '}
+                {res.checked.length === 0
+                  ? 'no lock file found'
+                  : res.findings.length === 0
+                    ? 'no known problems'
+                    : `${res.findings.length} ${res.findings.length === 1 ? 'problem' : 'problems'}`}
+              </strong>
+              {res.checked.length > 0 && <span className="hint">Checked {res.checked.join(' and ')}</span>}
+            </div>
+          </div>
+          {res.problems.map((p) => (
+            <div key={p} className="hint" style={{ color: 'var(--warn)' }}>
+              {p}
+            </div>
+          ))}
+          <div className="scan-list">
+            {res.findings.map((f, i) => (
+              <div key={i} className="scan-item">
+                <span className="sev" data-sev={f.severity === 'unknown' ? 'low' : f.severity}>
+                  {f.severity}
+                </span>
+                <div className="grow">
+                  <strong>
+                    {f.package} <span className="hint">({f.tool})</span>
+                  </strong>
+                  <p>
+                    {f.title}
+                    {f.id ? ` (${f.id})` : ''}
+                  </p>
+                  {f.affected && <span className="mono hint">Affected: {f.affected}</span>}
+                  {f.fix && <p className="hint">Fix: {f.fix}</p>}
+                  {f.link && (
+                    <button className="link" onClick={() => window.laramac.invoke('tools:open-external', f.link!)}>
+                      Details
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

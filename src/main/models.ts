@@ -48,6 +48,8 @@ export function normalizeBase(url: string, api: ModelApi): string {
   if (!/^https?:\/\//i.test(u)) u = `http://${u}`
   u = u.replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, '$1127.0.0.1')
   if (api === 'anthropic') return u.replace(/\/v1$/, '')
+  // OpenAI-format servers answer under /v1; an address with just the host and port gets it added.
+  if (/^https?:\/\/[^/]+$/.test(u)) return `${u}/v1`
   return u
 }
 

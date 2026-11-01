@@ -3404,7 +3404,9 @@ html[data-glass='midnight'] .menu {
   display: flex;
   flex-direction: column;
   border-radius: var(--r-lg);
-  overflow: hidden;
+  position: relative;
+  /* Not hidden: the ⋯ menu has to be able to spill outside the card. */
+  overflow: visible;
   transition: transform 0.25s var(--spring), box-shadow 0.25s var(--ease);
 }
 .gal-card:hover {
@@ -3858,4 +3860,40 @@ html[data-tone='light'] .nav-item[aria-current='page'] svg {
 }
 .sidebar[data-slim='true'] .nav-item::before {
   display: none;
+}
+
+/* A card with its menu open sits above its neighbours. */
+.gal-card:has(.menu),
+.gal-card:focus-within {
+  z-index: 20;
+}
+
+/* Warning in the push dialog when a file looks like it holds a key. */
+.push-keys {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+  font-size: 12.5px;
+}
+.push-keys strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+}
+.push-keys ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+}
+.push-keys .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  cursor: pointer;
 }

@@ -28,9 +28,10 @@ import {
   List,
   LayoutGrid,
   Sparkles,
-  Wrench
+  Wrench,
+  KeyRound
 } from 'lucide-react'
-import type { SiteLogSource, DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
+import type { SiteLogSource, DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer, SecretHit } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
@@ -840,7 +841,17 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
   const [replace, setReplace] = useState(false)
   const [done, setDone] = useState<GitPushResult | null>(null)
   const [changeRepo, setChangeRepo] = useState(false)
+  const [keys, setKeys] = useState<SecretHit[] | null>(null)
+  const [keysOk, setKeysOk] = useState(false)
   const picking = !st?.remote || changeRepo
+
+  useEffect(() => {
+    // Looks for passwords and API keys in the files that would be pushed, before anything leaves the Mac.
+    void api
+      .invoke('sites:secret-check', site.name)
+      .then(setKeys)
+      .catch(() => setKeys([]))
+  }, [api, site.name])
 
   useEffect(() => {
     void api.invoke('github:account').then(async (a) => {
@@ -1033,6 +1044,25 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
                 does not
               </label>
             )}
+            {keys && keys.length > 0 && (
+              <div className="push-keys">
+                <strong>
+                  <KeyRound size={13} /> {keys.length === 1 ? 'This looks like a password or key' : `${keys.length} things look like passwords or keys`}
+                </strong>
+                <ul>
+                  {keys.slice(0, 6).map((k) => (
+                    <li key={`${k.file}:${k.line}`}>
+                      {k.kind} in <span className="mono">{k.file}:{k.line}</span>
+                    </li>
+                  ))}
+                  {keys.length > 6 && <li>and {keys.length - 6} more</li>}
+                </ul>
+                <span className="hint">Move them to .env (which Git ignores) before pushing. Anything pushed stays in the history, even after you delete it.</span>
+                <label className="check">
+                  <input type="checkbox" checked={keysOk} onChange={(e) => setKeysOk(e.target.checked)} /> I checked these, they are safe to push
+                </label>
+              </div>
+            )}
             <div className="end" style={{ marginTop: 8 }}>
               <button className="btn" onClick={onClose}>
                 Cancel
@@ -1041,6 +1071,7 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
                 className="btn btn-primary"
                 disabled={
                   busy.has(`push-${site.name}`) ||
+                  (!!keys && keys.length > 0 && !keysOk) ||
                   (mode === 'branch' && !branch.trim()) ||
                   ((mode === 'tag' || mode === 'release') && !tag.trim()) ||
                   (picking && target === 'new' && !newName.trim())

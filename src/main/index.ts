@@ -27,6 +27,7 @@ import * as models from './models'
 import * as mailrelay from './mailrelay'
 import * as review from './review'
 import * as scan from './scan'
+import * as audit from './audit'
 import * as dumps from './dumps'
 import * as project from './project'
 import * as cli from './cli'
@@ -979,6 +980,18 @@ function registerIpc(): void {
       clipboard.writeText(prompt)
       activity.push('info', 'Fix request copied', 'Paste it into your AI tool to start fixing the findings.')
     }
+  })
+  handle('audit:run', (name) => audit.auditProject(siteByName(name).path))
+  handle('review:repos', async (provider, token, org) => {
+    try {
+      return await review.listRemoteRepos(provider === 'azure' ? 'azure' : 'github', String(token ?? ''), String(org ?? ''))
+    } catch (err) {
+      throw new ValidationError((err as Error).message)
+    }
+  })
+  handle('sites:secret-check', async (name) => {
+    const site = siteByName(name)
+    return review.scanSecrets(site.path, await review.pushableFiles(site.path))
   })
   handle('scan:status', async () => ({ installed: existsSync(scan.nucleiBinary()), version: await scan.nucleiVersion() }))
   handle('scan:run', async (target, siteName) => {

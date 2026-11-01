@@ -87,7 +87,7 @@ export function scanSecrets(root: string, files: string[]): SecretHit[] {
       for (const [kind, re] of SECRET_PATTERNS) {
         if (!re.test(line)) continue
         // Example and test files commonly hold fake keys.
-        if (/example|sample|dummy|placeholder|changeme|your[_-]?(key|token|secret)|xxxx|<.*>/i.test(line) && kind !== 'Private key') continue
+        if (/example|sample|dummy|placeholder|changeme|your[_-]?(key|token|secret)|xxxx|<[\w -]{2,40}>/i.test(line) && kind !== 'Private key') continue
         if (kind === 'Laravel app key' && !/^\.env$/.test(rel.split('/').pop() ?? '')) continue
         hits.push({ file: rel, line: i + 1, kind })
         break
@@ -127,7 +127,16 @@ ${FORMAT}`
 
 function runClaude(cwd: string, prompt: string, onLine: (l: string) => void): Promise<string> {
   const claude = findCli(['claude'])
-  if (!claude) return Promise.reject(new Error('Claude Code is not installed. Install it on the Tools page, or choose a model instead.'))
+  if (!claude) {
+    const app = existsSync('/Applications/Claude.app')
+    return Promise.reject(
+      new Error(
+        app
+          ? 'You have the Claude app, but code review needs Claude Code’s command line tool, which is installed separately. Press Install Claude Code, then try again, or choose a model instead.'
+          : 'Claude Code is not installed. Press Install Claude Code, then try again, or choose a model instead.'
+      )
+    )
+  }
   return new Promise((resolve, reject) => {
     // Plan mode and read-only tools: Claude Code can read and search, but not edit or run anything.
     const child = spawn(claude, ['-p', prompt, '--output-format', 'text', '--permission-mode', 'plan', '--allowedTools', 'Read,Grep,Glob'], {
@@ -301,6 +310,59 @@ export function cloneForReview(url: string, token: string | null, name: string):
       if (!err) return resolve(target)
       const msg = String(stderr || err.message)
       reject(new Error(/Authentication|403|401|could not read Username|not found/i.test(msg) ? 'The repository could not be read. Check the address, and add a token if it is private.' : `Cloning failed: ${msg.trim().split('\n').pop()}`))
+    })
+  })
+}
+
+export interface RemoteRepo {
+  name: string
+  url: string
+  private: boolean
+  project?: string
+}
+
+/** Lists repositories a token can read, so you can pick one instead of typing its address. */
+export async function listRemoteRepos(provider: 'github' | 'azure', token: string, org = ''): Promise<RemoteRepo[]> {
+  if (!token.trim()) throw new Error('Paste a token first.')
+  if (provider === 'github') {
+    const out: RemoteRepo[] = []
+    for (let page = 1; page <= 5; page++) {
+      const res = await fetch(`https://api.github.com/user/repos?per_page=100&sort=updated&page=${page}`, {
+        headers: { Authorization: `Bearer ${token.trim()}`, Accept: 'application/vnd.github+json', 'User-Agent': 'Laramac' },
+        signal: AbortSignal.timeout(20000)
+      })
+      if (res.status === 401) throw new Error('GitHub did not accept that token.')
+      if (!res.ok) throw new Error(`GitHub answered ${res.status}.`)
+      const list = (await res.json()) as { full_name: string; clone_url: string; private: boolean }[]
+      out.push(...list.map((r) => ({ name: r.full_name, url: r.clone_url, private: r.private })))
+      if (list.length < 100) break
+    }
+    return out
+  }
+  const o = org.trim().replace(/^https:\/\/dev\.azure\.com\//, '').replace(/\/.*$/, '')
+  if (!/^[\w.-]{1,100}$/.test(o)) throw new Error('Enter your Azure DevOps organization, the name after dev.azure.com/.')
+  const res = await fetch(`https://dev.azure.com/${encodeURIComponent(o)}/_apis/git/repositories?api-version=7.1`, {
+    headers: { Authorization: `Basic ${Buffer.from(`:${token.trim()}`).toString('base64')}`, Accept: 'application/json' },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(20000)
+  })
+  // Azure answers a bad token with a redirect to its sign-in page.
+  if (res.status === 401 || res.status === 203 || (res.status >= 300 && res.status < 400)) throw new Error('Azure DevOps did not accept that token. It needs Code (Read) access.')
+  if (res.status === 404) throw new Error('That Azure DevOps organization was not found.')
+  if (!res.ok) throw new Error(`Azure DevOps answered ${res.status}.`)
+  const data = (await res.json()) as { value: { name: string; remoteUrl: string; project: { name: string; visibility?: string } }[] }
+  return data.value
+    .map((r) => ({ name: `${r.project.name}/${r.name}`, url: r.remoteUrl, private: r.project.visibility !== 'public', project: r.project.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Files git would push (tracked or new, never ignored), or all source files outside git. */
+export function pushableFiles(root: string): Promise<string[]> {
+  return new Promise((resolve) => {
+    execFile('git', ['ls-files', '-co', '--exclude-standard', '-z'], { cwd: root, maxBuffer: 64 * 1024 * 1024 }, (err, out) => {
+      if (err) return resolve(listSourceFiles(root))
+      const files = String(out).split('\0').filter(Boolean)
+      resolve(files.filter((f) => !/(^|\/)(node_modules|vendor)\//.test(f)).slice(0, 8000))
     })
   })
 }
