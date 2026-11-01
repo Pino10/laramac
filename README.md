@@ -57,7 +57,7 @@ This downloads the newest release for your Mac, checks it against the published 
 
 ### Option 2: download the DMG
 
-1. Download `Laramac-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from [Releases](https://github.com/Pino10/laramac/releases/latest).
+1. Download `Laramac-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from [Releases](https://github.com/Pino10/laramac/releases).
 2. Drag Laramac to Applications and open it.
 3. The first time, macOS says it cannot verify the developer. Click **Done**, open **System Settings › Privacy & Security**, scroll down and click **Open Anyway**.
 
