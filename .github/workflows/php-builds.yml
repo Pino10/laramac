@@ -36,11 +36,13 @@ jobs:
       - name: Work out which PHP releases are missing
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          REPO: ${{ vars.RELEASES_REPO || github.repository }}
+          SELF_HOSTED: ${{ vars.MAC_RUNNER == 'self-hosted' }}
           MINORS: ${{ inputs.minors || '8.5,8.4,8.3,8.2' }}
           FORCE: ${{ inputs.force || false }}
         run: |
-          existing=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          existing=$(gh release view "$RELEASE_TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
           include='[]'
           for minor in ${MINORS//,/ }; do
             version=$(curl -fsSL "https://www.php.net/releases/?json&version=$minor" | jq -r .version)
@@ -49,8 +51,15 @@ jobs:
               name="php-$version-fpm-macos-$arch.tar.gz"
               sums="php-$version-macos-$arch.sha256"
               if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing" || ! grep -qx "$sums" <<<"$existing"; then
-                runner=$([ "$arch" = aarch64 ] && echo macos-latest || echo macos-15-intel)
-                include=$(jq -c --arg v "$version" --arg m "$minor" --arg a "$arch" --arg r "$runner" '. + [{version:$v, minor:$m, arch:$a, runner:$r}]' <<<"$include")
+                if [ "$SELF_HOSTED" = "true" ]; then
+                  # Your own Apple Silicon Mac builds the Apple Silicon versions. Intel builds need an
+                  # Intel machine, so they are skipped; Intel Macs fall back to static-php.dev builds.
+                  [ "$arch" = aarch64 ] || { echo "Skipped on your Mac: PHP $version for Intel"; continue; }
+                  runner='["self-hosted","macOS","ARM64"]'
+                else
+                  runner=$([ "$arch" = aarch64 ] && echo '"macos-latest"' || echo '"macos-15-intel"')
+                fi
+                include=$(jq -c --arg v "$version" --arg m "$minor" --arg a "$arch" --argjson r "$runner" '. + [{version:$v, minor:$m, arch:$a, runner:$r}]' <<<"$include")
                 echo "Needs a build: PHP $version for $arch"
               else
                 echo "Already built: PHP $version for $arch"
@@ -110,11 +119,12 @@ jobs:
 
       - name: Publish
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          REPO: ${{ vars.RELEASES_REPO || github.repository }}
         run: |
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+          gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --repo "$REPO" --prerelease --latest=false \
               --title "PHP builds" --notes "Static PHP builds used by Laramac, rebuilt automatically when php.net publishes a new release."
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+          gh release upload "$RELEASE_TAG" --repo "$REPO" --clobber \
             php-${{ matrix.version }}-*-macos-${{ matrix.arch }}.* \
             php-${{ matrix.version }}-macos-${{ matrix.arch }}.sha256

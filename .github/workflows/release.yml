@@ -10,10 +10,19 @@ on:
         description: 'Create this release tag (for example v0.5.1). Leave empty to only build.'
         required: false
         default: ''
+      also_here:
+        description: 'Also publish in this repository, for copies of Laramac that still look here for updates.'
+        type: boolean
+        default: false
+
+# Finished builds are published to a separate public repository (vars.RELEASES_REPO, using the
+# RELEASES_TOKEN secret), so this repository can stay private. Without them, they go here as before.
+# Set the repository variable MAC_RUNNER to "self-hosted" to build on your own Mac instead of
+# GitHub's machines (free and unlimited, even for private repositories).
 
 jobs:
   build-mac:
-    runs-on: macos-latest
+    runs-on: ${{ vars.MAC_RUNNER == 'self-hosted' && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-latest' }}
     permissions:
       contents: write
     steps:
@@ -68,16 +77,25 @@ jobs:
             dist/*.dmg
             dist/SHA256SUMS.txt
 
-      # Started from the Actions tab with a tag: create the tag and the release.
-      - name: Create the release
+      # Started from the Actions tab with a tag: publish the release.
+      - name: Publish the release
         if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: Laramac ${{ inputs.tag }}
-          prerelease: true
-          body_path: RELEASE_NOTES.md
-          files: |
-            dist/*.dmg
-            dist/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          REPO: ${{ vars.RELEASES_REPO || github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          target=""
+          [ "$REPO" = "$GITHUB_REPOSITORY" ] && target="--target $GITHUB_SHA"
+          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt --repo "$REPO" $target \
+            --title "Laramac $TAG" --notes-file RELEASE_NOTES.md --prerelease
+          echo "Published $TAG to $REPO"
+
+      - name: Also publish in this repository
+        if: github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.also_here && vars.RELEASES_REPO != '' && vars.RELEASES_REPO != github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Laramac $TAG" --notes-file RELEASE_NOTES.md --prerelease

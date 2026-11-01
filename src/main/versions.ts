@@ -236,7 +236,8 @@ export const COMPOSER_URL = 'https://getcomposer.org/download/latest-stable/comp
 export const WORDPRESS_URL = 'https://wordpress.org/latest.zip'
 
 /** Where prebuilt Nginx and Apache binaries are published by this repo's CI. */
-export const BINARIES_REPO = 'Pino10/laramac'
+/** Public repository with Laramac's downloads: app releases, PHP builds and server builds. The source can stay private. */
+export const BINARIES_REPO = 'Pino10/laramac-releases'
 
 export function bundledBinaryUrl(name: 'nginx' | 'httpd' | 'redis', arch: 'arm64' | 'amd64'): string {
   return `https://github.com/${BINARIES_REPO}/releases/download/binaries/${name}-darwin-${arch}.tar.gz`

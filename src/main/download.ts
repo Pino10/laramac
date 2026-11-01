@@ -6,7 +6,7 @@ import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 
 /** Some download servers block anonymous clients; identify the app honestly. */
-export const USER_AGENT = 'Laramac (+https://github.com/Pino10/laramac)'
+export const USER_AGENT = 'Laramac (+https://github.com/Pino10/laramac-releases)'
 
 export type ProgressFn = (percent: number | null, note?: string) => void
 
