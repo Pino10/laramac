@@ -4,6 +4,7 @@ import { dirname } from 'path'
 import { execFile } from 'child_process'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
+import { openAsset } from './distribution'
 
 /** Some download servers block anonymous clients; identify the app honestly. */
 export const USER_AGENT = 'Laramac (+https://github.com/Pino10/laramac-releases)'
@@ -20,7 +21,7 @@ export async function downloadFile(
   onProgress?: ProgressFn
 ): Promise<void> {
   mkdirSync(dirname(dest), { recursive: true })
-  const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': USER_AGENT } })
+  const res = await openAsset(url)
   if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) for ${url}`)
 
   const total = Number(res.headers.get('content-length')) || 0

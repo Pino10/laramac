@@ -222,6 +222,41 @@ describe('API client', () => {
       expect(back).toMatchObject({ method: 'POST', url: 'http://127.0.0.1:18555/posts?page=2' })
       expect(back.headers.find((h) => h.key === 'Authorization')?.value).toBe('Bearer s3cret')
       expect((await sendRequest({ ...emptyRequest(), url: 'http://127.0.0.1:18555/missing' }, [])).status).toBe(404)
+
+      // Tests and saved values, like Postman.
+      const checked = await sendRequest(
+        {
+          ...req,
+          tests: [
+            { enabled: true, source: 'status', path: '', op: 'eq', value: '201' },
+            { enabled: true, source: 'time', path: '', op: 'lt', value: '5000' },
+            { enabled: true, source: 'header', path: 'X-Seen', op: 'eq', value: 'yes' },
+            { enabled: true, source: 'json', path: 'method', op: 'eq', value: 'POST' },
+            { enabled: true, source: 'json', path: 'nothing.here', op: 'exists', value: '' },
+            { enabled: false, source: 'status', path: '', op: 'eq', value: '500' }
+          ],
+          extract: [{ enabled: true, name: 'lastAuth', path: 'auth' }, { enabled: true, name: 'seen', path: 'header:x-seen' }]
+        },
+        vars
+      )
+      expect(checked.tests.map((t) => t.pass)).toEqual([true, true, true, true, false])
+      expect(checked.tests[4].detail).toBe('Got nothing')
+      expect(checked.saved).toEqual([{ key: 'lastAuth', value: 'Bearer s3cret' }, { key: 'seen', value: 'yes' }])
+      const { applySaved, mergeVars, toCode } = await import('../src/main/apiclient')
+      expect(applySaved({ id: 'e', name: 'Local', vars: [{ key: 'seen', value: 'no', enabled: false }] }, checked.saved).vars).toEqual([
+        { key: 'seen', value: 'yes', enabled: true },
+        { key: 'lastAuth', value: 'Bearer s3cret', enabled: true }
+      ])
+      expect(mergeVars([{ key: 'base', value: 'col', enabled: true }, { key: 'x', value: '1', enabled: true }], [{ key: 'base', value: 'env', enabled: true }])).toEqual([
+        { key: 'base', value: 'env', enabled: true },
+        { key: 'x', value: '1', enabled: true }
+      ])
+      expect(toCode(req, vars, 'fetch')).toContain("fetch(\"http://127.0.0.1:18555/posts?page=2\"")
+      const php = toCode(req, vars, 'php')
+      expect(php).toContain("'Authorization: Bearer s3cret'")
+      const { spawnSync } = await import('child_process')
+      if (spawnSync('which', ['php']).status === 0) expect(spawnSync('php', ['-l'], { input: php, encoding: 'utf8' }).stdout).toContain('No syntax errors')
+      expect(toCode(req, vars, 'python')).toContain('requests.request(')
       await expect(sendRequest({ ...emptyRequest(), url: 'http://127.0.0.1:18556/' }, [])).rejects.toThrow(/Nothing is answering/)
       await expect(sendRequest({ ...emptyRequest(), url: 'file:///etc/passwd' }, [])).rejects.toThrow(/Only http/)
     } finally {
@@ -233,24 +268,39 @@ describe('API client', () => {
     const { importText } = await import('../src/main/apiclient')
     const postman = importText(
       JSON.stringify({
+        variable: [{ key: 'base', value: 'https://shop.test' }],
         info: { name: 'Shop API', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
         item: [
           { name: 'Orders', item: [{ name: 'List', request: { method: 'GET', url: { raw: '{{base}}/orders' }, header: [{ key: 'Accept', value: 'application/json' }] } }] },
-          { name: 'Login', request: { method: 'POST', url: '{{base}}/login', body: { mode: 'raw', raw: '{"email":"a"}', options: { raw: { language: 'json' } } }, auth: { type: 'bearer', bearer: [{ key: 'token', value: 'abc' }] } } }
+          {
+            name: 'Login',
+            event: [{ listen: 'test', script: { exec: ['pm.test("ok", () => pm.response.to.have.status(200));', 'var jsonData = pm.response.json();', 'pm.environment.set("token", jsonData.data.token);', 'pm.expect(pm.response.responseTime).to.be.below(500);'] } }],
+            request: { method: 'POST', url: '{{base}}/login', body: { mode: 'raw', raw: '{"email":"a"}', options: { raw: { language: 'json' } } }, auth: { type: 'bearer', bearer: [{ key: 'token', value: 'abc' }] } }
+          }
         ]
       })
-    )
+    ).collection!
     expect(postman.name).toBe('Shop API')
-    expect(postman.requests.map((r) => r.name)).toEqual(['Orders / List', 'Login'])
+    expect(postman.requests.map((r) => `${r.folder ?? ''}|${r.name}`)).toEqual(['Orders|List', '|Login'])
+    expect(postman.variables).toEqual([{ key: 'base', value: 'https://shop.test', enabled: true }])
+    expect(postman.requests[1].tests).toEqual([
+      { enabled: true, source: 'status', path: '', op: 'eq', value: '200' },
+      { enabled: true, source: 'time', path: '', op: 'lt', value: '500' }
+    ])
+    expect(postman.requests[1].extract).toEqual([{ enabled: true, name: 'token', path: 'data.token' }])
+    const { toPostman } = await import('../src/main/apiclient')
+    const again = importText(JSON.stringify(toPostman(postman))).collection!
+    expect(again.requests.map((r) => `${r.folder ?? ''}|${r.name}|${r.method}`)).toEqual(['Orders|List|GET', '|Login|POST'])
+    expect(importText(JSON.stringify({ name: 'Staging', values: [{ key: 'base', value: 'https://staging.example.com', enabled: true }], _postman_variable_scope: 'environment' })).environment).toMatchObject({ name: 'Staging', vars: [{ key: 'base' }] })
     expect(postman.requests[1]).toMatchObject({ method: 'POST', body: { type: 'json' }, auth: { type: 'bearer', token: 'abc' } })
 
-    const insomnia = importText(JSON.stringify({ _type: 'export', resources: [{ _type: 'workspace', name: 'Radio' }, { _type: 'request', name: 'Now playing', method: 'GET', url: 'https://radio.test/api/now', headers: [], parameters: [{ name: 'limit', value: '5' }] }] }))
+    const insomnia = importText(JSON.stringify({ _type: 'export', resources: [{ _type: 'workspace', name: 'Radio' }, { _type: 'request', name: 'Now playing', method: 'GET', url: 'https://radio.test/api/now', headers: [], parameters: [{ name: 'limit', value: '5' }] }] })).collection!
     expect(insomnia).toMatchObject({ name: 'Radio', requests: [{ name: 'Now playing', query: [{ key: 'limit', value: '5' }] }] })
 
-    const openapi = importText(JSON.stringify({ openapi: '3.0.0', info: { title: 'Pets' }, servers: [{ url: 'https://api.example.com/v1' }], paths: { '/pets/{id}': { get: { summary: 'Get a pet', parameters: [{ name: 'id', in: 'path' }] }, delete: { operationId: 'deletePet' } } } }))
+    const openapi = importText(JSON.stringify({ openapi: '3.0.0', info: { title: 'Pets' }, servers: [{ url: 'https://api.example.com/v1' }], paths: { '/pets/{id}': { get: { summary: 'Get a pet', parameters: [{ name: 'id', in: 'path' }] }, delete: { operationId: 'deletePet' } } } })).collection!
     expect(openapi.requests.map((r) => `${r.method} ${r.url}`)).toEqual(['GET https://api.example.com/v1/pets/{{id}}', 'DELETE https://api.example.com/v1/pets/{{id}}'])
 
-    const curl = importText(`curl 'https://api.example.com/users' -H 'Content-Type: application/json' --data-raw '{"name":"Ada"}'`)
+    const curl = importText(`curl 'https://api.example.com/users' -H 'Content-Type: application/json' --data-raw '{"name":"Ada"}'`).collection!
     expect(curl.requests[0]).toMatchObject({ method: 'POST', url: 'https://api.example.com/users', body: { type: 'json', text: '{"name":"Ada"}' } })
     expect(() => importText('not json')).toThrow(/cURL/)
   })
@@ -306,5 +356,54 @@ describe('GitHub push', () => {
     expect(show('main', 'index.php')).toBe('mine')
 
     await expect(publish(site, remote, { mode: 'branch', message: 'x', branch: '../evil' }, auth)).rejects.toThrow(/branch a name/)
+
+    // Pull brings in what someone else pushed, and refuses while there are unpushed changes.
+    const { pull } = await import('../src/main/github')
+    execFileSync('git', ['-C', site, 'branch', '--set-upstream-to=origin/main', 'main'])
+    execFileSync('git', ['-C', other, 'fetch', '-q', 'origin'])
+    execFileSync('git', ['-C', other, 'reset', '-q', '--hard', 'origin/main'])
+    writeFileSync(join(other, 'about.php'), 'about')
+    execFileSync('git', ['-C', other, 'add', '.'])
+    execFileSync('git', ['-C', other, '-c', 'user.name=B', '-c', 'user.email=b@x', 'commit', '-qm', 'about page'])
+    execFileSync('git', ['-C', other, 'push', '-q', 'origin', 'main'])
+    expect(await pull(site, auth)).toBe('Brought in 1 new commit.')
+    expect(readFileSync(join(site, 'about.php'), 'utf8')).toBe('about')
+    expect(await pull(site, auth)).toBe('Already up to date.')
+    writeFileSync(join(site, 'index.php'), 'unsaved')
+    await expect(pull(site, auth)).rejects.toThrow(/not pushed yet/)
+  })
+})
+
+describe('downloads while the project is private', () => {
+  it('reads releases from the private repository with the GitHub sign-in, and downloads its files with it', async () => {
+    const { vi } = await import('vitest')
+    const dist = await import('../src/main/distribution')
+    const calls: { url: string; auth?: string }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: { headers?: Record<string, string> }) => {
+      calls.push({ url, auth: init?.headers?.Authorization })
+      const authed = init?.headers?.Authorization === 'Bearer tok'
+      if (url.includes('laramac-releases')) return new Response('{}', { status: 404 })
+      if (url.endsWith('/releases?per_page=50')) {
+        return authed
+          ? Response.json([{ tag_name: 'v0.12.0', assets: [{ name: 'SHA256SUMS.txt', browser_download_url: 'https://github.com/x/SHA256SUMS.txt', url: 'https://api.github.com/assets/9' }] }])
+          : new Response('{}', { status: 404 })
+      }
+      if (url === 'https://api.github.com/assets/9') return new Response(authed ? 'sums' : 'no', { status: authed ? 200 : 404 })
+      return new Response('public file')
+    })
+    try {
+      dist.setDownloadToken(() => null)
+      await expect(dist.releasesApi('releases?per_page=50')).rejects.toThrow(/Connect your GitHub account/)
+      dist.setDownloadToken(() => 'tok')
+      const rel = await dist.releasesApi<{ tag_name: string }[]>('releases?per_page=50')
+      expect(rel[0].tag_name).toBe('v0.12.0')
+      expect(await (await dist.openAsset('https://github.com/x/SHA256SUMS.txt')).text()).toBe('sums')
+      expect(await (await dist.openAsset('https://cdn.mysql.com/x.tar.gz')).text()).toBe('public file')
+      // The token never goes to other hosts.
+      expect(calls.filter((c) => c.auth && !c.url.startsWith('https://api.github.com/')).length).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+      dist.setDownloadToken(() => null)
+    }
   })
 })

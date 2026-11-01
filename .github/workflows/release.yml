@@ -17,12 +17,12 @@ on:
 
 # Finished builds are published to a separate public repository (vars.RELEASES_REPO, using the
 # RELEASES_TOKEN secret), so this repository can stay private. Without them, they go here as before.
-# Set the repository variable MAC_RUNNER to "self-hosted" to build on your own Mac instead of
-# GitHub's machines (free and unlimited, even for private repositories).
+# Builds run on your own Mac (a self-hosted runner), which is free and unlimited even while the
+# repository is private. Set the repository variable MAC_RUNNER to "github" to use GitHub's Macs.
 
 jobs:
   build-mac:
-    runs-on: ${{ vars.MAC_RUNNER == 'self-hosted' && fromJSON('["self-hosted","macOS","ARM64"]') || 'macos-latest' }}
+    runs-on: ${{ vars.MAC_RUNNER == 'github' && 'macos-latest' || fromJSON('["self-hosted","macOS","ARM64"]') }}
     permissions:
       contents: write
     steps:

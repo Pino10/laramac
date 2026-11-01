@@ -4,9 +4,10 @@ import { existsSync, mkdtempSync, renameSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { ReleaseNote, UpdateInfo } from '../shared/types'
-import { USER_AGENT, downloadFile, sha256File } from './download'
+import { downloadFile, sha256File } from './download'
+import { openAsset, releasesApi } from './distribution'
 import { dirs } from './paths'
-import { BINARIES_REPO, hashFor } from './versions'
+import { hashFor } from './versions'
 import { changelog, dmgArch, pickUpdate, type Release } from './updatecheck'
 
 function run(cmd: string, args: string[]): Promise<string> {
@@ -20,11 +21,7 @@ let pending: { info: UpdateInfo; dmg: string; sums: string } | null = null
 let lastReleases: Release[] = []
 
 async function fetchReleases(): Promise<Release[]> {
-  const res = await fetch(`https://api.github.com/repos/${BINARIES_REPO}/releases?per_page=50`, {
-    headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' }
-  })
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} while checking for updates.`)
-  lastReleases = (await res.json()) as Release[]
+  lastReleases = await releasesApi<Release[]>('releases?per_page=50')
   return lastReleases
 }
 
@@ -61,7 +58,7 @@ export async function installUpdate(update: (pct: number | null, label?: string)
   await downloadFile(dmg, file, (p) => update(p, `Downloading Laramac ${info.version}`))
 
   update(null, 'Checking the download')
-  const list = await (await fetch(sums, { headers: { 'User-Agent': USER_AGENT } })).text()
+  const list = await (await openAsset(sums)).text()
   const expected = hashFor(list, `Laramac-${info.version}-${dmgArch()}.dmg`)
   if (!expected || (await sha256File(file)) !== expected) {
     rmSync(file, { force: true })

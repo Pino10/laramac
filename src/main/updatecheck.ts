@@ -7,7 +7,7 @@ export interface Release {
   body: string | null
   published_at: string
   html_url: string
-  assets: { name: string; browser_download_url: string }[]
+  assets: { name: string; browser_download_url: string; url?: string }[]
 }
 
 /** Every app release, newest first, for the changelog. */

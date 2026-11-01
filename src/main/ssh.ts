@@ -310,6 +310,9 @@ export const rename = async (sid: string, from: string, toName: string): Promise
 
 export const remove = async (sid: string, path: string, isDir: boolean): Promise<void> => session(sid).fs.remove(path, isDir)
 
+/** The open file connection of a browser session. */
+export const sessionFs = (sid: string): RemoteFs => session(sid).fs
+
 /** Opens a server's files for Deploy, over SFTP or FTP. */
 export async function openFs(id: string, passphrase: string | null, crypto: Crypto): Promise<RemoteFs> {
   const s = server(id)

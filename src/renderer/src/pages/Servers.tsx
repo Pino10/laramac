@@ -9,6 +9,7 @@ import {
   File,
   Folder,
   FolderPlus,
+  FolderUp,
   KeyRound,
   Link2,
   Pencil,
@@ -558,7 +559,7 @@ function TerminalPane({
   )
 }
 
-function ServerDialog({
+export function ServerDialog({
   initial,
   onClose,
   onSaved,
@@ -782,7 +783,21 @@ function FileBrowser({ server, session, home }: { server: SshServer; session: st
               }
             }}
           >
-            <Upload size={14} /> Upload
+            <Upload size={14} /> Files
+          </button>
+          <button
+            className="btn"
+            title="Upload a whole folder, such as one of your projects"
+            disabled={busy.has('sftp-up-folder')}
+            onClick={async () => {
+              const r = await act('sftp-up-folder', () => api().invoke('sftp:upload-folder', session, path))
+              if (r) {
+                notify({ kind: 'info', text: `Uploaded ${r.uploaded} ${r.uploaded === 1 ? 'file' : 'files'}${r.skipped ? `, ${r.skipped} already up to date` : ''}.` })
+                await load(path)
+              }
+            }}
+          >
+            <FolderUp size={14} /> {busy.has('sftp-up-folder') ? 'Uploading…' : 'Folder'}
           </button>
           <button
             className="btn btn-primary"

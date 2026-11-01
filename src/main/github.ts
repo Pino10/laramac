@@ -1,7 +1,7 @@
 import { execFile } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { GitHubAccount, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus } from '../shared/types'
+import type { GitHubAccount, GitHubRepo, GitHubRepoDetails, GitPushOptions, GitPushResult, GitSiteStatus } from '../shared/types'
 import { dirs } from './paths'
 import type { Crypto } from './ssh'
 
@@ -21,6 +21,8 @@ interface Stored {
   login: string
   name: string | null
   id: number
+  /** Classic token scopes, or null for fine-grained tokens (which do not report them). */
+  scopes?: string[] | null
 }
 
 function load(): Stored | null {
@@ -33,7 +35,7 @@ function load(): Stored | null {
 
 export function account(): GitHubAccount | null {
   const s = load()
-  return s ? { login: s.login, name: s.name } : null
+  return s ? { login: s.login, name: s.name, scopes: s.scopes ?? null } : null
 }
 
 export function token(crypto: Crypto): string {
@@ -67,11 +69,16 @@ export async function signIn(tok: string, crypto: Crypto): Promise<GitHubAccount
   const t = tok.trim()
   if (!/^(gh[pousr]_[A-Za-z0-9_]{20,255}|github_pat_[A-Za-z0-9_]{20,255}|[a-f0-9]{40})$/.test(t)) throw new Error('That does not look like a GitHub token.')
   if (!crypto.available()) throw new Error('The macOS Keychain is not available, so the token cannot be stored safely.')
-  const me = await gh<{ login: string; name: string | null; id: number }>(t, '/user')
+  const res = await fetch(`${API}/user`, { headers: { Authorization: `Bearer ${t}`, Accept: 'application/vnd.github+json', 'User-Agent': 'Laramac' }, signal: AbortSignal.timeout(30_000) })
+  if (res.status === 401) throw new Error('GitHub did not accept that token.')
+  if (!res.ok) throw new Error(`GitHub answered ${res.status}.`)
+  const me = (await res.json()) as { login: string; name: string | null; id: number }
+  const header = res.headers.get('x-oauth-scopes')
+  const scopes = header === null ? null : header.split(',').map((x) => x.trim()).filter(Boolean)
   mkdirSync(dirs.root(), { recursive: true, mode: 0o700 })
-  writeFileSync(file(), JSON.stringify({ tokenEnc: crypto.encrypt(t), login: me.login, name: me.name, id: me.id }), { mode: 0o600 })
+  writeFileSync(file(), JSON.stringify({ tokenEnc: crypto.encrypt(t), login: me.login, name: me.name, id: me.id, scopes }), { mode: 0o600 })
   chmodSync(file(), 0o600)
-  return { login: me.login, name: me.name }
+  return { login: me.login, name: me.name, scopes }
 }
 
 export function signOut(): void {
@@ -128,9 +135,51 @@ export async function editRepo(tok: string, fullName: string, patch: { descripti
   return toRepo(await gh<RawRepo>(tok, `/repos/${fullName}`, { method: 'PATCH', body: patch }))
 }
 
-export async function createRepo(tok: string, name: string, isPrivate: boolean, description = ''): Promise<GitHubRepo> {
+export async function createRepo(tok: string, name: string, isPrivate: boolean, description = '', readme = false): Promise<GitHubRepo> {
   if (!/^[A-Za-z0-9._-]{1,100}$/.test(name)) throw new Error('Repository names may use letters, numbers, dots, dashes and underscores.')
-  return toRepo(await gh<RawRepo>(tok, '/user/repos', { method: 'POST', body: { name, private: isPrivate, description, auto_init: false } }))
+  return toRepo(await gh<RawRepo>(tok, '/user/repos', { method: 'POST', body: { name, private: isPrivate, description, auto_init: readme } }))
+}
+
+export async function deleteRepo(tok: string, fullName: string): Promise<void> {
+  if (!REPO.test(fullName)) throw new Error('Unknown repository.')
+  try {
+    await gh(tok, `/repos/${fullName}`, { method: 'DELETE' })
+  } catch (err) {
+    if (/Must have admin rights|Not Found|403/i.test((err as Error).message)) {
+      throw new Error('Your GitHub token cannot delete repositories. Connect again with a token that has the delete_repo permission (Administration: read and write for fine-grained tokens).')
+    }
+    throw err
+  }
+}
+
+export async function repoDetails(tok: string, fullName: string): Promise<GitHubRepoDetails> {
+  if (!REPO.test(fullName)) throw new Error('Unknown repository.')
+  const base = `/repos/${fullName}`
+  const [branches, releases, commits, pulls, issues] = await Promise.all([
+    gh<{ name: string; protected: boolean }[]>(tok, `${base}/branches?per_page=50`).catch(() => []),
+    gh<{ tag_name: string; name: string | null; published_at: string; html_url: string; prerelease: boolean }[]>(tok, `${base}/releases?per_page=10`).catch(() => []),
+    gh<{ sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } }[]>(tok, `${base}/commits?per_page=10`).catch(() => []),
+    gh<{ number: number; title: string; html_url: string; user: { login: string } }[]>(tok, `${base}/pulls?state=open&per_page=20`).catch(() => []),
+    gh<{ number: number; title: string; html_url: string; pull_request?: unknown }[]>(tok, `${base}/issues?state=open&per_page=30`).catch(() => [])
+  ])
+  return {
+    branches: branches.map((b) => ({ name: b.name, protected: b.protected })),
+    releases: releases.map((r) => ({ tag: r.tag_name, name: r.name ?? r.tag_name, date: r.published_at, url: r.html_url, prerelease: r.prerelease })),
+    commits: commits.map((c) => ({ sha: c.sha.slice(0, 7), message: c.commit.message.split('\n')[0], author: c.commit.author.name, date: c.commit.author.date, url: c.html_url })),
+    pulls: pulls.map((p) => ({ number: p.number, title: p.title, url: p.html_url, author: p.user.login })),
+    issues: issues.filter((i) => !i.pull_request).map((i) => ({ number: i.number, title: i.title, url: i.html_url }))
+  }
+}
+
+/** Saves the default branch as a zip file. */
+export async function downloadZip(tok: string, fullName: string, dest: string): Promise<void> {
+  if (!REPO.test(fullName)) throw new Error('Unknown repository.')
+  const res = await fetch(`${API}/repos/${fullName}/zipball`, { headers: { Authorization: `Bearer ${tok}`, 'User-Agent': 'Laramac' }, redirect: 'follow' })
+  if (!res.ok || !res.body) throw new Error(`GitHub answered ${res.status} for the download.`)
+  const { Readable } = await import('stream')
+  const { pipeline } = await import('stream/promises')
+  const { createWriteStream } = await import('fs')
+  await pipeline(Readable.fromWeb(res.body as never), createWriteStream(dest))
 }
 
 export async function createRelease(tok: string, fullName: string, tag: string, name: string, notes: string): Promise<string> {
@@ -245,6 +294,19 @@ export async function publish(path: string, remote: string, o: GitPushOptions, a
   await git(path, ['tag', '-a', tag, '-m', o.notes?.trim() || message], who)
   await git(path, ['push', 'origin', `refs/tags/${tag}`], net)
   return { mode: o.mode, commit, ref: tag }
+}
+
+/** Brings in what is new on GitHub for a site that was cloned or pushed before. */
+export async function pull(path: string, auth: GitAuth): Promise<string> {
+  if (!existsSync(join(path, '.git'))) throw new Error('This site is not connected to GitHub yet. Push it first.')
+  const dirty = (await git(path, ['status', '--porcelain'])).length > 0
+  if (dirty) throw new Error('This site has changes that are not pushed yet. Push them first, or take a snapshot and discard them.')
+  const before = await git(path, ['rev-parse', 'HEAD'])
+  await git(path, ['pull', '--ff-only'], [...auth.config, '-c', `user.name=${auth.user.name}`, '-c', `user.email=${auth.user.email}`])
+  const after = await git(path, ['rev-parse', 'HEAD'])
+  if (before === after) return 'Already up to date.'
+  const n = (await git(path, ['rev-list', '--count', `${before}..${after}`])).trim()
+  return `Brought in ${n} new ${n === '1' ? 'commit' : 'commits'}.`
 }
 
 export async function cloneRepo(cloneUrl: string, into: string, auth: GitAuth): Promise<void> {

@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { Agent, fetch as ufetch, FormData } from 'undici'
-import type { ApiCollection, ApiRequest, ApiResponse, ApiStore, HttpMethod, KV } from '../shared/types'
+import type { ApiAssertion, ApiCollection, ApiEnvironment, ApiExtract, ApiImportResult, ApiRequest, ApiResponse, ApiStore, ApiTestResult, HttpMethod, KV } from '../shared/types'
 import { dirs } from './paths'
 
 /**
@@ -119,7 +119,18 @@ export async function sendRequest(req: ApiRequest, vars: KV[]): Promise<ApiRespo
   })
   const buf = Buffer.from(await res.arrayBuffer())
   const ms = Math.round(performance.now() - started)
+  const text = buf.subarray(0, MAX_BODY).toString('utf8')
+  const headersList = [...res.headers.entries()]
+  let json: unknown = undefined
+  try {
+    json = JSON.parse(text)
+  } catch {
+    /* not JSON */
+  }
+  const view = { status: res.status, ms, headers: headersList, body: text, json }
   return {
+    tests: runAssertions(req.tests ?? [], view),
+    saved: extractValues(req.extract ?? [], view),
     status: res.status,
     statusText: res.statusText,
     ms,
@@ -130,6 +141,151 @@ export async function sendRequest(req: ApiRequest, vars: KV[]): Promise<ApiRespo
     truncated: buf.length > MAX_BODY,
     url
   }
+}
+
+// ------------------------------------------------------------------ tests
+
+interface View {
+  status: number
+  ms: number
+  headers: [string, string][]
+  body: string
+  json: unknown
+}
+
+/** Reads a value like data.items[0].id or $.token from parsed JSON. */
+export function jsonPath(obj: unknown, path: string): unknown {
+  const parts = path
+    .trim()
+    .replace(/^\$\.?/, '')
+    .replace(/\[(\d+)\]/g, '.$1')
+    .replace(/\[["']([^"']+)["']\]/g, '.$1')
+    .split('.')
+    .filter(Boolean)
+  let cur: unknown = obj
+  for (const p of parts) {
+    if (cur === null || cur === undefined) return undefined
+    if (p === 'length' && (Array.isArray(cur) || typeof cur === 'string')) return (cur as { length: number }).length
+    cur = (cur as Record<string, unknown>)[p]
+  }
+  return cur
+}
+
+const show = (v: unknown): string => (v === undefined ? 'nothing' : typeof v === 'string' ? `"${v}"` : JSON.stringify(v))
+
+function pick(a: { source: string; path: string }, v: View): unknown {
+  if (a.source === 'status') return v.status
+  if (a.source === 'time') return v.ms
+  if (a.source === 'body') return v.body
+  if (a.source === 'header') return v.headers.find(([k]) => k.toLowerCase() === a.path.trim().toLowerCase())?.[1]
+  return jsonPath(v.json, a.path)
+}
+
+function label(a: ApiAssertion): string {
+  const what = a.source === 'status' ? 'Status' : a.source === 'time' ? 'Response time' : a.source === 'body' ? 'Body' : a.source === 'header' ? `Header ${a.path}` : a.path || 'JSON'
+  const op = { eq: 'is', neq: 'is not', contains: 'contains', exists: 'exists', lt: 'is below', gt: 'is above' }[a.op]
+  return a.op === 'exists' ? `${what} exists` : `${what} ${op} ${a.value}${a.source === 'time' ? ' ms' : ''}`
+}
+
+export function runAssertions(list: ApiAssertion[], v: View): ApiTestResult[] {
+  return list
+    .filter((a) => a.enabled)
+    .map((a) => {
+      const actual = pick(a, v)
+      const num = Number(a.value)
+      const asText = typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual)
+      let pass = false
+      switch (a.op) {
+        case 'exists':
+          pass = actual !== undefined && actual !== null
+          break
+        case 'eq':
+          pass = asText === a.value || (typeof actual === 'number' && actual === num) || String(actual) === a.value
+          break
+        case 'neq':
+          pass = !(asText === a.value || String(actual) === a.value)
+          break
+        case 'contains':
+          pass = asText.includes(a.value)
+          break
+        case 'lt':
+          pass = Number(actual) < num
+          break
+        case 'gt':
+          pass = Number(actual) > num
+          break
+      }
+      return { name: label(a), pass, detail: pass ? '' : `Got ${show(actual)}` }
+    })
+}
+
+export function extractValues(list: ApiExtract[], v: View): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = []
+  for (const e of list) {
+    if (!e.enabled || !e.name.trim() || !e.path.trim()) continue
+    const val = e.path.startsWith('header:') ? v.headers.find(([k]) => k.toLowerCase() === e.path.slice(7).trim().toLowerCase())?.[1] : jsonPath(v.json, e.path)
+    if (val === undefined || val === null) continue
+    out.push({ key: e.name.trim(), value: typeof val === 'string' ? val : JSON.stringify(val) })
+  }
+  return out
+}
+
+/** Environment values win over collection variables with the same name. */
+export function mergeVars(collection: KV[] | undefined, env: KV[] | undefined): KV[] {
+  const map = new Map<string, KV>()
+  for (const v of collection ?? []) if (v.enabled) map.set(v.key, v)
+  for (const v of env ?? []) if (v.enabled) map.set(v.key, v)
+  return [...map.values()]
+}
+
+/** Writes saved values into an environment, adding names it does not have yet. */
+export function applySaved(env: ApiEnvironment, saved: { key: string; value: string }[]): ApiEnvironment {
+  const vars = [...env.vars]
+  for (const s of saved) {
+    const i = vars.findIndex((v) => v.key === s.key)
+    if (i >= 0) vars[i] = { ...vars[i], value: s.value, enabled: true }
+    else vars.push({ key: s.key, value: s.value, enabled: true })
+  }
+  return { ...env, vars }
+}
+
+// ------------------------------------------------------------------ code
+
+export function toCode(req: ApiRequest, vars: KV[], lang: 'curl' | 'fetch' | 'php' | 'python'): string {
+  if (lang === 'curl') return toCurl(req, vars)
+  const url = buildUrl(req, vars)
+  const headers: Record<string, string> = {}
+  for (const h of req.headers) if (h.enabled && h.key) headers[fillVars(h.key, vars)] = fillVars(h.value, vars)
+  if (req.auth.type === 'bearer' && req.auth.token) headers['Authorization'] = `Bearer ${fillVars(req.auth.token, vars)}`
+  if (req.auth.type === 'basic') headers['Authorization'] = `Basic ${Buffer.from(`${fillVars(req.auth.user, vars)}:${fillVars(req.auth.pass, vars)}`).toString('base64')}`
+  let body: string | null = null
+  if (req.body.type === 'json' || req.body.type === 'text') {
+    body = fillVars(req.body.text, vars)
+    if (req.body.type === 'json') headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
+  } else if (req.body.type === 'urlencoded' || req.body.type === 'form') {
+    body = new URLSearchParams(req.body.form.filter((f) => f.enabled).map((f) => [fillVars(f.key, vars), fillVars(f.value, vars)])).toString()
+    headers['Content-Type'] = headers['Content-Type'] ?? 'application/x-www-form-urlencoded'
+  }
+  const hasBody = body !== null && req.method !== 'GET' && req.method !== 'HEAD'
+  if (lang === 'fetch') {
+    const opts = [`  method: '${req.method}'`]
+    if (Object.keys(headers).length) opts.push(`  headers: ${JSON.stringify(headers, null, 2).replace(/\n/g, '\n  ')}`)
+    if (hasBody) opts.push(`  body: ${JSON.stringify(body)}`)
+    return `const res = await fetch(${JSON.stringify(url)}, {\n${opts.join(',\n')}\n})\nconst data = await res.json()\nconsole.log(res.status, data)`
+  }
+  if (lang === 'python') {
+    const lines = ['import requests', '', `response = requests.request(`, `    ${JSON.stringify(req.method)},`, `    ${JSON.stringify(url)},`]
+    if (Object.keys(headers).length) lines.push(`    headers=${JSON.stringify(headers)},`)
+    if (hasBody) lines.push(`    data=${JSON.stringify(body)},`)
+    lines.push(')', 'print(response.status_code, response.text)')
+    return lines.join('\n')
+  }
+  const q = (t: string): string => `'${t.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const lines = ['<?php', '$ch = curl_init();', 'curl_setopt_array($ch, [', `    CURLOPT_URL => ${q(url)},`, '    CURLOPT_RETURNTRANSFER => true,', `    CURLOPT_CUSTOMREQUEST => ${q(req.method)},`]
+  if (Object.keys(headers).length) lines.push(`    CURLOPT_HTTPHEADER => [${Object.entries(headers).map(([k, v]) => q(`${k}: ${v}`)).join(', ')}],`)
+  if (hasBody) lines.push(`    CURLOPT_POSTFIELDS => ${q(body!)},`)
+  lines.push(']);', '$body = curl_exec($ch);', '$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);', 'curl_close($ch);', 'echo $status, PHP_EOL, $body;')
+  return lines.join('\n')
 }
 
 export function toCurl(req: ApiRequest, vars: KV[]): string {
@@ -227,6 +383,7 @@ export function fromCurl(cmd: string): ApiRequest {
 interface PostmanItem {
   name?: string
   item?: PostmanItem[]
+  event?: { listen?: string; script?: { exec?: string[] | string } }[]
   request?: {
     method?: string
     url?: string | { raw?: string }
@@ -236,17 +393,36 @@ interface PostmanItem {
   }
 }
 
-function fromPostman(doc: { info?: { name?: string }; item?: PostmanItem[] }): ApiCollection {
+/** Turns the common Postman test lines into Laramac tests and saved variables. Other code is left out. */
+function postmanScripts(item: PostmanItem): { tests: ApiAssertion[]; extract: ApiExtract[] } {
+  const tests: ApiAssertion[] = []
+  const extract: ApiExtract[] = []
+  for (const ev of item.event ?? []) {
+    if (ev.listen !== 'test') continue
+    const code = Array.isArray(ev.script?.exec) ? ev.script!.exec.join('\n') : String(ev.script?.exec ?? '')
+    for (const m of code.matchAll(/to\.have\.status\(\s*(\d{3})\s*\)/g)) tests.push({ enabled: true, source: 'status', path: '', op: 'eq', value: m[1] })
+    for (const m of code.matchAll(/responseTime\)\.to\.be\.below\(\s*(\d+)\s*\)/g)) tests.push({ enabled: true, source: 'time', path: '', op: 'lt', value: m[1] })
+    for (const m of code.matchAll(/to\.have\.header\(\s*["']([^"']+)["']\s*\)/g)) tests.push({ enabled: true, source: 'header', path: m[1], op: 'exists', value: '' })
+    for (const m of code.matchAll(/to\.include\(\s*["']([^"']+)["']\s*\)/g)) tests.push({ enabled: true, source: 'body', path: '', op: 'contains', value: m[1] })
+    for (const m of code.matchAll(/pm\.(?:environment|collectionVariables|globals)\.set\(\s*["']([^"']+)["']\s*,\s*(?:pm\.response\.json\(\)|jsonData|json|response|res|data)((?:\.[A-Za-z_$][\w$]*|\[\d+\])+)\s*\)/g)) {
+      extract.push({ enabled: true, name: m[1], path: m[2].replace(/^\./, '') })
+    }
+  }
+  return { tests, extract }
+}
+
+function fromPostman(doc: { info?: { name?: string }; item?: PostmanItem[]; variable?: { key: string; value: unknown; disabled?: boolean }[] }): ApiCollection {
   const requests: ApiRequest[] = []
-  const walk = (items: PostmanItem[], prefix: string): void => {
+  const walk = (items: PostmanItem[], folder: string): void => {
     for (const it of items) {
       if (it.item) {
-        walk(it.item, `${prefix}${it.name ?? 'Folder'} / `)
+        walk(it.item, folder ? `${folder}/${it.name ?? 'Folder'}` : (it.name ?? 'Folder'))
         continue
       }
       const r = it.request
       if (!r) continue
-      const req = emptyRequest(`${prefix}${it.name ?? 'Request'}`)
+      const req = emptyRequest(it.name ?? 'Request')
+      if (folder) req.folder = folder
       req.method = method(r.method)
       const raw = typeof r.url === 'string' ? r.url : r.url?.raw ?? ''
       req.url = raw
@@ -258,11 +434,65 @@ function fromPostman(doc: { info?: { name?: string }; item?: PostmanItem[] }): A
       const find = (list: { key: string; value: string }[] | undefined, k: string): string => list?.find((x) => x.key === k)?.value ?? ''
       if (r.auth?.type === 'bearer') req.auth = { ...req.auth, type: 'bearer', token: find(r.auth.bearer, 'token') }
       if (r.auth?.type === 'basic') req.auth = { ...req.auth, type: 'basic', user: find(r.auth.basic, 'username'), pass: find(r.auth.basic, 'password') }
+      const { tests, extract } = postmanScripts(it)
+      if (tests.length) req.tests = tests
+      if (extract.length) req.extract = extract
       requests.push(req)
     }
   }
   walk(doc.item ?? [], '')
-  return { id: newId(), name: doc.info?.name ?? 'Postman collection', requests }
+  const variables = (doc.variable ?? []).map((v) => kv(v.key, String(v.value ?? ''), !v.disabled))
+  return { id: newId(), name: doc.info?.name ?? 'Postman collection', requests, ...(variables.length ? { variables } : {}) }
+}
+
+/** Exports a collection as a Postman v2.1 collection, so it opens in Postman too. */
+export function toPostman(col: ApiCollection): unknown {
+  type Node = { name: string; item: unknown[] }
+  const root: Node = { name: '', item: [] }
+  const folderNode = (path: string | undefined): Node => {
+    let node = root
+    for (const part of (path ?? '').split('/').filter(Boolean)) {
+      let next = node.item.find((x): x is Node => !!x && typeof x === 'object' && (x as Node).name === part && Array.isArray((x as Node).item)) as Node | undefined
+      if (!next) {
+        next = { name: part, item: [] }
+        node.item.push(next)
+      }
+      node = next
+    }
+    return node
+  }
+  for (const r of col.requests) {
+    const body =
+      r.body.type === 'json' || r.body.type === 'text'
+        ? { mode: 'raw', raw: r.body.text, options: { raw: { language: r.body.type === 'json' ? 'json' : 'text' } } }
+        : r.body.type === 'urlencoded'
+          ? { mode: 'urlencoded', urlencoded: r.body.form.map((f) => ({ key: f.key, value: f.value, disabled: !f.enabled })) }
+          : r.body.type === 'form'
+            ? { mode: 'formdata', formdata: r.body.form.map((f) => ({ key: f.key, value: f.value, type: 'text', disabled: !f.enabled })) }
+            : undefined
+    const auth =
+      r.auth.type === 'bearer'
+        ? { type: 'bearer', bearer: [{ key: 'token', value: r.auth.token, type: 'string' }] }
+        : r.auth.type === 'basic'
+          ? { type: 'basic', basic: [{ key: 'username', value: r.auth.user }, { key: 'password', value: r.auth.pass }] }
+          : undefined
+    const qs = r.query.filter((q) => q.key)
+    folderNode(r.folder).item.push({
+      name: r.name,
+      request: {
+        method: r.method,
+        header: r.headers.map((h) => ({ key: h.key, value: h.value, disabled: !h.enabled })),
+        url: { raw: r.url + (qs.length ? (r.url.includes('?') ? '&' : '?') + qs.map((q) => `${q.key}=${q.value}`).join('&') : '') },
+        ...(body ? { body } : {}),
+        ...(auth ? { auth } : {})
+      }
+    })
+  }
+  return {
+    info: { name: col.name, schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+    item: root.item,
+    variable: (col.variables ?? []).map((v) => ({ key: v.key, value: v.value, disabled: !v.enabled }))
+  }
 }
 
 function fromInsomnia(doc: { resources?: Record<string, unknown>[] }): ApiCollection {
@@ -307,12 +537,12 @@ function fromOpenApi(doc: { info?: { title?: string }; servers?: { url: string }
   return { id: newId(), name: doc.info?.title ?? 'OpenAPI', requests }
 }
 
-/** Reads a Postman v2 collection, an Insomnia export, an OpenAPI 3 / Swagger 2 JSON file, or a cURL command. */
-export function importText(text: string): ApiCollection {
+/** Reads a Postman collection or environment, an Insomnia export, an OpenAPI 3 / Swagger 2 JSON file, or a cURL command. */
+export function importText(text: string): ApiImportResult {
   const t = text.trim()
   if (t.startsWith('curl ')) {
     const req = fromCurl(t)
-    return { id: newId(), name: 'Imported from cURL', requests: [req] }
+    return { collection: { id: newId(), name: 'Imported from cURL', requests: [req] } }
   }
   let doc: Record<string, unknown>
   try {
@@ -320,8 +550,12 @@ export function importText(text: string): ApiCollection {
   } catch {
     throw new Error('Paste a cURL command, or choose a Postman, Insomnia or OpenAPI JSON file. YAML OpenAPI files need converting to JSON first.')
   }
-  if (Array.isArray(doc.item)) return fromPostman(doc as never)
-  if (Array.isArray(doc.resources)) return fromInsomnia(doc as never)
-  if (doc.openapi || doc.swagger) return fromOpenApi(doc as never)
-  throw new Error('That file is not a Postman, Insomnia or OpenAPI collection.')
+  if (Array.isArray(doc.item)) return { collection: fromPostman(doc as never) }
+  if (Array.isArray(doc.values)) {
+    const values = doc.values as { key: string; value: unknown; enabled?: boolean }[]
+    return { environment: { id: newId(), name: String(doc.name ?? 'Imported environment'), vars: values.map((v) => kv(v.key, String(v.value ?? ''), v.enabled !== false)) } }
+  }
+  if (Array.isArray(doc.resources)) return { collection: fromInsomnia(doc as never) }
+  if (doc.openapi || doc.swagger) return { collection: fromOpenApi(doc as never) }
+  throw new Error('That file is not a Postman collection or environment, an Insomnia export or an OpenAPI file.')
 }

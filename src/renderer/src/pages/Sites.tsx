@@ -1,11 +1,42 @@
 import { useEffect, useState } from 'react'
-import { Camera, Code, GitBranch, Tag, Rocket, GitCommitHorizontal, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, UploadCloud, X } from 'lucide-react'
+import {
+  Camera,
+  Code,
+  GitBranch,
+  Tag,
+  Rocket,
+  GitCommitHorizontal,
+  Download,
+  ExternalLink,
+  FolderOpen,
+  History,
+  Lock,
+  Plus,
+  RotateCcw,
+  Search,
+  Share2,
+  Terminal,
+  Trash2,
+  Upload,
+  UploadCloud,
+  X
+} from 'lucide-react'
 import type { DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
+import { ServerDialog } from './Servers'
 
-const AI_NAMES: Record<string, string> = { claude: 'Claude Code', opencode: 'OpenCode', openclaw: 'OpenClaw', codex: 'Codex', gemini: 'Gemini CLI', vmlx: 'vMLX', lmstudio: 'LM Studio', ollama: 'Ollama' }
+const AI_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  opencode: 'OpenCode',
+  openclaw: 'OpenClaw',
+  codex: 'Codex',
+  gemini: 'Gemini CLI',
+  vmlx: 'vMLX',
+  lmstudio: 'LM Studio',
+  ollama: 'Ollama'
+}
 
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
@@ -90,7 +121,11 @@ export default function Sites(): React.JSX.Element {
                     Public at {site.shareUrl.replace('https://', '')}
                   </button>
                 ) : (
-                  <button className="link row-sub" style={{ display: 'block', color: 'var(--ink-3)' }} onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}>
+                  <button
+                    className="link row-sub"
+                    style={{ display: 'block', color: 'var(--ink-3)' }}
+                    onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}
+                  >
                     {site.secure ? 'https://' : 'http://'}
                     {site.domain}
                   </button>
@@ -128,16 +163,28 @@ export default function Sites(): React.JSX.Element {
                 />
               </span>
               <div className="site-actions">
-                <IconBtn label={`Open ${site.name}`} title="Open in browser" onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}>
+                <IconBtn
+                  label={`Open ${site.name}`}
+                  title="Open in browser"
+                  onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}
+                >
                   <ExternalLink size={18} />
                 </IconBtn>
                 <IconBtn label={`Show ${site.name} in Finder`} title="Show in Finder" onClick={() => api.invoke('sites:open-folder', site.path)}>
                   <FolderOpen size={18} />
                 </IconBtn>
-                <IconBtn label={`Open ${site.name} in ${editor}`} title={`Open in ${editor}`} onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}>
+                <IconBtn
+                  label={`Open ${site.name} in ${editor}`}
+                  title={`Open in ${editor}`}
+                  onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}
+                >
                   <Code size={18} />
                 </IconBtn>
-                <IconBtn label={`${aiName} in ${site.name}`} title={`Open ${aiName} here`} onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
+                <IconBtn
+                  label={`${aiName} in ${site.name}`}
+                  title={`Open ${aiName} here`}
+                  onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}
+                >
                   <Terminal size={18} />
                 </IconBtn>
                 <IconBtn label={`Push ${site.name} to GitHub`} title="Push to GitHub" onClick={() => setPushFor(site)}>
@@ -254,7 +301,14 @@ function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => voi
           </button>
         </div>
         <div className="snap-new">
-          <input className="input" placeholder="What is this version? (optional)" value={note} maxLength={120} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
+          <input
+            className="input"
+            placeholder="What is this version? (optional)"
+            value={note}
+            maxLength={120}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && save()}
+          />
           <button className="btn btn-primary" disabled={busy.has(`snap-${site.name}`)} onClick={save}>
             <Camera size={15} /> {busy.has(`snap-${site.name}`) ? 'Saving…' : 'Save snapshot'}
           </button>
@@ -304,7 +358,7 @@ function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => voi
           ))}
         </div>
       </div>
-      {askDialog}
+      <div onMouseDown={(e) => e.stopPropagation()}>{askDialog}</div>
     </div>
   )
 }
@@ -319,6 +373,7 @@ function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }
   const [excludes, setExcludes] = useState((saved?.excludes ?? []).join(', '))
   const [force, setForce] = useState(false)
   const [result, setResult] = useState<DeployResult | null>(null)
+  const [adding, setAdding] = useState(false)
   const [ask, askDialog] = useAsk()
   const key = `deploy-${site.name}`
   const job = jobs.find((j) => j.label.startsWith(`Deploying ${site.name}`) && j.status === 'running')
@@ -374,38 +429,50 @@ function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }
         {servers?.length === 0 ? (
           <div className="empty-state" style={{ padding: '28px 8px' }}>
             <strong>Add a server first</strong>
-            <span>Save your hosting account or VPS under Servers, with SFTP, FTPS or FTP.</span>
-            <button
-              className="btn btn-primary"
-              style={{ marginTop: 10 }}
-              onClick={() => {
-                onClose()
-                setPage('servers')
-              }}
-            >
-              Go to Servers
+            <span>Your hosting account or VPS, with SFTP, FTPS or FTP. It is saved under Servers too.</span>
+            <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={() => setAdding(true)}>
+              <Plus size={14} /> Add server
             </button>
           </div>
         ) : (
           <div className="deploy-form">
             <div className="field">
               <label htmlFor="dp-server">Server</label>
-              <select id="dp-server" className="input" value={serverId} onChange={(e) => setServerId(e.target.value)}>
-                {servers?.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name} ({x.protocol === 'sftp' ? 'SFTP' : x.protocol.toUpperCase()}, {x.user}@{x.host})
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select id="dp-server" className="input" style={{ flex: 1 }} value={serverId} onChange={(e) => setServerId(e.target.value)}>
+                  {servers?.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name} ({x.protocol === 'sftp' ? 'SFTP' : x.protocol.toUpperCase()}, {x.user}@{x.host})
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-tonal" onClick={() => setAdding(true)}>
+                  <Plus size={14} /> Add server
+                </button>
+              </div>
             </div>
             <div className="field">
               <label htmlFor="dp-path">Folder on the server</label>
-              <input id="dp-path" className="input mono" placeholder="/var/www/mysite or public_html" value={remotePath} onChange={(e) => setRemotePath(e.target.value)} />
+              <input
+                id="dp-path"
+                className="input mono"
+                placeholder="/var/www/mysite or public_html"
+                value={remotePath}
+                onChange={(e) => setRemotePath(e.target.value)}
+              />
             </div>
             <div className="field">
               <label htmlFor="dp-ex">Also leave out</label>
-              <input id="dp-ex" className="input mono" placeholder="uploads, *.sql, storage/app" value={excludes} onChange={(e) => setExcludes(e.target.value)} />
-              <span className="hint">Always left out: node_modules, .git, .env, .DS_Store, editor folders and logs. Your server keeps its own .env and config.</span>
+              <input
+                id="dp-ex"
+                className="input mono"
+                placeholder="uploads, *.sql, storage/app"
+                value={excludes}
+                onChange={(e) => setExcludes(e.target.value)}
+              />
+              <span className="hint">
+                Always left out: node_modules, .git, .env, .DS_Store, editor folders and logs. Your server keeps its own .env and config.
+              </span>
             </div>
             <label className="check">
               <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> Upload every file, even unchanged ones
@@ -414,11 +481,17 @@ function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }
               <div className="deploy-result">
                 <strong>Deployed</strong>
                 <span>
-                  {result.uploaded} {result.uploaded === 1 ? 'file' : 'files'} sent ({formatBytes(result.bytes)}), {result.skipped} already up to date, in {result.seconds}s.
+                  {result.uploaded} {result.uploaded === 1 ? 'file' : 'files'} sent ({formatBytes(result.bytes)}), {result.skipped} already up to date, in{' '}
+                  {result.seconds}s.
                 </span>
               </div>
             )}
-            {job && <div className="deploy-result">{job.label}{job.percent !== null ? `, ${job.percent}%` : ''}</div>}
+            {job && (
+              <div className="deploy-result">
+                {job.label}
+                {job.percent !== null ? `, ${job.percent}%` : ''}
+              </div>
+            )}
             <div className="end" style={{ marginTop: 6 }}>
               <button className="btn" onClick={onClose}>
                 Close
@@ -430,7 +503,21 @@ function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }
           </div>
         )}
       </div>
-      {askDialog}
+      <div onMouseDown={(e) => e.stopPropagation()}>{askDialog}</div>
+      {adding && (
+        <div onMouseDown={(e) => e.stopPropagation()}>
+          <ServerDialog
+            initial={{ name: '', host: '', port: 21, user: '', auth: 'password', protocol: 'ftps' }}
+            onClose={() => setAdding(false)}
+            onSaved={(list) => {
+              const added = list.find((x) => !servers?.some((y) => y.id === x.id))
+              setServers(list)
+              if (added) setServerId(added.id)
+              setAdding(false)
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -458,6 +545,8 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
   const [notes, setNotes] = useState('')
   const [replace, setReplace] = useState(false)
   const [done, setDone] = useState<GitPushResult | null>(null)
+  const [changeRepo, setChangeRepo] = useState(false)
+  const picking = !st?.remote || changeRepo
 
   useEffect(() => {
     void api.invoke('github:account').then(async (a) => {
@@ -466,13 +555,13 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
       const s = await api.invoke('github:site-status', site.path)
       setSt(s)
       setTag(s.next)
-      if (!s.remote) setRepos(await api.invoke('github:repos').catch(() => []))
+      setRepos(await api.invoke('github:repos').catch(() => []))
     })
   }, [api, site.path])
 
   const run = async (): Promise<void> => {
     const o: GitPushOptions = { mode, message, branch, tag, notes, replace }
-    if (!st?.remote) {
+    if (picking) {
       if (target === 'new') o.create = { name: newName.trim(), private: priv }
       else o.repo = target
     }
@@ -490,10 +579,27 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
           <div>
             <h2 className="page-title">Push {site.name} to GitHub</h2>
             <p className="page-desc" style={{ marginTop: 4 }}>
-              {st?.remote ? (
+              {st?.remote && !changeRepo ? (
                 <>
                   To <span className="mono">{st.remote}</span>
-                  {st.changed ? `, with ${st.changed} changed ${st.changed === 1 ? 'file' : 'files'}` : ', nothing new to commit'}.
+                  {st.changed ? `, with ${st.changed} changed ${st.changed === 1 ? 'file' : 'files'}` : ', nothing new to commit'}.{' '}
+                  <button className="link" onClick={() => setChangeRepo(true)}>
+                    Push somewhere else
+                  </button>
+                  {' · '}
+                  <button
+                    className="link"
+                    disabled={busy.has(`pull-${site.name}`)}
+                    onClick={async () => {
+                      const msg = await act(`pull-${site.name}`, () => api.invoke('github:pull', site.path))
+                      if (msg) {
+                        notify({ kind: 'info', text: msg })
+                        setSt(await api.invoke('github:site-status', site.path))
+                      }
+                    }}
+                  >
+                    {busy.has(`pull-${site.name}`) ? 'Pulling…' : 'Pull latest from GitHub'}
+                  </button>
                 </>
               ) : (
                 'Commits everything in the site (except .env, node_modules and logs) and sends it to GitHub.'
@@ -524,7 +630,8 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
           <div className="deploy-result" style={{ marginTop: 18 }}>
             <strong>Pushed</strong>
             <span>
-              Commit {done.commit} is on GitHub as {done.mode === 'main' ? `the newest ${done.ref}` : done.mode === 'branch' ? `branch ${done.ref}` : `${done.mode} ${done.ref}`}.
+              Commit {done.commit} is on GitHub as{' '}
+              {done.mode === 'main' ? `the newest ${done.ref}` : done.mode === 'branch' ? `branch ${done.ref}` : `${done.mode} ${done.ref}`}.
             </span>
             {done.url && (
               <button className="link" style={{ alignSelf: 'flex-start', marginTop: 6 }} onClick={() => api.invoke('tools:open-external', done.url!)}>
@@ -533,10 +640,12 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
             )}
           </div>
         ) : st === null ? (
-          <div className="hint" style={{ padding: '24px 0' }}>Looking at the project…</div>
+          <div className="hint" style={{ padding: '24px 0' }}>
+            Looking at the project…
+          </div>
         ) : (
           <div className="deploy-form">
-            {!st.remote && (
+            {picking && (
               <div className="field">
                 <label htmlFor="push-repo">Repository</label>
                 <select id="push-repo" className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -549,7 +658,13 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
                 </select>
                 {target === 'new' && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <input className="input mono" style={{ flex: 1 }} value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="New repository name" />
+                    <input
+                      className="input mono"
+                      style={{ flex: 1 }}
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      aria-label="New repository name"
+                    />
                     <div className="seg" role="radiogroup" aria-label="Visibility">
                       <button role="radio" aria-checked={priv} onClick={() => setPriv(true)}>
                         <Lock size={12} /> Private
@@ -570,7 +685,16 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
               {PUSH_MODES.map((m) => (
                 <button key={m.id} className="choice" role="radio" aria-checked={mode === m.id} onClick={() => setMode(m.id)}>
                   <span className="push-mode-title">
-                    {m.id === 'main' ? <GitCommitHorizontal size={15} /> : m.id === 'branch' ? <GitBranch size={15} /> : m.id === 'tag' ? <Tag size={15} /> : <Rocket size={15} />} {m.title}
+                    {m.id === 'main' ? (
+                      <GitCommitHorizontal size={15} />
+                    ) : m.id === 'branch' ? (
+                      <GitBranch size={15} />
+                    ) : m.id === 'tag' ? (
+                      <Tag size={15} />
+                    ) : (
+                      <Rocket size={15} />
+                    )}{' '}
+                    {m.title}
                   </span>
                   <span className="row-sub" style={{ whiteSpace: 'normal' }}>
                     {m.desc}
@@ -599,12 +723,20 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
             {mode === 'release' && (
               <div className="field">
                 <label htmlFor="push-notes">Release notes</label>
-                <textarea id="push-notes" className="apic-code" style={{ minHeight: 90, fontFamily: 'inherit' }} placeholder="Leave empty and GitHub writes them from your commits." value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <textarea
+                  id="push-notes"
+                  className="apic-code"
+                  style={{ minHeight: 90, fontFamily: 'inherit' }}
+                  placeholder="Leave empty and GitHub writes them from your commits."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
             )}
             {mode !== 'branch' && (
               <label className="check">
-                <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> Replace what is on GitHub if it has changes this Mac does not
+                <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> Replace what is on GitHub if it has changes this Mac
+                does not
               </label>
             )}
             <div className="end" style={{ marginTop: 8 }}>
@@ -613,7 +745,12 @@ function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }):
               </button>
               <button
                 className="btn btn-primary"
-                disabled={busy.has(`push-${site.name}`) || (mode === 'branch' && !branch.trim()) || ((mode === 'tag' || mode === 'release') && !tag.trim()) || (!st.remote && target === 'new' && !newName.trim())}
+                disabled={
+                  busy.has(`push-${site.name}`) ||
+                  (mode === 'branch' && !branch.trim()) ||
+                  ((mode === 'tag' || mode === 'release') && !tag.trim()) ||
+                  (picking && target === 'new' && !newName.trim())
+                }
                 onClick={run}
               >
                 <GitBranch size={15} /> {busy.has(`push-${site.name}`) ? 'Pushing…' : mode === 'release' ? 'Push and release' : 'Push'}

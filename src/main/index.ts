@@ -1,11 +1,13 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, runImport } from './importer'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
 import { cleanRemotePath, deploy } from './deploy'
+import { posix } from 'path'
 import * as api from './apiclient'
 import * as github from './github'
+import { setDownloadToken } from './distribution'
 import { readFileSync } from 'fs'
 import { listPackages, removePackage } from './packages'
 import * as snapshots from './snapshots'
@@ -22,7 +24,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni } from './php'
 import { safeStorage } from 'electron'
-import type { ApiRequest, ApiStore, GitPushOptions, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -595,11 +597,27 @@ function registerIpc(): void {
   })
   handle('sftp:upload', async (sid, remoteDir) => {
     if (!mainWindow) return 0
-    const res = await dialog.showOpenDialog(mainWindow, { title: 'Upload files', buttonLabel: 'Upload', properties: ['openFile', 'multiSelections'] })
+    const res = await dialog.showOpenDialog(mainWindow, { title: 'Upload files', buttonLabel: 'Upload', defaultPath: ensureWww(), properties: ['openFile', 'multiSelections'] })
     if (res.canceled || res.filePaths.length === 0) return 0
     const n = await ssh.upload(String(sid), res.filePaths, String(remoteDir))
     activity.push('success', `Uploaded ${n} ${n === 1 ? 'file' : 'files'}`, String(remoteDir))
     return n
+  })
+  handle('sftp:upload-folder', async (sid, remoteDir) => {
+    if (!mainWindow) return null
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Upload a folder',
+      message: 'Choose a project or any folder. It is uploaded with everything inside, leaving out node_modules, .git and .env.',
+      buttonLabel: 'Upload folder',
+      defaultPath: ensureWww(),
+      properties: ['openDirectory']
+    })
+    if (res.canceled || !res.filePaths[0]) return null
+    const local = res.filePaths[0]
+    const target = posix.join(String(remoteDir), local.split('/').pop()!)
+    const result = await jobs.run(`Uploading ${local.split('/').pop()}`, (update) => deploy(ssh.sessionFs(String(sid)), local, target, {}, update))
+    activity.push('success', `Uploaded ${local.split('/').pop()}`, `${result.uploaded} files to ${target}`)
+    return result
   })
   handle('sftp:mkdir', (sid, dir, name) => ssh.mkdir(String(sid), String(dir), String(name)))
   handle('sftp:rename', (sid, from, to) => ssh.rename(String(sid), String(from), String(to)))
@@ -624,6 +642,14 @@ function registerIpc(): void {
   // The page has no clipboard permission of its own; the terminal reads and writes through here.
   // ---- GitHub
   const ghTok = (): string => github.token(keychain)
+  // While the project is private, updates and PHP builds are read with this sign-in.
+  setDownloadToken(() => {
+    try {
+      return github.account() ? github.token(keychain) : null
+    } catch {
+      return null
+    }
+  })
   handle('github:account', () => ({ account: github.account(), cli: findCli(['gh']) !== null }))
   handle('github:sign-in', (tok) => github.signIn(String(tok), keychain))
   handle('github:sign-in-cli', async () => {
@@ -658,6 +684,42 @@ function registerIpc(): void {
     notifySitesChanged()
     return listSites()
   })
+  handle('github:create', async (input) => {
+    const i = (input ?? {}) as Record<string, unknown>
+    const tok = ghTok()
+    const repo = await github.createRepo(tok, String(i.name ?? '').trim(), i.private !== false, typeof i.description === 'string' ? i.description.slice(0, 350) : '', i.readme === true)
+    activity.push('success', `Created ${repo.fullName} on GitHub`)
+    if (i.clone !== true) return { repo, sites: null }
+    const acc = github.storedAccount()!
+    await jobs.run(`Cloning ${repo.fullName}`, async (update) => {
+      update(null, `Cloning ${repo.fullName}`)
+      await github.cloneRepo(`https://github.com/${repo.fullName}.git`, join(ensureWww(), repo.name), github.authFor(tok, acc))
+    })
+    notifySitesChanged()
+    return { repo, sites: listSites() }
+  })
+  handle('github:delete', async (full) => {
+    await github.deleteRepo(ghTok(), String(full))
+    activity.push('info', `Deleted ${full} on GitHub`)
+  })
+  handle('github:details', (full) => github.repoDetails(ghTok(), String(full)))
+  handle('github:download-zip', async (full) => {
+    const name = String(full)
+    if (!github.REPO.test(name)) throw new ValidationError('Unknown repository.')
+    const res = await dialog.showSaveDialog(mainWindow!, { title: `Download ${name}`, defaultPath: join(homedir(), 'Downloads', `${name.split('/')[1]}.zip`), filters: [{ name: 'Zip', extensions: ['zip'] }] })
+    if (res.canceled || !res.filePath) return null
+    await jobs.run(`Downloading ${name}`, async (update) => {
+      update(null, `Downloading ${name}`)
+      await github.downloadZip(ghTok(), name, res.filePath!)
+    })
+    return res.filePath
+  })
+  handle('github:pull', async (path) => {
+    const p = sitePath(path)
+    const msg = await github.pull(p, github.authFor(ghTok(), github.storedAccount()!))
+    notifySitesChanged()
+    return msg
+  })
   handle('github:site-status', async (path) => {
     const st = await github.siteStatus(sitePath(path))
     return { ...st, next: github.nextVersion(st.lastTag) }
@@ -669,9 +731,10 @@ function registerIpc(): void {
     const tok = ghTok()
     const acc = github.storedAccount()!
     const st = await github.siteStatus(p)
-    let repo = st.remote && github.REPO.test(st.remote) ? st.remote : null
-    if (!repo && o.repo && github.REPO.test(o.repo)) repo = o.repo
+    // A repository chosen in the dialog wins over the one the site is linked to.
+    let repo: string | null = o.repo && github.REPO.test(o.repo) ? o.repo : null
     if (!repo && o.create) repo = (await github.createRepo(tok, o.create.name, o.create.private !== false)).fullName
+    if (!repo && st.remote && github.REPO.test(st.remote)) repo = st.remote
     if (!repo) throw new ValidationError('Choose a repository or create a new one.')
     const name = p.split('/').pop()
     const result = await jobs.run(`Pushing ${name} to GitHub`, async (update) => {
@@ -690,13 +753,58 @@ function registerIpc(): void {
   // ---- API client
   handle('api:load', () => api.loadStore())
   handle('api:save', (store) => api.saveStore(store as ApiStore))
-  handle('api:send', async (req, envId) => {
-    const store = api.loadStore()
+  const apiVars = (store: ApiStore, envId: unknown, colId: unknown): KV[] =>
+    api.mergeVars(store.collections.find((c) => c.id === colId)?.variables, store.environments.find((e) => e.id === envId)?.vars)
+  /** Saved values from a response go into the active environment. */
+  const keepSaved = (store: ApiStore, envId: unknown, saved: { key: string; value: string }[]): void => {
+    if (!saved.length) return
     const env = store.environments.find((e) => e.id === envId)
-    const res = await api.sendRequest(req as ApiRequest, env?.vars ?? [])
+    if (env) store.environments = store.environments.map((e) => (e.id === env.id ? api.applySaved(e, saved) : e))
+  }
+  handle('api:send', async (req, envId, colId) => {
+    const store = api.loadStore()
+    const res = await api.sendRequest(req as ApiRequest, apiVars(store, envId, colId))
+    keepSaved(store, envId, res.saved)
     store.history = [{ at: Date.now(), method: (req as ApiRequest).method, url: res.url, status: res.status, ms: res.ms }, ...store.history].slice(0, 50)
     api.saveStore(store)
     return res
+  })
+  handle('api:run', async (colId, envId, folder) => {
+    const store = api.loadStore()
+    const col = store.collections.find((c) => c.id === colId)
+    if (!col) throw new ValidationError('That collection is no longer there.')
+    const list = col.requests.filter((r) => !folder || r.folder === folder || (r.folder ?? '').startsWith(`${folder}/`))
+    const results: ApiRunResult[] = []
+    await jobs.run(`Running ${col.name}`, async (update) => {
+      for (const [i, r] of list.entries()) {
+        update(Math.round((i / Math.max(1, list.length)) * 100), `${i + 1} of ${list.length}: ${r.name}`)
+        try {
+          const res = await api.sendRequest(r, apiVars(store, envId, colId))
+          keepSaved(store, envId, res.saved)
+          results.push({ id: r.id, name: r.name, status: res.status, ms: res.ms, tests: res.tests, error: null })
+        } catch (err) {
+          results.push({ id: r.id, name: r.name, status: null, ms: 0, tests: [], error: (err as Error).message })
+        }
+      }
+    })
+    api.saveStore(store)
+    return results
+  })
+  handle('api:export', async (colId) => {
+    const col = api.loadStore().collections.find((c) => c.id === colId)
+    if (!col) throw new ValidationError('That collection is no longer there.')
+    const res = await dialog.showSaveDialog(mainWindow!, {
+      title: `Export ${col.name}`,
+      defaultPath: join(homedir(), 'Downloads', `${col.name.replace(/[^\w .-]/g, '')}.postman_collection.json`),
+      filters: [{ name: 'Postman collection', extensions: ['json'] }]
+    })
+    if (res.canceled || !res.filePath) return null
+    writeFileSync(res.filePath, JSON.stringify(api.toPostman(col), null, 2))
+    return res.filePath
+  })
+  handle('api:code', (req, envId, colId, lang) => {
+    if (!['curl', 'fetch', 'php', 'python'].includes(String(lang))) throw new ValidationError('Unknown language.')
+    return api.toCode(req as ApiRequest, apiVars(api.loadStore(), envId, colId), lang as 'curl')
   })
   handle('api:import', (text) => {
     if (typeof text !== 'string' || text.length > 20_000_000) throw new ValidationError('That is too large to import.')

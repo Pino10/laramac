@@ -28,7 +28,7 @@ env:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.MAC_RUNNER == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","macOS","ARM64"]') }}
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
@@ -38,7 +38,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
           REPO: ${{ vars.RELEASES_REPO || github.repository }}
-          SELF_HOSTED: ${{ vars.MAC_RUNNER == 'self-hosted' }}
+          SELF_HOSTED: ${{ vars.MAC_RUNNER != 'github' }}
           MINORS: ${{ inputs.minors || '8.5,8.4,8.3,8.2' }}
           FORCE: ${{ inputs.force || false }}
         run: |

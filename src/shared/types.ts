@@ -183,6 +183,16 @@ export interface SftpListing {
 export interface GitHubAccount {
   login: string
   name: string | null
+  /** Permissions of a classic token; null for fine-grained tokens. */
+  scopes?: string[] | null
+}
+
+export interface GitHubRepoDetails {
+  branches: { name: string; protected: boolean }[]
+  releases: { tag: string; name: string; date: string; url: string; prerelease: boolean }[]
+  commits: { sha: string; message: string; author: string; date: string; url: string }[]
+  pulls: { number: number; title: string; url: string; author: string }[]
+  issues: { number: number; title: string; url: string }[]
 }
 
 export interface GitHubRepo {
@@ -241,9 +251,37 @@ export interface KV {
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
+export interface ApiAssertion {
+  enabled: boolean
+  /** What to check in the response. */
+  source: 'status' | 'time' | 'header' | 'body' | 'json'
+  /** Header name or JSON path (like data.items[0].id), when the source needs one. */
+  path: string
+  op: 'eq' | 'neq' | 'contains' | 'exists' | 'lt' | 'gt'
+  value: string
+}
+
+export interface ApiExtract {
+  enabled: boolean
+  /** Variable to set, such as token. */
+  name: string
+  /** JSON path in the response body, or header:Name for a header. */
+  path: string
+}
+
+export interface ApiTestResult {
+  name: string
+  pass: boolean
+  detail: string
+}
+
 export interface ApiRequest {
   id: string
   name: string
+  /** Folder inside the collection, like "Orders/Admin". */
+  folder?: string
+  tests?: ApiAssertion[]
+  extract?: ApiExtract[]
   method: HttpMethod
   url: string
   query: KV[]
@@ -256,6 +294,8 @@ export interface ApiCollection {
   id: string
   name: string
   requests: ApiRequest[]
+  /** Collection variables, used when the environment does not set the same name. */
+  variables?: KV[]
 }
 
 export interface ApiEnvironment {
@@ -290,6 +330,23 @@ export interface ApiResponse {
   truncated: boolean
   /** The address actually requested, after variables were filled in. */
   url: string
+  tests: ApiTestResult[]
+  /** Variables saved from this response into the active environment. */
+  saved: { key: string; value: string }[]
+}
+
+export interface ApiImportResult {
+  collection?: ApiCollection
+  environment?: ApiEnvironment
+}
+
+export interface ApiRunResult {
+  id: string
+  name: string
+  status: number | null
+  ms: number
+  tests: ApiTestResult[]
+  error: string | null
 }
 
 export interface DeployResult {
@@ -507,6 +564,7 @@ export interface Channels {
   'sftp:list': { args: [string, string]; result: SftpListing }
   'sftp:download': { args: [string, string[]]; result: number }
   'sftp:upload': { args: [string, string]; result: number }
+  'sftp:upload-folder': { args: [string, string]; result: DeployResult | null }
   'sftp:mkdir': { args: [string, string, string]; result: void }
   'sftp:rename': { args: [string, string, string]; result: void }
   'sftp:delete': { args: [string, string, boolean]; result: void }
@@ -517,9 +575,12 @@ export interface Channels {
   'shell:close': { args: [string]; result: void }
   'api:load': { args: []; result: ApiStore }
   'api:save': { args: [ApiStore]; result: void }
-  'api:send': { args: [ApiRequest, string | null]; result: ApiResponse }
-  'api:import': { args: [string]; result: ApiCollection }
-  'api:import-file': { args: []; result: ApiCollection | null }
+  'api:send': { args: [ApiRequest, string | null, string | null]; result: ApiResponse }
+  'api:run': { args: [string, string | null, string | null]; result: ApiRunResult[] }
+  'api:import': { args: [string]; result: ApiImportResult }
+  'api:import-file': { args: []; result: ApiImportResult | null }
+  'api:export': { args: [string]; result: string | null }
+  'api:code': { args: [ApiRequest, string | null, string | null, 'curl' | 'fetch' | 'php' | 'python']; result: string }
   'github:account': { args: []; result: { account: GitHubAccount | null; cli: boolean } }
   'github:sign-in': { args: [string]; result: GitHubAccount }
   'github:sign-in-cli': { args: []; result: GitHubAccount }
@@ -529,6 +590,11 @@ export interface Channels {
   'github:clone': { args: [string]; result: SiteInfo[] }
   'github:site-status': { args: [string]; result: GitSiteStatus & { next: string } }
   'github:push': { args: [string, GitPushOptions]; result: GitPushResult }
+  'github:create': { args: [{ name: string; description: string; private: boolean; readme: boolean; clone: boolean }]; result: { repo: GitHubRepo; sites: SiteInfo[] | null } }
+  'github:delete': { args: [string]; result: void }
+  'github:details': { args: [string]; result: GitHubRepoDetails }
+  'github:download-zip': { args: [string]; result: string | null }
+  'github:pull': { args: [string]; result: string }
   'deploy:run': { args: [string, DeployTarget, boolean, string | null]; result: DeployResult }
   'clipboard:read': { args: []; result: string }
   'clipboard:write': { args: [string]; result: void }

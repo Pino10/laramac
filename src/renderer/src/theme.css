@@ -1971,3 +1971,342 @@ html[data-material='vibrancy'] .sidebar {
   gap: 7px;
   font-weight: 600;
 }
+
+/* Hover labels may rise above a list, so lists no longer clip; their first and last rows carry the
+   rounded corners instead. */
+.group,
+.panel {
+  overflow: visible;
+}
+.group > :first-child,
+.panel > :first-child {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+.group > :last-child,
+.panel > :last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+.icon-btn[data-tip]:hover {
+  z-index: 30;
+}
+.gh-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gh-name:hover {
+  color: var(--accent-text);
+}
+.repo-dialog {
+  width: min(900px, calc(100vw - 48px));
+}
+.repo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.repo-grid section {
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--sel);
+  min-width: 0;
+}
+.repo-grid section.wide {
+  grid-column: 1 / -1;
+}
+.repo-grid h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.repo-grid h3 small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.repo-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--ink);
+  min-width: 0;
+}
+.repo-line .grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-row:hover {
+  background: var(--glass-strong);
+}
+
+/* ---------- API client, Postman-style additions ---------- */
+.apic-env .icon-btn {
+  flex-shrink: 0;
+}
+.apic-col-head {
+  padding: 2px 2px 2px 4px;
+}
+.apic-fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: left;
+}
+.apic-fold span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apic-fold small {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.apic-fold:hover {
+  background: var(--sel);
+}
+.apic-col-tools {
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+.apic-col-head:hover .apic-col-tools,
+.apic-folder-head:hover .apic-col-tools,
+.apic-col-tools:focus-within {
+  opacity: 1;
+}
+.apic-col-tools .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.apic-col-tools .icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.apic-folder {
+  margin-left: 12px;
+  padding-left: 4px;
+  border-left: 1px solid var(--line);
+}
+.apic-folder-head {
+  display: flex;
+  align-items: center;
+}
+.apic-folder-head .apic-fold {
+  font-weight: 500;
+}
+.test-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ok);
+}
+.test-dot[data-s='fail'] {
+  background: var(--bad);
+}
+.apic-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.apic-crumbs {
+  width: 100%;
+  display: flex;
+  gap: 4px;
+  padding-left: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.tab-count {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--sel);
+  color: var(--ink-2);
+}
+.tab-count[data-s='pass'] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.tab-count[data-s='fail'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.test-row {
+  display: grid;
+  grid-template-columns: 18px 130px minmax(0, 1fr) 110px minmax(0, 0.8fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+.test-row .input {
+  height: 34px;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+.test-row[data-off='true'] .input {
+  opacity: 0.5;
+}
+.resp-tests {
+  padding: 12px 16px;
+  overflow: auto;
+}
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.test-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.test-result[data-pass='false'] .test-icon {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.menu-wrap {
+  position: relative;
+}
+.menu-catch {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 41;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  animation: approach 0.22s var(--spring) both;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+}
+.menu-item:hover {
+  background: var(--sel);
+}
+.code-block {
+  margin: 0;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: #101116;
+  color: #e7e4f2;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+.run-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  border-radius: var(--r-md);
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-weight: 600;
+}
+.run-summary[data-ok='true'] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.run-summary .hint {
+  margin-left: auto;
+  font-weight: 400;
+}
+.run-list {
+  max-height: 46vh;
+  overflow: auto;
+  border-radius: var(--r-md);
+  background: var(--sel);
+}
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+}
+.run-row + .run-row {
+  border-top: 1px solid var(--line);
+}
+.run-row:hover {
+  background: var(--glass-strong);
+}
+.run-row .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.run-row strong {
+  font-weight: 500;
+}
+.run-row small {
+  font-size: 12px;
+}

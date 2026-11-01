@@ -1,4 +1,5 @@
 import { mysqlArch, phpArch } from './platform'
+import { releasesApi } from './distribution'
 import { USER_AGENT, urlExists } from './download'
 
 /** Compares dotted numeric versions: 8.4.10 is newer than 8.4.8. */
@@ -140,7 +141,7 @@ export function parseLaramacPhpAssets(assets: ReleaseAsset[], arch = phpArch()):
 export function fetchLaramacPhpBuilds(): Promise<Record<string, PhpBuild>> {
   return cached('laramac-php', async () => {
     try {
-      const rel = await getJson<{ assets: ReleaseAsset[] }>(`https://api.github.com/repos/${BINARIES_REPO}/releases/tags/php-builds`)
+      const rel = await releasesApi<{ assets: ReleaseAsset[] }>('releases/tags/php-builds')
       return parseLaramacPhpAssets(rel.assets)
     } catch {
       return {}
