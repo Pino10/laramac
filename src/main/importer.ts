@@ -303,7 +303,8 @@ export async function inspect(source: string, installedEngines: ('mysql' | 'mari
     if (removed) warnings.push(`${removed} links inside the folder were left out for safety.`)
 
     // Make sure nothing escaped the staging folder.
-    if (!isInside(staging, realpathSync(content))) throw new ImportError('The import could not be prepared safely.')
+    // Resolve both sides: on macOS, /var is a link to /private/var.
+    if (!isInside(realpathSync(staging), realpathSync(content))) throw new ImportError('The import could not be prepared safely.')
 
     const found = scan(content)
     const projectAbs = found.projectDir !== null ? join(content, found.projectDir) : null
