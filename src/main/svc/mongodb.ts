@@ -4,7 +4,8 @@ import type { ServiceImpl } from './types'
 import { dirs } from '../paths'
 import { downloadFile, extract, removeQuarantine } from '../download'
 import { jobs } from '../jobs'
-import { MONGODB_VERSION, mongodbUrl } from '../versions'
+import { latestMongodb } from '../versions'
+import { readFileSync, writeFileSync } from 'fs'
 import { ManagedProcess } from '../process'
 
 const proc = new ManagedProcess('MongoDB')
@@ -18,15 +19,23 @@ export const mongodb: ServiceImpl = {
   description: 'Document database (Community Edition)',
   port: () => PORT,
   installed: () => existsSync(mongod()),
-  version: () => (existsSync(mongod()) ? MONGODB_VERSION : undefined),
+  version: () => {
+    try {
+      return readFileSync(join(dirs.mongodb(), 'VERSION'), 'utf8').trim()
+    } catch {
+      return undefined
+    }
+  },
   running: () => proc.running,
 
   async install() {
-    await jobs.run(`Installing MongoDB ${MONGODB_VERSION}`, async (update) => {
+    await jobs.run('Installing MongoDB', async (update) => {
+      update(null, 'Finding the newest MongoDB')
+      const { version, url } = await latestMongodb()
       const archive = join(dirs.downloads(), 'mongodb.tgz')
       const staging = join(dirs.downloads(), 'mongodb-staging')
       rmSync(staging, { recursive: true, force: true })
-      await downloadFile(mongodbUrl(), archive, (p) => update(p, `Downloading MongoDB ${MONGODB_VERSION}`))
+      await downloadFile(url, archive, (p) => update(p, `Downloading MongoDB ${version}`))
       update(null, 'Unpacking MongoDB')
       await extract(archive, staging)
       const inner = readdirSync(staging).find((d) => d.startsWith('mongodb-'))
@@ -34,6 +43,7 @@ export const mongodb: ServiceImpl = {
       rmSync(dirs.mongodb(), { recursive: true, force: true })
       renameSync(join(staging, inner), dirs.mongodb())
       chmodSync(mongod(), 0o755)
+      writeFileSync(join(dirs.mongodb(), 'VERSION'), version)
       await removeQuarantine(dirs.mongodb())
       rmSync(staging, { recursive: true, force: true })
       rmSync(archive, { force: true })

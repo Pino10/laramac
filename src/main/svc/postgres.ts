@@ -25,7 +25,7 @@ export function installedPostgres(): string[] {
 export function activePostgres(): string | null {
   const installed = installedPostgres()
   const major = getSettings().postgresMajor
-  return installed.find((v) => v.split('.')[0] === major) ?? installed[0] ?? null
+  return (major !== 'latest' && installed.find((v) => v.split('.')[0] === major)) || installed[0] || null
 }
 
 function run(command: string, args: string[]): Promise<void> {
@@ -46,8 +46,10 @@ export const postgres: ServiceImpl = {
   running: () => proc.running,
 
   async install() {
-    const major = getSettings().postgresMajor
+    const wanted = getSettings().postgresMajor
     const versions = await fetchPostgresVersions()
+    const newestMajor = Object.keys(versions).sort((a, b) => Number(b) - Number(a))[0]
+    const major = wanted === 'latest' ? newestMajor : wanted
     const version = versions[major]
     if (!version) {
       throw new Error(`PostgreSQL ${major} is not available. Available: ${Object.keys(versions).join(', ')}.`)

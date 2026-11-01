@@ -1,6 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { existsSync } from 'fs'
 import { cancelImport, inspect, runImport } from './importer'
+import { checkForUpdate, installUpdate } from './updater'
+import { resetLaramac } from './reset'
+import { setupRecommended } from './setup'
+import { installAiTool, launchAiTool, listAiTools } from './aitools'
+import * as ssh from './ssh'
+import { customIniPath, ensureCustomIni } from './php'
+import { safeStorage } from 'electron'
+import type { ResetOptions, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -332,7 +340,7 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle('sites:open-editor', (path) => openInEditor(getSettings().editor, sitePath(path)))
-  handle('sites:open-claude', (path) => openClaudeCode(sitePath(path)))
+  handle('sites:open-claude', (path) => launchAiTool(getSettings().aiTool, sitePath(path)).catch(() => openClaudeCode(sitePath(path))))
   handle('sites:share', async (name) => {
     const site = siteByName(name)
     const url = await shareSite(site)
@@ -457,6 +465,94 @@ function registerIpc(): void {
 
   handle('import:cancel', (id) => cancelImport(String(id)))
 
+  // ---- Updates, reset, setup
+  handle('app:check-update', async () => {
+    const info = await checkForUpdate()
+    if (info) send('update:available', info)
+    return info
+  })
+  handle('app:install-update', () => jobs.run('Updating Laramac', (update) => installUpdate(update)))
+  handle('app:reset', async (opts) => {
+    const o = (opts ?? {}) as ResetOptions
+    const clean: ResetOptions = { settings: o.settings === true, software: o.software === true, data: o.data === true, system: o.system === true }
+    if (!Object.values(clean).some(Boolean)) throw new ValidationError('Choose at least one thing to clear.')
+    quitting = true
+    ssh.disconnectAll()
+    await Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm()])
+    stopDnsServer()
+    await resetLaramac(clean)
+    app.relaunch()
+    app.exit(0)
+  })
+  handle('settings:choose-www', async () => {
+    if (!mainWindow) return null
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose your projects folder',
+      buttonLabel: 'Use this folder',
+      defaultPath: getSettings().wwwPath,
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (res.canceled || !res.filePaths[0]) return null
+    const next = setSettings(sanitizeSettingsPatch({ wwwPath: res.filePaths[0] }))
+    watchWww()
+    notifySitesChanged()
+    return next
+  })
+  handle('php:edit-ini', async (minor) => {
+    const m = assertMinor(minor)
+    const file = ensureCustomIni(m)
+    await openInEditor(getSettings().editor, file).catch(() => shell.openPath(customIniPath(m)))
+  })
+  handle('setup:recommended', async () => {
+    const report = await setupRecommended()
+    activity.push(
+      report.failed.length ? 'error' : 'success',
+      report.failed.length ? 'Setup finished with problems' : 'Your stack is ready',
+      report.failed.length ? report.failed.map((f) => `${f.step}: ${f.error}`).join('\n') : report.done.join(', ')
+    )
+    notifySitesChanged()
+    return report
+  })
+
+  // ---- AI tools
+  handle('ai:tools', () => listAiTools())
+  handle('ai:install-tool', (id) => installAiTool(String(id)))
+  handle('ai:launch-tool', (id, path) => launchAiTool(String(id), path === null ? null : sitePath(path)))
+
+  // ---- SSH and SFTP. Secrets are encrypted with the macOS Keychain and never sent to the page.
+  const keychain: ssh.Crypto = {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (s) => safeStorage.encryptString(s).toString('base64'),
+    decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64'))
+  }
+  handle('ssh:list', () => ssh.listServers())
+  handle('ssh:save', (input) => ssh.saveServer(input as SshServerInput, keychain))
+  handle('ssh:delete', (id) => ssh.deleteServer(String(id)))
+  handle('ssh:terminal', (id) => ssh.openSshTerminal(String(id)))
+  handle('ssh:trust', (id, fp) => ssh.trustHostKey(String(id), String(fp)))
+  handle('sftp:connect', (id, passphrase) => ssh.connectSftp(String(id), typeof passphrase === 'string' ? passphrase : null, keychain))
+  handle('sftp:list', (sid, path) => ssh.listDir(String(sid), String(path)))
+  handle('sftp:download', async (sid, paths) => {
+    if (!mainWindow || !Array.isArray(paths)) return 0
+    const res = await dialog.showOpenDialog(mainWindow, { title: 'Download to…', buttonLabel: 'Download here', properties: ['openDirectory', 'createDirectory'] })
+    if (res.canceled || !res.filePaths[0]) return 0
+    const n = await ssh.download(String(sid), paths.map(String), res.filePaths[0])
+    activity.push('success', `Downloaded ${n} ${n === 1 ? 'file' : 'files'}`, res.filePaths[0])
+    return n
+  })
+  handle('sftp:upload', async (sid, remoteDir) => {
+    if (!mainWindow) return 0
+    const res = await dialog.showOpenDialog(mainWindow, { title: 'Upload files', buttonLabel: 'Upload', properties: ['openFile', 'multiSelections'] })
+    if (res.canceled || res.filePaths.length === 0) return 0
+    const n = await ssh.upload(String(sid), res.filePaths, String(remoteDir))
+    activity.push('success', `Uploaded ${n} ${n === 1 ? 'file' : 'files'}`, String(remoteDir))
+    return n
+  })
+  handle('sftp:mkdir', (sid, dir, name) => ssh.mkdir(String(sid), String(dir), String(name)))
+  handle('sftp:rename', (sid, from, to) => ssh.rename(String(sid), String(from), String(to)))
+  handle('sftp:delete', (sid, path, isDir) => ssh.remove(String(sid), String(path), isDir === true))
+  handle('sftp:disconnect', (sid) => ssh.disconnect(String(sid)))
+
   handle('activity:list', () => activity.list())
   handle('activity:clear', () => activity.clear())
 
@@ -495,7 +591,35 @@ app.whenReady().then(() => {
   )
 
   app.on('activate', showWindow)
+  setTimeout(() => void backgroundChecks(), 8000)
+  setInterval(() => void backgroundChecks(), 6 * 60 * 60 * 1000)
 })
+
+const announced = new Set<string>()
+/** Looks for a newer Laramac and newer PHP builds, and says so once per version. */
+async function backgroundChecks(): Promise<void> {
+  if (!getSettings().autoUpdateCheck) return
+  try {
+    const info: UpdateInfo | null = await checkForUpdate()
+    if (info && !announced.has(`app-${info.version}`)) {
+      announced.add(`app-${info.version}`)
+      activity.push('info', `Laramac ${info.version} is available`, 'Update from the banner on the Overview or in Settings.')
+      send('update:available', info)
+    }
+  } catch {
+    // Offline: try again later.
+  }
+  try {
+    for (const v of await listVersions()) {
+      if (v.updateAvailable && !announced.has(`php-${v.latest}`)) {
+        announced.add(`php-${v.latest}`)
+        activity.push('info', `PHP ${v.latest} is available`, `You have ${v.installed}. Update it on the PHP page.`)
+      }
+    }
+  } catch {
+    // Offline.
+  }
+}
 
 app.on('window-all-closed', () => {
   // Keep running in the menu bar on macOS, like Laragon stays in the tray.
@@ -506,6 +630,7 @@ app.on('before-quit', (event) => {
   if (quitting) return
   event.preventDefault()
   quitting = true
+  ssh.disconnectAll()
   void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm()]).then(() => {
     stopDnsServer()
     app.exit(0)

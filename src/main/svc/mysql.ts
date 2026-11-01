@@ -124,6 +124,11 @@ export const mysql: ServiceImpl = {
 
     // First run: create the data directory with an empty root password.
     if (!existsSync(join(dataDir, 'mysql'))) {
+      // A previous first start that was interrupted leaves files behind, and
+      // mysqld refuses to initialise a folder that is not empty. Keep them aside.
+      if (existsSync(dataDir) && readdirSync(dataDir).length > 0) {
+        renameSync(dataDir, `${dataDir}.incomplete-${Date.now()}`)
+      }
       mkdirSync(dataDir, { recursive: true })
       try {
         await runOnce(mysqldPath(version), [

@@ -1,5 +1,5 @@
 import { mysqlArch, phpArch } from './platform'
-import { urlExists } from './download'
+import { USER_AGENT, urlExists } from './download'
 
 /** Compares dotted numeric versions: 8.4.10 is newer than 8.4.8. */
 export function compareVersions(a: string, b: string): number {
@@ -54,19 +54,121 @@ export function parsePhpListing(
   return latest
 }
 
-const cache = new Map<string, { at: number; data: Record<string, string> }>()
+const cache = new Map<string, { at: number; data: unknown }>()
+const TEN_MINUTES = 10 * 60 * 1000
 
-export async function fetchPhpReleases(flavor: PhpFlavor): Promise<Record<string, string>> {
-  const key = flavor
+async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key)
-  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.data
-
-  const res = await fetch(`https://dl.static-php.dev/static-php-cli/${flavorDir(flavor)}/?format=json`)
-  if (!res.ok) throw new Error(`Could not list PHP versions (${res.status})`)
-  const entries = (await res.json()) as { name: string }[]
-  const data = parsePhpListing(entries)
+  if (hit && Date.now() - hit.at < TEN_MINUTES) return hit.data as T
+  const data = await load()
   cache.set(key, { at: Date.now(), data })
   return data
+}
+
+export function clearVersionCache(): void {
+  cache.clear()
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`)
+  return (await res.json()) as T
+}
+
+/** static-php.dev's ready-made builds (newest patch per minor). */
+export function fetchPhpReleases(flavor: PhpFlavor): Promise<Record<string, string>> {
+  return cached(`spc-${flavor}`, async () =>
+    parsePhpListing(await getJson<{ name: string }[]>(`https://dl.static-php.dev/static-php-cli/${flavorDir(flavor)}/?format=json`))
+  )
+}
+
+/** PHP versions Laramac offers. php.net is asked for the newest release of each. */
+export const SUPPORTED_PHP = ['8.5', '8.4', '8.3', '8.2', '8.1', '8.0']
+
+/** The newest release of each PHP version according to php.net itself. */
+export function fetchPhpNetLatest(minors: string[] = SUPPORTED_PHP): Promise<Record<string, string>> {
+  return cached('php.net', async () => {
+    const out: Record<string, string> = {}
+    await Promise.all(
+      minors.map(async (m) => {
+        try {
+          const d = await getJson<{ version?: string }>(`https://www.php.net/releases/?json&version=${m}`)
+          if (d.version && /^\d+\.\d+\.\d+$/.test(d.version)) out[m] = d.version
+        } catch {
+          // php.net unreachable: fall back to what the build sources offer.
+        }
+      })
+    )
+    return out
+  })
+}
+
+export interface PhpBuild {
+  version: string
+  cliUrl: string
+  fpmUrl: string
+  /** SHA-256 list covering both archives, when the source publishes one. */
+  sumsUrl: string | null
+  source: 'laramac' | 'static-php'
+}
+
+interface ReleaseAsset {
+  name: string
+  browser_download_url: string
+}
+
+/** Builds published by this repo's "Build latest PHP" workflow, newest patch per minor. */
+export function parseLaramacPhpAssets(assets: ReleaseAsset[], arch = phpArch()): Record<string, PhpBuild> {
+  const byName = new Map(assets.map((a) => [a.name, a.browser_download_url]))
+  const out: Record<string, PhpBuild> = {}
+  const re = new RegExp(`^php-(\\d+\\.\\d+\\.\\d+)-fpm-macos-${arch}\\.tar\\.gz$`)
+  for (const a of assets) {
+    const m = re.exec(a.name)
+    if (!m) continue
+    const v = m[1]
+    const cli = byName.get(`php-${v}-cli-macos-${arch}.tar.gz`)
+    if (!cli) continue
+    const minor = minorOf(v)
+    if (out[minor] && compareVersions(out[minor].version, v) >= 0) continue
+    out[minor] = { version: v, cliUrl: cli, fpmUrl: a.browser_download_url, sumsUrl: byName.get(`php-${v}-macos-${arch}.sha256`) ?? null, source: 'laramac' }
+  }
+  return out
+}
+
+export function fetchLaramacPhpBuilds(): Promise<Record<string, PhpBuild>> {
+  return cached('laramac-php', async () => {
+    try {
+      const rel = await getJson<{ assets: ReleaseAsset[] }>(`https://api.github.com/repos/${BINARIES_REPO}/releases/tags/php-builds`)
+      return parseLaramacPhpAssets(rel.assets)
+    } catch {
+      return {}
+    }
+  })
+}
+
+/** For each PHP version, the newest build available from Laramac's own builds or static-php.dev. */
+export async function resolvePhpBuilds(flavor: PhpFlavor): Promise<Record<string, PhpBuild>> {
+  const [own, spc] = await Promise.all([
+    flavor === 'full' ? fetchLaramacPhpBuilds() : Promise.resolve({} as Record<string, PhpBuild>),
+    fetchPhpReleases(flavor).catch(() => ({}) as Record<string, string>)
+  ])
+  const out: Record<string, PhpBuild> = {}
+  for (const [minor, version] of Object.entries(spc)) {
+    out[minor] = { version, cliUrl: phpDownloadUrl('cli', version, flavor), fpmUrl: phpDownloadUrl('fpm', version, flavor), sumsUrl: null, source: 'static-php' }
+  }
+  for (const [minor, build] of Object.entries(own)) {
+    if (!out[minor] || compareVersions(build.version, out[minor].version) >= 0) out[minor] = build
+  }
+  return out
+}
+
+/** Reads "hash  filename" lines and returns the hash for one file. */
+export function hashFor(list: string, filename: string): string | null {
+  for (const line of list.split('\n')) {
+    const m = /^([a-f0-9]{64})\s+\*?(.+)$/i.exec(line.trim())
+    if (m && m[2].split('/').pop() === filename) return m[1].toLowerCase()
+  }
+  return null
 }
 
 /**
@@ -177,9 +279,31 @@ export async function fetchPostgresVersions(): Promise<Record<string, string>> {
 
 // ---- MongoDB: official community tarballs.
 
-export const MONGODB_VERSION = '8.0.12'
+export const MONGODB_FALLBACK = '9.0.4'
 
-export function mongodbUrl(version = MONGODB_VERSION, arch: string = process.arch): string {
+/** The newest MongoDB Community release for this Mac, from MongoDB's own version feed. */
+export async function latestMongodb(arch: string = process.arch): Promise<{ version: string; url: string }> {
+  const a = arch === 'arm64' ? 'arm64' : 'x86_64'
+  try {
+    const feed = await getJson<{ versions: { version: string; production_release?: boolean; downloads: { target?: string; arch?: string; archive: { url: string } }[] }[] }>(
+      'https://downloads.mongodb.org/current.json'
+    )
+    for (const v of feed.versions) {
+      if (v.production_release === false) continue
+      const d = v.downloads.find((x) => x.target === 'macos' && x.arch === a && x.archive.url.startsWith('https://fastdl.mongodb.org/'))
+      if (d) return { version: v.version, url: d.archive.url }
+    }
+  } catch {
+    // Feed unreachable: use the known release.
+  }
+  return { version: MONGODB_FALLBACK, url: mongodbUrl(MONGODB_FALLBACK, arch) }
+}
+
+export function meilisearchUrl(arch: string = process.arch): string {
+  return `https://github.com/meilisearch/meilisearch/releases/latest/download/meilisearch-macos-${arch === 'arm64' ? 'apple-silicon' : 'amd64'}`
+}
+
+export function mongodbUrl(version: string = MONGODB_FALLBACK, arch: string = process.arch): string {
   const a = arch === 'arm64' ? 'arm64' : 'x86_64'
   return `https://fastdl.mongodb.org/osx/mongodb-macos-${a}-${version}.tgz`
 }

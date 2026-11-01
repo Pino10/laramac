@@ -1,4 +1,4 @@
-import { Database, Mail, Plus, Upload } from 'lucide-react'
+import { Check, Database, Mail, Plus, Sparkles, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
@@ -11,7 +11,8 @@ const groups: { id: ServiceGroup; title: string }[] = [
   { id: 'mail', title: 'Mail' }
 ]
 
-function headline(running: number, installed: number, failing: boolean): { title: string; sub: string } {
+function headline(running: number, installed: number, failing: boolean, ready: boolean): { title: string; sub: string } {
+  if (!ready) return { title: 'Set up your stack.', sub: 'One click below installs everything you need, or pick pieces from the lists.' }
   if (installed === 0) return { title: 'Set up your stack.', sub: 'Install PHP, a web server and a database. Each takes one click.' }
   if (failing) return { title: 'Something needs a look.', sub: 'A service could not start. The details are below.' }
   if (running === 0) return { title: 'Everything is off.', sub: 'Start all to bring your sites up.' }
@@ -20,7 +21,7 @@ function headline(running: number, installed: number, failing: boolean): { title
 }
 
 export default function Dashboard(): React.JSX.Element {
-  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites } = useApp()
+  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites, php } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
@@ -28,7 +29,9 @@ export default function Dashboard(): React.JSX.Element {
   const installing = jobs.some((j) => j.status === 'running')
   const tld = settings?.tld ?? 'test'
   const mailpit = services.find((s) => s.id === 'mailpit')
-  const { title, sub } = headline(running, installed.length, failing)
+  // Ready means a web server and PHP are installed; until then the welcome card leads.
+  const ready = services.some((s) => s.group === 'web' && s.status !== 'not-installed') && services.some((s) => s.id === 'php' && s.status !== 'not-installed')
+  const { title, sub } = headline(running, installed.length, failing, ready)
 
   const setup = tools
     ? [
@@ -88,7 +91,55 @@ export default function Dashboard(): React.JSX.Element {
         </div>
       </div>
 
-      {setup.map((step) => (
+      {!ready && (
+        <div className="welcome glass">
+          <div>
+            <div className="card-title" style={{ fontSize: 17 }}>
+              <Sparkles size={16} style={{ color: 'var(--accent)' }} /> Set up everything in one click
+            </div>
+            <p className="dim" style={{ margin: '6px 0 0', maxWidth: '62ch' }}>
+              Laramac installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on .{tld} addresses with trusted HTTPS.
+              macOS asks for your password twice along the way.
+            </p>
+            <div className="welcome-steps">
+              {['PHP ' + (php[0]?.latest ?? ''), 'Apache', 'MySQL', 'phpMyAdmin', 'Mailpit', `.${tld} + HTTPS`].map((s) => (
+                <span key={s} className="step-chip">
+                  <Check size={12} /> {s}
+                </span>
+              ))}
+            </div>
+            {tools && !tools.homebrew && (
+              <p className="hint" style={{ marginTop: 10 }}>
+                Apache installs with Homebrew. Get it free at{' '}
+                <button className="link" onClick={() => api.invoke('tools:open-external', 'https://brew.sh')}>
+                  brew.sh
+                </button>
+                ; everything else installs without it.
+              </p>
+            )}
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ height: 40, padding: '0 18px', fontSize: 13.5 }}
+            disabled={busy.has('setup') || installing}
+            onClick={async () => {
+              const report = await act('setup', () => api.invoke('setup:recommended'))
+              setServices(await api.invoke('services:list'))
+              if (report) {
+                notify(
+                  report.failed.length
+                    ? { kind: 'error', text: `Set up ${report.done.length} of ${report.done.length + report.failed.length}. ${report.failed.map((f) => `${f.step}: ${f.error}`).join(' ')}` }
+                    : { kind: 'info', text: 'Your stack is ready.' }
+                )
+              }
+            }}
+          >
+            {busy.has('setup') ? 'Setting up' : 'Set up my stack'}
+          </button>
+        </div>
+      )}
+
+      {ready && setup.map((step) => (
         <div key={step.key} className="notice glass">
           <div className="notice-body">
             <div className="notice-title">{step.title}</div>

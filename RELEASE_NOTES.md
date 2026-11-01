@@ -1,38 +1,33 @@
 Laramac is a free, open-source local development environment for macOS, inspired by Laragon.
 
-## Fixed in 0.5.2
-- **"No MySQL build was found for this Mac."** Oracle's download page blocks requests from apps, so the MySQL install always failed. Laramac now downloads from Oracle's CDN directly and installs the newest MySQL 8.4 for your Mac (8.4.13 on Apple Silicon, 8.4.11 on Intel today). A test now checks Oracle's servers on every build.
+## New in 0.6
+- **Your data survives updates.** Settings, PHP versions, databases and downloads live in `~/.laramac`, and updating only replaces the app.
+- **Updates inside the app.** Laramac checks for new versions, shows what changed, verifies the download and restarts into the new version.
+- **Apache first.** Apache is now the main web server on ports 80 and 443, with Nginx beside it on 8080 and 8443. Swap them in Settings.
+- **Always the newest PHP.** PHP 8.5.12, 8.4.27, 8.3.36 and every new php.net release, built daily for Apple Silicon and Intel. Laramac tells you when an update is ready.
+- **php.ini made for your version.** Tuned for local development, with settings newer PHP removed left out. Add your own lines with Edit php.ini.
+- **SSH and SFTP.** Save servers, open SSH in Terminal, and browse files WinSCP-style.
+- **AI tools.** Install and launch Claude Code, OpenCode, OpenClaw, Codex, Gemini CLI, vMLX, MLX LM, Ollama and LM Studio.
+- **More databases.** Memcached and Meilisearch join MySQL, MariaDB, PostgreSQL, Redis and MongoDB.
+- **Set up my stack.** One click installs PHP, Apache, MySQL, phpMyAdmin and Mailpit and starts them.
+- **Reset without uninstalling.** Clear software, data, settings or system changes from Settings. Your projects are never touched.
+- **Projects in `~/Laramac/www`.** Kept out of Documents so iCloud does not sync it. An existing `~/www` keeps working.
+- **Interface.** Uses the full window in full screen, a new notification bell whose list scrolls, and a fresher Liquid Glass look.
 
-## Fixed in 0.5.1
-- **"Laramac is damaged and can't be opened."** The app is now ad-hoc signed, and every build is launched on a Mac before it is published.
+## Fixed
+- MySQL now installs the newest 8.4 build from Oracle's CDN and recovers from an interrupted first start.
 
 ## Download
-- **Apple Silicon (M1 and later):** Laramac-0.5.2-arm64.dmg
-- **Intel:** Laramac-0.5.2-x64.dmg
+- **Apple Silicon (M1 and later):** Laramac-0.6.0-arm64.dmg
+- **Intel:** Laramac-0.6.0-x64.dmg
 
-The app is not notarized by Apple yet, so confirm the first launch: open Laramac, click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
-
-## What's inside
-- Every folder in `~/www` becomes `https://name.test`
-- PHP 8.0 to 8.5, side by side, chosen per site
-- Nginx and Apache
-- MySQL, MariaDB, PostgreSQL, Redis and MongoDB
-- phpMyAdmin and Adminer
-- Mailpit catches all outgoing mail
-- One-click local HTTPS
-- Public links through Cloudflare Tunnel or ngrok
-- Import projects from Laragon or backups (.zip, .tar.gz, folder or .sql), with the database loaded and config updated
-- New WordPress, Laravel or PHP projects in one click
-- Open sites in Cursor, VS Code or Claude Code
-- An assistant powered by your own local model
-- Live stack map, ⌘K command bar, macOS notifications
-- Designed for macOS 27 Golden Gate with native Liquid Glass
+The app is not notarized by Apple yet, so confirm the first launch: open Laramac, click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**. From 0.6 on, updates install from inside the app.
 
 ## Security
-Sites are only reachable from your Mac unless you allow your network. The local certificate authority can only vouch for `.test` names. Imports are checked for unsafe archives and SQL dumps. See the README for details.
+Sites are only reachable from your Mac unless you allow your network. The local certificate authority can only vouch for `.test` names. Updates, PHP builds and imports are all verified. See the README for details.
 
 ## Known limits
 This is an early preview, so please report problems in Issues.
-- Nginx, Redis, Apache and MariaDB need Homebrew for now.
+- Apache, Nginx, Redis, MariaDB and Memcached need Homebrew for now.
 - PostgreSQL has no `psql` command.
-- No auto-update yet.
+- A new PHP release takes about an hour to appear after php.net publishes it.

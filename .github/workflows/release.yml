@@ -48,17 +48,25 @@ jobs:
           echo "Laramac started and stayed running."
           cat app.log
 
+      # The in-app updater only installs a DMG whose hash matches this list.
+      - name: Checksums
+        run: cd dist && shasum -a 256 *.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: laramac-dmg
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS.txt
 
       # A release created in the GitHub UI (tag push): just attach the files.
       - name: Attach DMGs to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.dmg
+          files: |
+            dist/*.dmg
+            dist/SHA256SUMS.txt
 
       # Started from the Actions tab with a tag: create the tag and the release.
       - name: Create the release
@@ -70,4 +78,6 @@ jobs:
           name: Laramac ${{ inputs.tag }}
           prerelease: true
           body_path: RELEASE_NOTES.md
-          files: dist/*.dmg
+          files: |
+            dist/*.dmg
+            dist/SHA256SUMS.txt

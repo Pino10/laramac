@@ -4,6 +4,8 @@ import type { SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram, PageHead, Switch } from '../ui'
 
+const AI_NAMES: Record<string, string> = { claude: 'Claude Code', opencode: 'OpenCode', openclaw: 'OpenClaw', codex: 'Codex', gemini: 'Gemini CLI', vmlx: 'vMLX', 'mlx-lm': 'MLX LM' }
+
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
   wordpress: 'WordPress',
@@ -19,6 +21,7 @@ export default function Sites(): React.JSX.Element {
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
   const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
+  const aiName = AI_NAMES[settings?.aiTool ?? 'claude'] ?? 'AI tool'
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -130,7 +133,7 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn label={`Open ${site.name} in ${editor}`} title={`Open in ${editor}`} onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}>
                   <Code size={15} />
                 </IconBtn>
-                <IconBtn label={`Claude Code in ${site.name}`} title="Open Claude Code here" onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
+                <IconBtn label={`${aiName} in ${site.name}`} title={`Open ${aiName} here`} onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
                   <Terminal size={15} />
                 </IconBtn>
                 <IconBtn

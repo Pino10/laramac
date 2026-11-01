@@ -14,6 +14,20 @@ import { ManagedProcess, isPortOpen } from '../process'
 import { buildHostConfs } from '../webconf'
 import { ensurePhpRunning } from './php'
 
+/** The main server gets the standard ports; the other one runs beside it on its own ports. */
+export function portsFor(server: 'apache' | 'nginx'): { http: number; https: number } {
+  const s = getSettings()
+  return s.primaryServer === server
+    ? { http: s.httpPort, https: s.httpsPort }
+    : { http: s.secondaryHttpPort, https: s.secondaryHttpsPort }
+}
+
+async function assertPortFree(port: number): Promise<void> {
+  if (await isPortOpen(port)) {
+    throw new Error(`Port ${port} is already in use by another program. Quit it, or change the port in Settings.`)
+  }
+}
+
 // ---------------------------------------------------------------- Nginx
 
 const nginxProc = new ManagedProcess('Nginx')
@@ -41,8 +55,8 @@ async function writeNginxConf(): Promise<void> {
     generateNginxConf({
       sites: hosts.sites,
       extras: hosts.extras,
-      httpPort: settings.httpPort,
-      httpsPort: settings.httpsPort,
+      httpPort: portsFor('nginx').http,
+      httpsPort: portsFor('nginx').https,
       pidFile: join(dirs.run(), 'nginx.pid'),
       errorLog: join(dirs.logs(), 'nginx-error.log'),
       accessLog: join(dirs.logs(), 'nginx-access.log'),
@@ -56,8 +70,8 @@ async function writeNginxConf(): Promise<void> {
 export const nginx: ServiceImpl = {
   id: 'nginx',
   name: 'Nginx',
-  description: 'Web server for your sites',
-  port: () => getSettings().httpPort,
+  description: 'Fast web server, runs beside Apache',
+  port: () => portsFor('nginx').http,
   installed: () => nginxBinary() !== null,
   version: () => undefined,
   running: () => nginxProc.running,
@@ -82,10 +96,8 @@ export const nginx: ServiceImpl = {
   async start() {
     const bin = nginxBinary()
     if (!bin) throw new Error('Nginx is not installed.')
-    const port = getSettings().httpPort
-    if (await isPortOpen(port)) {
-      throw new Error(`Port ${port} is already in use. Stop the other web server and try again.`)
-    }
+    const port = portsFor('nginx').http
+    await assertPortFree(port)
     await ensurePhpRunning().catch(() => undefined)
     await writeNginxConf()
     await nginxProc.start(
@@ -149,8 +161,8 @@ async function writeApacheConf(layout: ApacheLayout): Promise<void> {
     generateApacheConf({
       sites: hosts.sites,
       extras: hosts.extras,
-      port: settings.apachePort,
-      httpsPort: settings.apacheHttpsPort,
+      port: portsFor('apache').http,
+      httpsPort: portsFor('apache').https,
       modulesDir: layout.modulesDir,
       mimeTypesFile: layout.mimeTypesFile,
       pidFile: join(dirs.run(), 'httpd.pid'),
@@ -165,8 +177,8 @@ async function writeApacheConf(layout: ApacheLayout): Promise<void> {
 export const apache: ServiceImpl = {
   id: 'apache',
   name: 'Apache',
-  description: 'Alternative web server on its own port',
-  port: () => getSettings().apachePort,
+  description: 'Web server for your sites, with .htaccess support',
+  port: () => portsFor('apache').http,
   installed: () => apacheLayout() !== null,
   version: () => undefined,
   running: () => apacheProc.running,
@@ -197,10 +209,8 @@ export const apache: ServiceImpl = {
   async start() {
     const layout = apacheLayout()
     if (!layout) throw new Error('Apache is not installed.')
-    const port = getSettings().apachePort
-    if (await isPortOpen(port)) {
-      throw new Error(`Port ${port} is already in use. Change Apache's port in Settings.`)
-    }
+    const port = portsFor('apache').http
+    await assertPortFree(port)
     await ensurePhpRunning().catch(() => undefined)
     await writeApacheConf(layout)
     await apacheProc.start(

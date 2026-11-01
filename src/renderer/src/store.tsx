@@ -8,7 +8,8 @@ import type {
   PhpVersionInfo,
   ServiceInfo,
   SiteInfo,
-  ToolsStatus
+  ToolsStatus,
+  UpdateInfo
 } from '@shared/types'
 
 export interface Toast {
@@ -16,7 +17,7 @@ export interface Toast {
   text: string
 }
 
-export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'tools' | 'assistant' | 'settings'
+export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'servers' | 'tools' | 'assistant' | 'settings'
 
 interface AppCtx {
   page: Page
@@ -30,6 +31,8 @@ interface AppCtx {
   activity: ActivityItem[]
   clearActivity: () => void
   appInfo: AppInfo | null
+  update: UpdateInfo | null
+  setUpdate: (u: UpdateInfo | null) => void
   services: ServiceInfo[]
   sites: SiteInfo[]
   jobs: JobInfo[]
@@ -74,6 +77,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [importOpen, setImportOpen] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+  const [update, setUpdate] = useState<UpdateInfo | null>(null)
   const [services, setServices] = useState<ServiceInfo[]>([])
   const [sites, setSites] = useState<SiteInfo[]>([])
   const [jobs, setJobs] = useState<JobInfo[]>([])
@@ -139,12 +143,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     api().invoke('settings:get').then(setSettings)
     api().invoke('jobs:list').then(setJobs)
     api().invoke('activity:list').then(setActivity)
+    api().invoke('app:check-update').then(setUpdate).catch(() => undefined)
     refreshAll()
     const offs = [
       api().on('services:changed', setServices),
       api().on('jobs:changed', setJobs),
       api().on('sites:changed', setSites),
-      api().on('activity:changed', setActivity)
+      api().on('activity:changed', setActivity),
+      api().on('update:available', setUpdate)
     ]
     window.addEventListener('focus', refreshAll)
     return () => {
@@ -175,6 +181,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       activity,
       clearActivity,
       appInfo,
+      update,
+      setUpdate,
       services,
       sites,
       jobs,
@@ -194,7 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       act,
       notify
     }),
-    [page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -45,9 +45,10 @@ export default function StackMap(): React.JSX.Element {
         : void act(`toggle-${s.id}`, () => api.invoke('services:toggle', s.id).then(setServices))
 
     // Web servers
-    const web = (['nginx', 'apache'] as const)
+    const primary = settings?.primaryServer ?? 'apache'
+    const web = ([primary, primary === 'apache' ? 'nginx' : 'apache'] as const)
       .map((id) => svc(id))
-      .filter((s): s is ServiceInfo => !!s && (s.id === 'nginx' || s.status !== 'not-installed'))
+      .filter((s): s is ServiceInfo => !!s && (s.id === primary || s.status !== 'not-installed'))
     for (const s of web) {
       nodes.push({
         id: s.id,
@@ -123,7 +124,7 @@ export default function StackMap(): React.JSX.Element {
     for (const a of phpSources.length ? phpSources : byCol(2).slice(0, 1)) for (const b of byCol(3)) edges.push({ from: a.id, to: b.id })
     return { nodes, edges }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [services, sites, php, settings?.wwwPath, tools])
+  }, [services, sites, php, settings?.wwwPath, settings?.primaryServer, tools])
 
   const layout = useCallback(() => {
     const el = box.current

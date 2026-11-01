@@ -14,6 +14,8 @@ import Databases from './pages/Databases'
 import Tools from './pages/Tools'
 import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
+import Servers from './pages/Servers'
+import UpdateBanner from './components/UpdateBanner'
 
 function Shell(): React.JSX.Element {
   const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject, setImportOpen } = useApp()
@@ -36,7 +38,7 @@ function Shell(): React.JSX.Element {
       } else if (key === 'i') {
         e.preventDefault()
         setImportOpen(true)
-      } else if (/^[1-7]$/.test(key)) {
+      } else if (/^[1-8]$/.test(key)) {
         e.preventDefault()
         setPage(PAGE_ORDER[Number(key) - 1])
       }
@@ -61,10 +63,12 @@ function Shell(): React.JSX.Element {
           </header>
           <div className="scroll">
             <div className="main-inner" key={page}>
+              <UpdateBanner />
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}
+              {page === 'servers' && <Servers />}
               {page === 'tools' && <Tools />}
               {page === 'assistant' && <Assistant />}
               {page === 'settings' && <Settings />}

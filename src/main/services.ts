@@ -9,9 +9,12 @@ import { mariadb } from './svc/mariadb'
 import { postgres } from './svc/postgres'
 import { redis } from './svc/redis'
 import { mongodb } from './svc/mongodb'
+import { meilisearch } from './svc/meilisearch'
+import { memcached } from './svc/memcached'
 
 /** Start order matters: mail and database first, then PHP, then the web servers. */
-const IMPLS: ServiceImpl[] = [mailpit, mysql, mariadb, postgres, redis, mongodb, php, nginx, apache]
+// Start order: mail and data first, then PHP, then the web servers (Apache is the main one).
+const IMPLS: ServiceImpl[] = [mailpit, mysql, mariadb, postgres, redis, memcached, mongodb, meilisearch, php, apache, nginx]
 
 const GROUPS: Record<ServiceId, ServiceGroup> = {
   nginx: 'web',
@@ -22,6 +25,8 @@ const GROUPS: Record<ServiceId, ServiceGroup> = {
   postgres: 'database',
   redis: 'database',
   mongodb: 'database',
+  meilisearch: 'database',
+  memcached: 'database',
   mailpit: 'mail'
 }
 
@@ -32,6 +37,8 @@ const CONNECTIONS: Partial<Record<ServiceId, string>> = {
   postgres: 'postgresql://postgres@127.0.0.1:5432',
   redis: 'redis://127.0.0.1:6379',
   mongodb: 'mongodb://127.0.0.1:27017',
+  meilisearch: 'http://127.0.0.1:7700',
+  memcached: '127.0.0.1:11211',
   mailpit: 'smtp://127.0.0.1:1025'
 }
 

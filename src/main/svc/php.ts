@@ -50,9 +50,9 @@ export const php: ServiceImpl = {
   running: () => runningMinors().length > 0,
 
   async install() {
-    // Pick a sensible first version: 8.4 if offered, otherwise the newest available.
+    // Always start with the newest PHP that has a build ready.
     const versions = await listVersions()
-    const choice = versions.find((v) => v.minor === '8.4') ?? versions[0]
+    const choice = versions.find((v) => v.latest && v.latest !== v.minor) ?? versions[0]
     if (!choice) throw new Error('No PHP versions are available right now. Check your connection.')
     await installMinor(choice.minor)
   },

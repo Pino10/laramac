@@ -64,6 +64,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'glass':
       case 'notifications':
       case 'allowLan':
+      case 'autoUpdateCheck':
         out[key] = bool(value, key)
         break
       case 'defaultPhp':
@@ -76,13 +77,19 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.mysqlVersion = typeof value === 'string' && (value === 'latest' || /^\d{1,2}\.\d{1,2}\.\d{1,3}$/.test(value)) ? value : fail('Use latest, or a MySQL version like 8.4.11.')
         break
       case 'postgresMajor':
-        out.postgresMajor = typeof value === 'string' && /^\d{1,2}$/.test(value) ? value : fail('Use a PostgreSQL major version like 17.')
+        out.postgresMajor = typeof value === 'string' && (value === 'latest' || /^\d{1,2}$/.test(value)) ? value : fail('Use latest, or a PostgreSQL major version like 17.')
         break
       case 'httpPort':
       case 'httpsPort':
-      case 'apachePort':
-      case 'apacheHttpsPort':
+      case 'secondaryHttpPort':
+      case 'secondaryHttpsPort':
         out[key] = isPort(value) ? value : fail('Ports are whole numbers from 1 to 65535.')
+        break
+      case 'primaryServer':
+        out.primaryServer = oneOf(value, ['apache', 'nginx'] as const, 'Main web server')
+        break
+      case 'aiTool':
+        out.aiTool = typeof value === 'string' && /^[a-z0-9-]{1,32}$/.test(value) ? value : fail('Unknown AI tool.')
         break
       case 'shareProvider':
         out.shareProvider = oneOf(value, ['cloudflare', 'ngrok'] as const, 'Tunnel provider')

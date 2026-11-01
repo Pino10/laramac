@@ -90,10 +90,10 @@ describe('network exposure', () => {
     expect(generateNginxConf(opts)).toContain('allow 127.0.0.1;')
     expect(generateNginxConf({ ...opts, allowLan: true })).not.toContain('allow 127.0.0.1;')
   })
-  it('Apache listens on loopback unless LAN access is turned on', () => {
-    const opts = { ...base, port: 8080, httpsPort: 8443, modulesDir: '/m', pidFile: '/p', errorLog: '/e', accessLog: '/a', serverRoot: '/s' }
-    expect(generateApacheConf(opts)).toContain('Listen 127.0.0.1:8080')
-    expect(generateApacheConf({ ...opts, allowLan: true })).toContain('Listen 8080')
+  it('Apache only admits this Mac unless LAN access is turned on', () => {
+    const opts = { ...base, port: 80, httpsPort: 443, modulesDir: '/m', pidFile: '/p', errorLog: '/e', accessLog: '/a', serverRoot: '/s' }
+    expect(generateApacheConf(opts)).toContain('Require local')
+    expect(generateApacheConf({ ...opts, allowLan: true })).toContain('Require all granted')
   })
 })
 

@@ -1,26 +1,53 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings } from '@shared/types'
+import { FolderOpen, RotateCcw } from 'lucide-react'
+import type { AppSettings, ResetOptions } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
 
 export default function Settings(): React.JSX.Element {
-  const { settings, updateSettings, tools } = useApp()
+  const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify } = useApp()
+  const api = window.laramac
+  const [resetOpen, setResetOpen] = useState(false)
   if (!settings) return <></>
+  const other = settings.primaryServer === 'apache' ? 'Nginx' : 'Apache'
+  const main = settings.primaryServer === 'apache' ? 'Apache' : 'Nginx'
 
   return (
     <>
-      <PageHead title="Settings" desc="Ports apply the next time a server starts." />
+      <PageHead title="Settings" desc="Everything here is saved outside the app, so updates keep it." />
 
       <h2 className="section-title" style={{ marginTop: 0 }}>
         Sites
       </h2>
       <div className="panel">
-        <TextRow label="Projects folder" hint="Every folder inside becomes a site." value={settings.wwwPath} wide onSave={(v) => updateSettings({ wwwPath: v })} />
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Projects folder</div>
+            <div className="row-sub mono">{settings.wwwPath}</div>
+          </div>
+          <div className="end">
+            <button className="btn btn-quiet" onClick={() => api.invoke('www:reveal')}>
+              Show
+            </button>
+            <button
+              className="btn"
+              onClick={() =>
+                act('choose-www', async () => {
+                  const next = await api.invoke('settings:choose-www')
+                  if (next) notify({ kind: 'info', text: `Projects folder is now ${next.wwwPath}` })
+                })
+              }
+            >
+              <FolderOpen size={14} /> Change
+            </button>
+          </div>
+        </div>
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">Domain suffix</div>
-            <div className="row-sub">
-              {tools?.dnsReady ? 'Sites open at name.suffix.' : 'After changing it, turn on addresses again from the Overview.'} Only reserved names are offered, so real websites are never affected.
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              {tools?.dnsReady ? 'Sites open at name.suffix.' : 'After changing it, turn on addresses again from the Overview.'} Only reserved names are offered, so
+              real websites are never affected.
             </div>
           </div>
           <select className="input" aria-label="Domain suffix" value={settings.tld} onChange={(e) => updateSettings({ tld: e.target.value })}>
@@ -34,18 +61,35 @@ export default function Settings(): React.JSX.Element {
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">Open to other devices</div>
-            <div className="row-sub">Lets phones and computers on your network open your sites. Off keeps everything on this Mac.</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Lets phones and computers on your network open your sites. Off keeps everything on this Mac.
+            </div>
           </div>
           <Switch on={settings.allowLan} label="Open to other devices" onChange={() => updateSettings({ allowLan: !settings.allowLan })} />
         </div>
       </div>
 
-      <h2 className="section-title">Ports</h2>
+      <h2 className="section-title">Web servers</h2>
       <div className="panel">
-        <NumberRow label="Nginx HTTP" value={settings.httpPort} onSave={(v) => updateSettings({ httpPort: v })} />
-        <NumberRow label="Nginx HTTPS" value={settings.httpsPort} onSave={(v) => updateSettings({ httpsPort: v })} />
-        <NumberRow label="Apache HTTP" value={settings.apachePort} onSave={(v) => updateSettings({ apachePort: v })} />
-        <NumberRow label="Apache HTTPS" value={settings.apacheHttpsPort} onSave={(v) => updateSettings({ apacheHttpsPort: v })} />
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Main web server</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Serves your sites at their normal addresses. {other} can run beside it on its own ports.
+            </div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Main web server">
+            {(['apache', 'nginx'] as const).map((s) => (
+              <button key={s} role="radio" aria-checked={settings.primaryServer === s} onClick={() => updateSettings({ primaryServer: s })}>
+                {s === 'apache' ? 'Apache' : 'Nginx'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <NumberRow label={`${main} HTTP port`} value={settings.httpPort} onSave={(v) => updateSettings({ httpPort: v })} />
+        <NumberRow label={`${main} HTTPS port`} value={settings.httpsPort} onSave={(v) => updateSettings({ httpsPort: v })} />
+        <NumberRow label={`${other} HTTP port`} value={settings.secondaryHttpPort} onSave={(v) => updateSettings({ secondaryHttpPort: v })} />
+        <NumberRow label={`${other} HTTPS port`} value={settings.secondaryHttpsPort} onSave={(v) => updateSettings({ secondaryHttpsPort: v })} />
       </div>
 
       <h2 className="section-title">Downloads</h2>
@@ -53,10 +97,10 @@ export default function Settings(): React.JSX.Element {
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">PHP build</div>
-            <div className="row-sub">Full adds intl, imagick, sodium and more. Affects new installs.</div>
+            <div className="row-sub">Full adds intl, gd, pgsql, redis, soap and more. Applies to new installs.</div>
           </div>
           <select
-            className="input no-drag"
+            className="input"
             aria-label="PHP build"
             value={settings.phpFlavor}
             onChange={(e) => updateSettings({ phpFlavor: e.target.value as AppSettings['phpFlavor'] })}
@@ -66,7 +110,7 @@ export default function Settings(): React.JSX.Element {
           </select>
         </div>
         <TextRow label="MySQL version" hint="latest picks the newest build for your Mac, or pin one such as 8.4.11." value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
-        <TextRow label="PostgreSQL major version" hint="Affects new installs, for example 17." value={settings.postgresMajor} onSave={(v) => updateSettings({ postgresMajor: v.replace(/\D/g, '') || '17' })} />
+        <TextRow label="PostgreSQL version" hint="latest, or a major version such as 17." value={settings.postgresMajor} onSave={(v) => updateSettings({ postgresMajor: v })} />
       </div>
 
       <h2 className="section-title">Connections</h2>
@@ -74,7 +118,7 @@ export default function Settings(): React.JSX.Element {
         <TextRow label="ngrok authtoken" hint="Only needed when sharing with ngrok." value={settings.ngrokToken} secret wide onSave={(v) => updateSettings({ ngrokToken: v })} />
         <TextRow
           label="Local model address"
-          hint="Any OpenAI-compatible server, such as http://127.0.0.1:11434/v1."
+          hint="Any OpenAI-compatible server, such as Ollama, LM Studio or vMLX."
           value={settings.llm.baseUrl}
           wide
           onSave={(v) => updateSettings({ llm: { ...settings.llm, baseUrl: v } })}
@@ -86,19 +130,118 @@ export default function Settings(): React.JSX.Element {
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">Notifications</div>
-            <div className="row-sub">Tell me when installs finish, links are shared, or a service stops on its own.</div>
+            <div className="row-sub">Tell me when installs finish, updates arrive, links are shared, or a service stops on its own.</div>
           </div>
           <Switch on={settings.notifications} label="Notifications" onChange={() => updateSettings({ notifications: !settings.notifications })} />
         </div>
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">Liquid Glass</div>
-            <div className="row-sub">Native glass on macOS 26, translucency on earlier versions. Restart Laramac to apply.</div>
+            <div className="row-sub">Native glass on macOS 26 and later, following your system transparency slider. Restart to apply.</div>
           </div>
           <Switch on={settings.glass} label="Liquid Glass" onChange={() => updateSettings({ glass: !settings.glass })} />
         </div>
       </div>
+
+      <h2 className="section-title">Updates</h2>
+      <div className="panel">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Laramac {appInfo?.version}</div>
+            <div className="row-sub">Updates replace only the app. Settings, PHP versions, databases and sites are kept.</div>
+          </div>
+          <button
+            className="btn"
+            disabled={busy.has('check-update')}
+            onClick={async () => {
+              const info = await act('check-update', () => api.invoke('app:check-update'))
+              setUpdate(info ?? null)
+              if (info === null) notify({ kind: 'info', text: `Laramac ${appInfo?.version} is the newest version.` })
+            }}
+          >
+            {busy.has('check-update') ? 'Checking' : 'Check now'}
+          </button>
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Check automatically</div>
+            <div className="row-sub">Looks for new Laramac and PHP releases at launch and every few hours.</div>
+          </div>
+          <Switch on={settings.autoUpdateCheck} label="Check for updates automatically" onChange={() => updateSettings({ autoUpdateCheck: !settings.autoUpdateCheck })} />
+        </div>
+      </div>
+
+      <h2 className="section-title">Start over</h2>
+      <div className="panel danger">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Reset Laramac</div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              Clear settings, downloads, databases or system changes without uninstalling. Your projects folder is never touched.
+            </div>
+          </div>
+          <button className="btn" style={{ color: 'var(--bad)' }} onClick={() => setResetOpen(true)}>
+            <RotateCcw size={14} /> Reset…
+          </button>
+        </div>
+      </div>
+
+      {resetOpen && <ResetDialog onClose={() => setResetOpen(false)} />}
     </>
+  )
+}
+
+function ResetDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const { act, busy } = useApp()
+  const [o, setO] = useState<ResetOptions>({ settings: true, software: false, data: false, system: false })
+  const [typed, setTyped] = useState('')
+  const items: { key: keyof ResetOptions; title: string; hint: string }[] = [
+    { key: 'settings', title: 'Settings', hint: 'Preferences, per-site PHP and HTTPS choices, saved servers.' },
+    { key: 'software', title: 'Downloaded software', hint: 'PHP versions, MySQL, PostgreSQL, MongoDB, Mailpit, phpMyAdmin and tools. Download them again any time.' },
+    { key: 'data', title: 'All database contents', hint: 'Every database in MySQL, MariaDB, PostgreSQL, Redis and MongoDB. This cannot be undone.' },
+    { key: 'system', title: 'System changes', hint: 'The .test address setup and the trusted local certificate. macOS asks for your password.' }
+  ]
+  const destructive = o.data
+  const ready = Object.values(o).some(Boolean) && (!destructive || typed === 'reset')
+
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass" style={{ width: 520 }} onMouseDown={(e) => e.stopPropagation()}>
+        <h2 className="page-title" style={{ fontSize: 18 }}>
+          Reset Laramac
+        </h2>
+        <p className="page-desc" style={{ margin: '4px 0 12px' }}>
+          Choose what to clear. Laramac stops everything, clears it, and restarts. Your projects folder stays as it is.
+        </p>
+        {items.map((it) => (
+          <label key={it.key} className="check">
+            <input type="checkbox" checked={o[it.key]} onChange={(e) => setO((x) => ({ ...x, [it.key]: e.target.checked }))} />
+            <span>
+              {it.title}
+              <span className="hint" style={{ display: 'block' }}>
+                {it.hint}
+              </span>
+            </span>
+          </label>
+        ))}
+        {destructive && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <label htmlFor="reset-confirm">
+              Type <code>reset</code> to delete all database contents
+            </label>
+            <input id="reset-confirm" className="input" value={typed} onChange={(e) => setTyped(e.target.value)} />
+          </div>
+        )}
+        <div className="end" style={{ marginTop: 14 }}>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-danger" disabled={!ready || busy.has('reset')} onClick={() => act('reset', () => window.laramac.invoke('app:reset', o))}>
+            {busy.has('reset') ? 'Resetting' : 'Reset and restart'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -131,8 +274,8 @@ function TextRow({
         <div className="row-sub">{hint}</div>
       </div>
       <input
-        className="input no-drag"
-        style={{ width: wide ? 280 : 150 }}
+        className="input"
+        style={{ width: wide ? 300 : 150 }}
         aria-label={label}
         type={secret ? 'password' : 'text'}
         value={draft}
@@ -158,7 +301,7 @@ function NumberRow({ label, value, onSave }: { label: string; value: number; onS
     <div className="row row-set" style={{ minHeight: 48 }}>
       <div className="row-title">{label}</div>
       <input
-        className="input num no-drag"
+        className="input num"
         style={{ width: 86 }}
         aria-label={label}
         inputMode="numeric"

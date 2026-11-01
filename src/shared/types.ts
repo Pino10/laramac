@@ -7,6 +7,8 @@ export type ServiceId =
   | 'postgres'
   | 'redis'
   | 'mongodb'
+  | 'meilisearch'
+  | 'memcached'
   | 'mailpit'
 
 export type ServiceGroup = 'web' | 'runtime' | 'database' | 'mail'
@@ -50,9 +52,15 @@ export interface SiteInfo {
 
 export interface PhpVersionInfo {
   minor: string
+  /** Newest build Laramac can install right now. */
   latest: string
+  /** Newest release on php.net, which may still be building. */
+  upstream: string | null
   installed: string | null
   isDefault: boolean
+  updateAvailable: boolean
+  /** Compiled-in extensions of the installed build. */
+  extensions: string[]
 }
 
 export interface JobInfo {
@@ -81,6 +89,82 @@ export interface AppInfo {
   version: string
 }
 
+export interface UpdateInfo {
+  version: string
+  current: string
+  notes: string
+  publishedAt: string
+  url: string
+}
+
+export interface ResetOptions {
+  /** Preferences and per-site settings. */
+  settings: boolean
+  /** Downloaded PHP, servers and tools. */
+  software: boolean
+  /** All database contents. */
+  data: boolean
+  /** The .test resolver and the trusted local certificate. Needs your password. */
+  system: boolean
+}
+
+export interface SetupReport {
+  done: string[]
+  failed: { step: string; error: string }[]
+}
+
+export interface AiTool {
+  id: string
+  name: string
+  kind: 'cli' | 'app'
+  description: string
+  installed: boolean
+  /** Apple Silicon only, needs Node.js, and so on. */
+  note?: string
+  available: boolean
+}
+
+export interface SshServer {
+  id: string
+  name: string
+  host: string
+  port: number
+  user: string
+  auth: 'agent' | 'key' | 'password'
+  keyPath?: string
+  hasPassword: boolean
+  /** Pinned SHA-256 host key fingerprint, set the first time you trust the server. */
+  hostKey?: string
+}
+
+export interface SshServerInput {
+  id?: string
+  name: string
+  host: string
+  port: number
+  user: string
+  auth: 'agent' | 'key' | 'password'
+  keyPath?: string
+  /** Only sent when changed; stored encrypted with the macOS Keychain. */
+  password?: string
+}
+
+export interface SftpEntry {
+  name: string
+  type: 'file' | 'dir' | 'link' | 'other'
+  size: number
+  modified: number
+}
+
+export interface SftpListing {
+  path: string
+  entries: SftpEntry[]
+}
+
+export type SftpConnectResult =
+  | { status: 'connected'; session: string; home: string }
+  | { status: 'unknown-host'; fingerprint: string }
+
 export interface LlmConfig {
   baseUrl: string
   model: string
@@ -94,16 +178,23 @@ export interface AppSettings {
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
   postgresMajor: string
+  /** The web server on the standard ports. Apache by default. */
+  primaryServer: 'apache' | 'nginx'
+  /** Ports of the primary web server. */
   httpPort: number
   httpsPort: number
-  apachePort: number
-  apacheHttpsPort: number
+  /** Ports of the other web server, so both can run together. */
+  secondaryHttpPort: number
+  secondaryHttpsPort: number
   shareProvider: 'cloudflare' | 'ngrok'
   ngrokToken: string
   editor: 'cursor' | 'vscode'
   /** Let phones and other computers on the network open your sites. Off by default. */
   allowLan: boolean
   notifications: boolean
+  autoUpdateCheck: boolean
+  /** Which AI coding tool the per-site button opens. */
+  aiTool: string
   siteConfig: Record<string, SiteConfig>
   llm: LlmConfig
 }
@@ -207,6 +298,28 @@ export interface Channels {
   'activity:list': { args: []; result: ActivityItem[] }
   'activity:clear': { args: []; result: ActivityItem[] }
   'app:info': { args: []; result: AppInfo }
+  'app:check-update': { args: []; result: UpdateInfo | null }
+  'app:install-update': { args: []; result: void }
+  'app:reset': { args: [ResetOptions]; result: void }
+  'settings:choose-www': { args: []; result: AppSettings | null }
+  'php:edit-ini': { args: [string]; result: void }
+  'setup:recommended': { args: []; result: SetupReport }
+  'ai:tools': { args: []; result: AiTool[] }
+  'ai:install-tool': { args: [string]; result: void }
+  'ai:launch-tool': { args: [string, string | null]; result: void }
+  'ssh:list': { args: []; result: SshServer[] }
+  'ssh:save': { args: [SshServerInput]; result: SshServer[] }
+  'ssh:delete': { args: [string]; result: SshServer[] }
+  'ssh:terminal': { args: [string]; result: void }
+  'ssh:trust': { args: [string, string]; result: SshServer[] }
+  'sftp:connect': { args: [string, string | null]; result: SftpConnectResult }
+  'sftp:list': { args: [string, string]; result: SftpListing }
+  'sftp:download': { args: [string, string[]]; result: number }
+  'sftp:upload': { args: [string, string]; result: number }
+  'sftp:mkdir': { args: [string, string, string]; result: void }
+  'sftp:rename': { args: [string, string, string]; result: void }
+  'sftp:delete': { args: [string, string, boolean]; result: void }
+  'sftp:disconnect': { args: [string]; result: void }
 }
 
 export type ChannelName = keyof Channels
@@ -216,6 +329,7 @@ export interface Events {
   'jobs:changed': JobInfo[]
   'sites:changed': SiteInfo[]
   'activity:changed': ActivityItem[]
+  'update:available': UpdateInfo
 }
 
 export interface LaramacApi {

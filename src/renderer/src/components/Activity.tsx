@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, CircleAlert, CircleCheck, Info } from 'lucide-react'
+import { Bell, CircleAlert, CircleCheck, Sparkles } from 'lucide-react'
+import type { ActivityItem } from '@shared/types'
 import { useApp } from '../store'
 
 function ago(at: number, now: number): string {
@@ -11,7 +12,13 @@ function ago(at: number, now: number): string {
   return h < 24 ? `${h} h ago` : new Date(at).toLocaleDateString()
 }
 
-/** The bell: recent installs, crashes and shares. Mirrors what macOS notifications showed. */
+const startOfToday = (): number => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/** The bell: installs, crashes, shares and updates, mirrored from macOS notifications. */
 export default function Activity(): React.JSX.Element {
   const { activity, clearActivity } = useApp()
   const [open, setOpen] = useState(false)
@@ -36,49 +43,65 @@ export default function Activity(): React.JSX.Element {
   }, [open, activity.length])
 
   const now = Date.now()
+  const today = startOfToday()
+  const groups: [string, ActivityItem[]][] = [
+    ['Today', activity.filter((a) => a.at >= today)],
+    ['Earlier', activity.filter((a) => a.at < today)]
+  ]
+
   return (
-    <div ref={ref}>
+    <div ref={ref} style={{ position: 'relative' }}>
       <button
-        className="btn btn-quiet btn-icon bell"
+        className="bell"
+        data-new={unseen.length > 0 && !open}
         aria-label={`Activity${unseen.length ? `, ${unseen.length} new` : ''}`}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <Bell size={16} />
+        <Bell size={16} strokeWidth={2} />
         {unseen.length > 0 && !open && (
           <span className="badge" data-kind={hasError ? 'error' : undefined}>
-            {unseen.length}
+            {unseen.length > 9 ? '9+' : unseen.length}
           </span>
         )}
       </button>
       {open && (
-        <div className="popover glass" role="dialog" aria-label="Activity">
+        <div className="popover glass" role="dialog" aria-label="Activity" style={{ top: 44, right: 0 }}>
           <div className="popover-head">
             Activity
             {activity.length > 0 && (
               <button className="btn btn-quiet" style={{ height: 26 }} onClick={clearActivity}>
-                Clear
+                Clear all
               </button>
             )}
           </div>
           <div className="popover-list">
             {activity.length === 0 && (
-              <div className="empty dim">Installs, crashes and shared links will show up here.</div>
-            )}
-            {activity.map((a) => (
-              <div key={a.id} className="event">
-                <span className="event-icon" style={{ color: a.kind === 'error' ? 'var(--bad)' : a.kind === 'success' ? 'var(--ok)' : 'var(--ink-3)' }}>
-                  {a.kind === 'error' ? <CircleAlert size={15} /> : a.kind === 'success' ? <CircleCheck size={15} /> : <Info size={15} />}
-                </span>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <span className="event-title">{a.title}</span>
-                    <span className="event-time">{ago(a.at, now)}</span>
-                  </div>
-                  {a.body && <div className="event-body">{a.body}</div>}
-                </div>
+              <div className="empty dim" style={{ padding: '34px 24px' }}>
+                Installs, updates, shared links and anything that stops unexpectedly will show up here.
               </div>
-            ))}
+            )}
+            {groups.map(([label, items]) =>
+              items.length === 0 ? null : (
+                <div key={label}>
+                  <div className="event-group">{label}</div>
+                  {items.map((a) => (
+                    <div key={a.id} className="event">
+                      <span className="event-icon" data-kind={a.kind}>
+                        {a.kind === 'error' ? <CircleAlert size={14} /> : a.kind === 'success' ? <CircleCheck size={14} /> : <Sparkles size={14} />}
+                      </span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <span className="event-title">{a.title}</span>
+                          <span className="event-time">{ago(a.at, now)}</span>
+                        </div>
+                        {a.body && <div className="event-body">{a.body}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
