@@ -50,7 +50,9 @@ jobs:
             for arch in aarch64 x86_64; do
               name="php-$version-fpm-macos-$arch.tar.gz"
               sums="php-$version-macos-$arch.sha256"
-              if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing" || ! grep -qx "$sums" <<<"$existing"; then
+              # Xdebug ships beside PHP as its own file; a marker records when it could not be built.
+              xd="php-$version-xdebug-macos-$arch.tar.gz"; xdnone="php-$version-xdebug-macos-$arch.none"
+              if [ "$FORCE" = "true" ] || ! grep -qx "$name" <<<"$existing" || ! grep -qx "$sums" <<<"$existing" || { ! grep -qx "$xd" <<<"$existing" && ! grep -qx "$xdnone" <<<"$existing"; }; then
                 if [ "$SELF_HOSTED" = "true" ]; then
                   # Your own Apple Silicon Mac builds the Apple Silicon versions. Intel builds need an
                   # Intel machine, so they are skipped; Intel Macs fall back to static-php.dev builds.
@@ -89,12 +91,34 @@ jobs:
 
       - name: Download PHP ${{ matrix.version }} and libraries
         # Libraries are built from source: the prebuilt SQLite lacks column metadata, which PHP checks for.
-        run: ./spc download --with-php=${{ matrix.version }} --for-extensions="$EXTENSIONS"
+        run: ./spc download --with-php=${{ matrix.version }} --for-extensions="$EXTENSIONS,xdebug"
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Build
-        run: ./spc build "$EXTENSIONS" --build-cli --build-fpm
+      # Xdebug can only be built as a separate file (it is a Zend extension). PHP loads it only
+      # when you turn Xdebug on in Laramac, so it costs nothing while it is off.
+      - name: Build with Xdebug
+        id: full
+        continue-on-error: true
+        run: ./spc build "$EXTENSIONS" --build-cli --build-fpm --build-shared=xdebug
+
+      - name: Check Xdebug loads
+        id: xdebug
+        if: steps.full.outcome == 'success'
+        continue-on-error: true
+        run: |
+          so=$(find buildroot -name xdebug.so | head -1)
+          [ -n "$so" ] || { echo "xdebug.so was not produced"; exit 1; }
+          buildroot/bin/php -n -d zend_extension="$PWD/$so" -v | tee /dev/stderr | grep -q 'with Xdebug'
+          buildroot/bin/php-fpm -n -d zend_extension="$PWD/$so" -m | grep -qi '^xdebug$'
+          mkdir -p xd && cp "$so" xd/xdebug.so
+
+      - name: Build without Xdebug
+        # A failed Xdebug build must never hold back a PHP update.
+        if: steps.full.outcome != 'success'
+        run: |
+          rm -rf buildroot
+          ./spc build "$EXTENSIONS" --build-cli --build-fpm
 
       - name: Check the result
         run: |
@@ -114,6 +138,11 @@ jobs:
           v=${{ matrix.version }}; a=${{ matrix.arch }}
           tar -czf "php-$v-cli-macos-$a.tar.gz" -C buildroot/bin php
           tar -czf "php-$v-fpm-macos-$a.tar.gz" -C buildroot/bin php-fpm
+          if [ -f xd/xdebug.so ]; then
+            tar -czf "php-$v-xdebug-macos-$a.tar.gz" -C xd xdebug.so
+          else
+            echo "Xdebug could not be built for PHP $v" > "php-$v-xdebug-macos-$a.none"
+          fi
           buildroot/bin/php -m | grep -v '^\[' | grep -v '^$' > "php-$v-extensions-macos-$a.txt"
           shasum -a 256 php-$v-*-macos-$a.* > "php-$v-macos-$a.sha256"
 
