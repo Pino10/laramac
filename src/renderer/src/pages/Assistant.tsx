@@ -26,6 +26,13 @@ function describe(a: Action): string {
   }
 }
 
+const SUGGESTIONS = [
+  'Set up a WordPress site called shop with HTTPS',
+  'Which PHP version should a new Laravel app use?',
+  'Start everything I need for Laravel',
+  'Why would Nginx fail to start on port 80?'
+]
+
 interface Turn {
   role: 'user' | 'assistant'
   content: string
@@ -49,8 +56,8 @@ export default function Assistant(): React.JSX.Element {
   if (!settings) return <></>
   const current = llms.find((l) => l.baseUrl === settings.llm.baseUrl)
 
-  const send = async (): Promise<void> => {
-    const text = input.trim()
+  const send = async (textArg?: string): Promise<void> => {
+    const text = (textArg ?? input).trim()
     if (!text) return
     const next: Turn[] = [...turns, { role: 'user', content: text }]
     setTurns(next)
@@ -60,39 +67,40 @@ export default function Assistant(): React.JSX.Element {
   }
 
   const run = async (key: string, a: Action): Promise<void> => {
-    const result = await act(key, async () => {
+    const ok = await act(key, async () => {
       switch (a.action) {
         case 'install-php':
           await api.invoke('php:install', a.version)
-          return true
+          break
         case 'set-default-php':
           await api.invoke('php:set-default', a.version)
-          return true
+          break
         case 'install-service':
           await api.invoke('services:install', a.id)
           setServices(await api.invoke('services:list'))
-          return true
+          break
         case 'start-service':
         case 'stop-service': {
           const running = services.find((s) => s.id === a.id)?.status === 'running'
           if ((a.action === 'start-service') !== running) setServices(await api.invoke('services:toggle', a.id))
-          return true
+          break
         }
         case 'create-project':
           setSites(await api.invoke('sites:create', a.kind, a.name))
-          return true
+          break
         case 'enable-ssl':
           setSites(await api.invoke('sites:set-config', a.site, { secure: true }))
-          return true
+          break
         case 'open-site': {
           const site = sites.find((s) => s.name === a.site)
           if (!site) throw new Error(`There is no site named ${a.site}.`)
           await api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)
-          return true
+          break
         }
       }
+      return true
     })
-    if (result) {
+    if (ok) {
       setDone((d) => new Set(d).add(key))
       notify({ kind: 'info', text: describe(a) })
     }
@@ -100,12 +108,7 @@ export default function Assistant(): React.JSX.Element {
 
   return (
     <>
-      <PageHead
-        title="Assistant"
-        desc="Chat with a model running on your Mac. It suggests actions, and nothing runs until you press its button."
-      />
-
-      <div className="no-drag" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+      <PageHead title="Assistant" desc="Ask a model running on your Mac. It can suggest actions, and nothing runs until you press the button.">
         <select
           className="input"
           aria-label="Model server"
@@ -115,7 +118,7 @@ export default function Assistant(): React.JSX.Element {
             updateSettings({ llm: { baseUrl: e.target.value, model: found?.models[0] ?? '' } })
           }}
         >
-          {!current && <option value={settings.llm.baseUrl}>{settings.llm.baseUrl}</option>}
+          {!current && <option value={settings.llm.baseUrl}>Custom server</option>}
           {llms.map((l) => (
             <option key={l.baseUrl} value={l.baseUrl}>
               {l.provider}
@@ -123,12 +126,7 @@ export default function Assistant(): React.JSX.Element {
           ))}
         </select>
         {current ? (
-          <select
-            className="input"
-            aria-label="Model"
-            value={settings.llm.model}
-            onChange={(e) => updateSettings({ llm: { ...settings.llm, model: e.target.value } })}
-          >
+          <select className="input" aria-label="Model" value={settings.llm.model} onChange={(e) => updateSettings({ llm: { ...settings.llm, model: e.target.value } })}>
             {current.models.map((m) => (
               <option key={m}>{m}</option>
             ))}
@@ -145,56 +143,67 @@ export default function Assistant(): React.JSX.Element {
         <button className="btn btn-quiet btn-icon" title="Look for local models again" aria-label="Refresh models" onClick={refreshLlms}>
           <RefreshCw size={14} />
         </button>
-        {llms.length === 0 && (
-          <span className="row-sub">No local model found. Start Ollama or LM Studio, or set an address in Settings.</span>
-        )}
-      </div>
+      </PageHead>
 
       <div className="panel chat">
-        {turns.length === 0 && (
-          <div className="dim" style={{ maxWidth: '52ch' }}>
-            Ask for what you want set up. For example: create a WordPress site called shop on PHP 8.3 with HTTPS.
+        {turns.length === 0 ? (
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{llms.length ? 'What should we set up?' : 'No local model is running'}</div>
+            <div className="dim" style={{ maxWidth: '58ch' }}>
+              {llms.length
+                ? 'The assistant sees your services, sites and PHP versions, and proposes steps you can run with one click.'
+                : 'Start Ollama or LM Studio, or point Settings at any OpenAI-compatible server on your network. Your prompts never leave your machine.'}
+            </div>
+            {llms.length > 0 && (
+              <div className="suggestions">
+                {SUGGESTIONS.map((s) => (
+                  <button key={s} className="suggestion" onClick={() => send(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="thread">
+            {turns.map((t, i) => {
+              const parsed = t.role === 'assistant' ? parseActions(t.content) : { prose: t.content, actions: [] }
+              return (
+                <div key={i} className={`bubble ${t.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>
+                  {parsed.prose}
+                  {parsed.actions.length > 0 && (
+                    <div className="msg-actions">
+                      {parsed.actions.map((a, j) => {
+                        const key = `${i}-${j}`
+                        return (
+                          <button key={key} className="btn" disabled={done.has(key) || busy.has(key)} onClick={() => run(key, a)}>
+                            {done.has(key) ? 'Done: ' : busy.has(key) ? 'Working: ' : ''}
+                            {describe(a)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {busy.has('chat') && <div className="bubble bubble-ai dim">Thinking</div>}
           </div>
         )}
-        {turns.map((t, i) => {
-          const parsed = t.role === 'assistant' ? parseActions(t.content) : { prose: t.content, actions: [] }
-          return (
-            <div key={i} className="msg">
-              <div className="msg-who" style={{ color: t.role === 'user' ? 'var(--ink)' : 'var(--accent)' }}>
-                {t.role === 'user' ? 'You' : 'Assistant'}
-              </div>
-              <div className="msg-text">{parsed.prose}</div>
-              {parsed.actions.length > 0 && (
-                <div className="msg-actions no-drag">
-                  {parsed.actions.map((a, j) => {
-                    const key = `${i}-${j}`
-                    return (
-                      <button key={key} className="btn" disabled={done.has(key) || busy.has(key)} onClick={() => run(key, a)}>
-                        {done.has(key) ? 'Done: ' : busy.has(key) ? 'Working: ' : ''}
-                        {describe(a)}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {busy.has('chat') && <div className="dim">Thinking</div>}
         <div ref={endRef} />
       </div>
 
-      <div className="no-drag" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <input
           className="input"
-          style={{ flex: 1, height: 34 }}
+          style={{ flex: 1, height: 38, borderRadius: 12 }}
           aria-label="Message"
           placeholder="Ask Laramac to set something up"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="btn btn-primary" style={{ height: 34 }} disabled={busy.has('chat') || !input.trim()} onClick={send}>
+        <button className="btn btn-primary" style={{ height: 38, borderRadius: 12 }} disabled={busy.has('chat') || !input.trim()} onClick={() => send()}>
           <Send size={13} /> Send
         </button>
       </div>

@@ -14,7 +14,7 @@ interface Command {
 
 /** ⌘K: one place to jump anywhere or do anything, without the mouse. */
 export default function CommandPalette(): React.JSX.Element | null {
-  const { paletteOpen, setPaletteOpen, setPage, setNewProject, services, sites, php, tools, settings, act, setServices, setPhp, setTools } =
+  const { paletteOpen, setPaletteOpen, setPage, setNewProject, setImportOpen, services, sites, php, tools, settings, act, setServices, setPhp, setTools } =
     useApp()
   const api = window.laramac
   const [query, setQuery] = useState('')
@@ -44,6 +44,7 @@ export default function CommandPalette(): React.JSX.Element | null {
     list.push({ id: 'mail', group: 'Open', label: 'Mail inbox', keywords: 'mailpit email smtp', run: () => api.invoke('sites:open-url', 'http://127.0.0.1:8025') })
     list.push({ id: 'www', group: 'Open', label: 'Projects folder', keywords: 'www finder', run: () => api.invoke('www:reveal') })
     list.push({ id: 'new', group: 'Create', label: 'New project', hint: '⌘N', keywords: 'wordpress laravel site', run: () => setNewProject(true) })
+    list.push({ id: 'import', group: 'Create', label: 'Import a project or database', hint: '⌘I', keywords: 'laragon zip tar sql dump restore backup migrate', run: () => setImportOpen(true) })
 
     for (const site of sites) {
       list.push({
@@ -89,7 +90,7 @@ export default function CommandPalette(): React.JSX.Element | null {
       }
     }
     return list
-  }, [services, sites, php, tools, tld, act, api, setPage, setNewProject, setServices, setPhp, setTools])
+  }, [services, sites, php, tools, tld, act, api, setPage, setNewProject, setImportOpen, setServices, setPhp, setTools])
 
   const results = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean)

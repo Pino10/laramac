@@ -2,7 +2,7 @@
 
 A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
 
-**Status: v0.4, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+**Status: v0.5, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
 
 ## What it does
 
@@ -13,10 +13,11 @@ A free, open-source local development environment for macOS, inspired by [Larago
 - **Mail:** Mailpit catches everything your apps send. PHP's `mail()` is wired to it.
 - **HTTPS:** a local certificate authority issues certificates per site. One click to trust it in your keychain.
 - **Public links:** share a site with Cloudflare Tunnel (no account) or ngrok.
+- **Import:** bring in a site from Laragon, a server backup or a teammate. Choose a .zip, .tar.gz, folder or .sql dump: Laramac finds the project and its database, asks a few questions, puts the files in `~/www`, loads the dump into MySQL or MariaDB, and points `wp-config.php` or `.env` at it. ⌘I opens it.
 - **New projects:** blank PHP, WordPress (database created and configured), or Laravel (via Composer, `.env` wired to MySQL and Mailpit).
 - **Editors:** open any site in Cursor or VS Code.
 - **AI:** connect any local model (Ollama, LM Studio, or any OpenAI-compatible server). The assistant proposes actions and you press the button. Open Claude Code in any site folder with PHP, Composer and MySQL on its PATH.
-- **Interface:** a live map of your stack on the Overview, where connections carry a moving current when both ends are running. Native Liquid Glass on macOS 26 (vibrancy on earlier versions), Poppins, light and dark themes.
+- **Interface:** designed for macOS 27 Golden Gate (sidebar to the window edge, native Liquid Glass that follows the system transparency slider, Reduce Transparency respected). A live map of your stack on the Overview, where connections carry a moving current when both ends are running. Native Liquid Glass on macOS 26 (vibrancy on earlier versions), Poppins, light and dark themes.
 - **Keyboard:** ⌘K opens a command bar for every site, service and action. ⌘1 to ⌘7 switch pages, ⌘N starts a new project.
 - **Notifications:** macOS notifications and an in-app activity list for finished installs, shared links and services that stop unexpectedly.
 - **Menu bar:** start and stop everything, open phpMyAdmin, the mail inbox or your projects folder.
@@ -83,8 +84,9 @@ Laramac runs servers on your Mac, so it is built to stay closed by default:
 - **Downloads use HTTPS.** PostgreSQL and Composer are also checked against their published SHA-256 checksums.
 - **Electron's own security switches** are set in the build: the app cannot be run as a plain Node.js process, and `NODE_OPTIONS` and debugging flags are ignored.
 - Settings (which can hold your ngrok token) are saved with owner-only permissions.
+- **Imports are unpacked privately first.** Archive entries that climb out of their folder are refused, links and special files are left out, and size and file-count limits apply. SQL dumps are fed through a filter that refuses client commands (`\!`, `system`, `source`, `tee`, `pager`) and drops statements that switch databases or change users, and the client runs with `--commands=OFF` (MySQL) or `--sandbox` (MariaDB) and `--local-infile=0`. Composer scripts from imported projects only run if you tick the box.
 
-The test suite includes attacks: a forged certificate for a real domain, path-traversal version strings, shell metacharacters in settings, and requests from another machine on the network.
+The test suite includes attacks: a forged certificate for a real domain, path-traversal version strings, shell metacharacters in settings, requests from another machine on the network, zip-slip and tar traversal archives, symlink archives, and SQL dumps that try to run shell commands. Imports are tested end to end against a real MariaDB server.
 
 Report security problems privately through GitHub's security advisories for this repository.
 

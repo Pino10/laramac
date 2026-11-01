@@ -6,6 +6,7 @@ import JobsBar from './components/JobsBar'
 import CommandPalette from './components/CommandPalette'
 import Activity from './components/Activity'
 import NewProject from './components/NewProject'
+import ImportWizard from './components/ImportWizard'
 import Dashboard from './pages/Dashboard'
 import Sites from './pages/Sites'
 import Php from './pages/Php'
@@ -15,7 +16,7 @@ import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 
 function Shell(): React.JSX.Element {
-  const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject } = useApp()
+  const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject, setImportOpen } = useApp()
 
   useEffect(() => {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
@@ -32,6 +33,9 @@ function Shell(): React.JSX.Element {
       } else if (key === 'n') {
         e.preventDefault()
         setNewProject(true)
+      } else if (key === 'i') {
+        e.preventDefault()
+        setImportOpen(true)
       } else if (/^[1-7]$/.test(key)) {
         e.preventDefault()
         setPage(PAGE_ORDER[Number(key) - 1])
@@ -39,7 +43,7 @@ function Shell(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [paletteOpen, setPaletteOpen, setNewProject, setPage])
+  }, [paletteOpen, setPaletteOpen, setNewProject, setPage, setImportOpen])
 
   return (
     <>
@@ -71,6 +75,7 @@ function Shell(): React.JSX.Element {
       <JobsBar />
       <CommandPalette />
       {newProject && <NewProject onClose={() => setNewProject(false)} />}
+      <ImportWizard />
       {toast && (
         <div className="toast" data-kind={toast.kind} role="status">
           {toast.text}

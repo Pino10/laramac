@@ -25,6 +25,8 @@ interface AppCtx {
   setNewProject: (open: boolean) => void
   paletteOpen: boolean
   setPaletteOpen: (open: boolean) => void
+  importOpen: boolean
+  setImportOpen: (open: boolean) => void
   activity: ActivityItem[]
   clearActivity: () => void
   appInfo: AppInfo | null
@@ -69,6 +71,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [page, setPage] = useState<Page>('dashboard')
   const [newProject, setNewProject] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [services, setServices] = useState<ServiceInfo[]>([])
@@ -167,6 +170,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       setNewProject,
       paletteOpen,
       setPaletteOpen,
+      importOpen,
+      setImportOpen,
       activity,
       clearActivity,
       appInfo,
@@ -189,7 +194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       act,
       notify
     }),
-    [page, newProject, paletteOpen, activity, clearActivity, appInfo, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

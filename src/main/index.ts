@@ -1,4 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { existsSync } from 'fs'
+import { cancelImport, inspect, runImport } from './importer'
+import { activeMysql, mysqlClientPath } from './svc/mysql'
+import { mariadbClient } from './svc/mariadb'
+import { runStreaming } from './creator'
+import type { ImportAnswers } from '../shared/types'
 import { watch, type FSWatcher } from 'fs'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -9,10 +15,11 @@ import { scanSites, setSiteConfig } from './sites'
 import { services } from './services'
 import { jobs } from './jobs'
 import { activity } from './activity'
-import { installMinor, installedMinors, listVersions, removeMinor, stopAllFpm } from './php'
+import { defaultMinor, installMinor, installedMinors, listVersions, phpBinary, phpIniPath, removeMinor, stopAllFpm } from './php'
 import { DNS_PORT, installResolver, startDnsServer, stopDnsServer } from './dns'
 import { ensureSiteCert, trustCa } from './ssl'
 import {
+  composerPhar,
   installAdminer,
   installCloudflared,
   installComposer,
@@ -253,6 +260,25 @@ function cleanMessages(messages: unknown): ChatMessage[] {
   })
 }
 
+function cleanAnswers(v: unknown): ImportAnswers {
+  const a = (v ?? {}) as Record<string, unknown>
+  const str = (k: string): string => {
+    if (typeof a[k] !== 'string') throw new ValidationError('The import answers are not valid.')
+    return a[k] as string
+  }
+  const flag = (k: string): boolean => a[k] === true
+  if (a.engine !== 'mysql' && a.engine !== 'mariadb') throw new ValidationError('Choose MySQL or MariaDB.')
+  return {
+    name: str('name'),
+    sqlFile: a.sqlFile === null ? null : str('sqlFile'),
+    engine: a.engine,
+    database: str('database'),
+    updateConfig: flag('updateConfig'),
+    replaceUrl: flag('replaceUrl'),
+    composerInstall: flag('composerInstall')
+  }
+}
+
 const PROJECT_KINDS: ProjectKind[] = ['blank', 'wordpress', 'laravel']
 const TOOLS = ['phpmyadmin', 'adminer', 'cloudflared', 'ngrok', 'composer'] as const
 
@@ -376,6 +402,60 @@ function registerIpc(): void {
 
   handle('ai:detect', () => detectLlms())
   handle('ai:chat', (messages) => assistantChat(cleanMessages(messages)))
+
+  // The file picker runs in the main process, so the page can never hand us an arbitrary path.
+  handle('import:choose', async () => {
+    if (!mainWindow) return null
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import a project or database',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'openDirectory'],
+      filters: [{ name: 'Projects and database dumps', extensions: ['zip', 'gz', 'tgz', 'tar', 'sql'] }]
+    })
+    if (res.canceled || !res.filePaths[0]) return null
+    const engines = services
+      .list()
+      .filter((s) => (s.id === 'mysql' || s.id === 'mariadb') && s.status !== 'not-installed')
+      .map((s) => s.id as 'mysql' | 'mariadb')
+    return inspect(res.filePaths[0], engines)
+  })
+
+  handle('import:run', async (id, answers) => {
+    const a = cleanAnswers(answers)
+    const result = await jobs.run(`Importing ${a.name}`, (update) =>
+      runImport(String(id), a, {
+        update,
+        ensureRunning: async (engine) => {
+          await services.start(engine)
+          const s = services.list().find((x) => x.id === engine)
+          if (s?.status !== 'running') throw new Error(s?.error ?? `${engine} did not start.`)
+        },
+        clientFor: (engine) => {
+          if (engine === 'mariadb') return mariadbClient()
+          const v = activeMysql()
+          return v ? mysqlClientPath(v) : null
+        },
+        composerInstall: async (dir, onLine) => {
+          const minor = defaultMinor()
+          if (!minor) throw new Error('Install PHP first.')
+          if (!existsSync(composerPhar())) await installComposer()
+          await runStreaming(
+            phpBinary(minor),
+            ['-c', phpIniPath(minor), composerPhar(), 'install', '--no-interaction', '--prefer-dist'],
+            dir,
+            { COMPOSER_HOME: join(app.getPath('home'), '.laramac', 'composer') },
+            onLine
+          )
+        }
+      })
+    )
+    const parts = [result.site ? `Site ${result.site}` : null, result.database ? `database ${result.database}` : null].filter(Boolean)
+    activity.push('success', `Imported ${a.name}`, `${parts.join(' and ')} ready.${result.skipped ? ` ${result.skipped} lines that change databases or users were skipped.` : ''}`)
+    notifySitesChanged()
+    return { ...result, sites: listSites() }
+  })
+
+  handle('import:cancel', (id) => cancelImport(String(id)))
 
   handle('activity:list', () => activity.list())
   handle('activity:clear', () => activity.clear())

@@ -1,4 +1,4 @@
-import { Database, FolderOpen, Mail, Plus } from 'lucide-react'
+import { Database, Mail, Plus, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
@@ -20,7 +20,7 @@ function headline(running: number, installed: number, failing: boolean): { title
 }
 
 export default function Dashboard(): React.JSX.Element {
-  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, notify, sites } = useApp()
+  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
@@ -147,15 +147,15 @@ export default function Dashboard(): React.JSX.Element {
             <span className="tile-sub">WordPress, Laravel or PHP</span>
           </span>
         </button>
-        <button className="tile glass" onClick={() => api.invoke('www:reveal')}>
+        <button className="tile glass" onClick={() => setImportOpen(true)}>
           <span className="tile-icon">
-            <FolderOpen size={16} />
+            <Upload size={16} />
           </span>
           <span>
             <span className="tile-name" style={{ display: 'block' }}>
-              Projects folder
+              Import
             </span>
-            <span className="tile-sub">{settings?.wwwPath.replace(/^\/Users\/[^/]+/, '~') ?? '~/www'}</span>
+            <span className="tile-sub">From Laragon, a zip or a .sql</span>
           </span>
         </button>
       </div>

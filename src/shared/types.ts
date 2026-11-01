@@ -135,6 +135,40 @@ export interface ChatMessage {
 
 export type ProjectKind = 'blank' | 'wordpress' | 'laravel'
 
+/** What Laramac found inside a file or folder chosen for import. */
+export interface ImportPlan {
+  id: string
+  sourceName: string
+  hasProject: boolean
+  suggestedName: string
+  kind: SiteKind | null
+  sqlFiles: { path: string; size: number }[]
+  suggestedDb: string
+  /** Installed engines that can take a MySQL dump. */
+  engines: ('mysql' | 'mariadb')[]
+  oldUrl: string | null
+  configFile: 'wp-config.php' | '.env' | null
+  hasVendor: boolean
+  warnings: string[]
+}
+
+export interface ImportAnswers {
+  name: string
+  sqlFile: string | null
+  engine: 'mysql' | 'mariadb'
+  database: string
+  updateConfig: boolean
+  replaceUrl: boolean
+  composerInstall: boolean
+}
+
+export interface ImportResult {
+  site: string | null
+  database: string | null
+  skipped: number
+  sites: SiteInfo[]
+}
+
 /** Every request the renderer can make to the main process. */
 export interface Channels {
   'settings:get': { args: []; result: AppSettings }
@@ -167,6 +201,9 @@ export interface Channels {
   'tools:open-external': { args: [string]; result: void }
   'ai:detect': { args: []; result: LocalLlm[] }
   'ai:chat': { args: [ChatMessage[]]; result: string }
+  'import:choose': { args: []; result: ImportPlan | null }
+  'import:run': { args: [string, ImportAnswers]; result: ImportResult }
+  'import:cancel': { args: [string]; result: void }
   'activity:list': { args: []; result: ActivityItem[] }
   'activity:clear': { args: []; result: ActivityItem[] }
   'app:info': { args: []; result: AppInfo }

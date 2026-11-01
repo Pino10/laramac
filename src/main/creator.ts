@@ -43,7 +43,7 @@ export function buildWpConfig(sample: string, dbName: string, salt: () => string
   return out
 }
 
-function runStreaming(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, onLine: (l: string) => void): Promise<void> {
+export function runStreaming(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, onLine: (l: string) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, env: { ...process.env, ...env } })
     let last = ''

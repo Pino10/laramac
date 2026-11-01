@@ -58,6 +58,43 @@ export function PageHead({
   )
 }
 
+/** Each framework and engine gets its own recognisable colour. */
+const HUES: Record<string, [string, string]> = {
+  wordpress: ['Wp', '#2271b1'],
+  laravel: ['La', '#f05340'],
+  symfony: ['Sy', '#7a7f87'],
+  php: ['Ph', '#7a7fc8'],
+  node: ['No', '#3c9a3f'],
+  static: ['Ht', '#8a919c'],
+  mysql: ['My', '#00758f'],
+  mariadb: ['Ma', '#c0765a'],
+  postgres: ['Pg', '#4a7bb5'],
+  redis: ['Rd', '#d83b2f'],
+  mongodb: ['Mg', '#1ea55a'],
+  mailpit: ['Mp', '#8b6fd6']
+}
+
+export function Monogram({ id, large }: { id: string; large?: boolean }): React.JSX.Element {
+  const [letters, hue] = HUES[id] ?? [id.slice(0, 2), '#8a919c']
+  return (
+    <span className={large ? 'mono-tile lg' : 'mono-tile'} style={{ ['--hue' as string]: hue }} aria-hidden>
+      {letters}
+    </span>
+  )
+}
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  const units = ['KB', 'MB', 'GB']
+  let v = n / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`
+}
+
 export function CopyField({ value }: { value: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   return (

@@ -18,6 +18,12 @@ function binDir(): string | null {
   return existsSync(join(prefix, 'bin', 'mariadbd')) ? join(prefix, 'bin') : null
 }
 
+/** The mariadb command-line client from Homebrew, used for imports. */
+export function mariadbClient(): string | null {
+  const dir = binDir()
+  return dir && existsSync(join(dir, 'mariadb')) ? join(dir, 'mariadb') : null
+}
+
 const baseDir = (): string => join(brewPrefix() ?? '/opt/homebrew', 'opt', 'mariadb')
 
 function run(command: string, args: string[]): Promise<void> {
