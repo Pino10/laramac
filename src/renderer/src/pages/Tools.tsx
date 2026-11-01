@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Cloud, Copy, Sparkles, Code, ExternalLink, Mail, Package, TerminalSquare, Waypoints } from 'lucide-react'
 import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
+import ModelServers from '../components/ModelServers'
+import MailDelivery, { relaySummary } from '../components/MailDelivery'
+import type { MailRelay } from '@shared/types'
 import { CopyField, PageHead, Switch } from '../ui'
 
 type Installable = 'cloudflared' | 'ngrok' | 'composer'
@@ -15,15 +18,22 @@ const AI_HOW: Record<string, string> = {
   openclaw: 'Terminal starts it so you can set it up and chat with it.',
   lmstudio: 'Open LM Studio, load a model, then turn on the server in its Developer tab. The status here turns green.',
   ollama: 'Open Ollama (it lives in the menu bar). Get a model with "ollama pull llama3.2" in Terminal. The status here turns green.',
-  vmlx: 'Open vMLX, pick a model and start serving it. Laramac looks for it on port 8000.'
+  vmlx: 'Open vMLX, pick a model and start serving it. Laramac looks on port 8000; add other ports, or its Anthropic address, under Model servers.',
+  omlx: 'Open oMLX from the menu bar and start the server. Laramac looks on port 8000; if you set an API key in oMLX, add the server below with that key.',
+  burp: 'Open app starts Burp. For testing behind a login, use Burp’s own scanner and AI; Laramac’s code review covers your source code.'
 }
-const MODEL_APPS = new Set(['lmstudio', 'ollama', 'vmlx'])
+const MODEL_APPS = new Set(['lmstudio', 'ollama', 'vmlx', 'omlx'])
 
-const AI_LETTERS: Record<string, string> = { claude: 'Cc', codex: 'Cx', opencode: 'Oc', vmlx: 'vM', lmstudio: 'LM', ollama: 'Ol', openclaw: 'Ow', gemini: 'Ge' }
+const AI_LETTERS: Record<string, string> = { omlx: 'oM', burp: 'Bp', claude: 'Cc', codex: 'Cx', opencode: 'Oc', vmlx: 'vM', lmstudio: 'LM', ollama: 'Ol', openclaw: 'Ow', gemini: 'Ge' }
 
 export default function Tools(): React.JSX.Element {
   const { tools, settings, services, act, busy, setTools, updateSettings, notify, llms, refreshLlms, setPage } = useApp()
   const [tests, setTests] = useState<Record<string, LlmTest>>({})
+  const [relay, setRelay] = useState<MailRelay | null>(null)
+  const [mailOpen, setMailOpen] = useState(false)
+  useEffect(() => {
+    void window.laramac.invoke('mail:relay').then(setRelay)
+  }, [])
   const api = window.laramac
   const [ai, setAi] = useState<AiTool[]>([])
   const [mcp, setMcp] = useState<McpStatus | null>(null)
@@ -108,6 +118,8 @@ export default function Tools(): React.JSX.Element {
         </span>
       </div>
 
+      <ModelServers />
+
       <h2 className="section-title">AI tools</h2>
       <div className="ai-grid">
         {ai.map((t) => {
@@ -134,7 +146,7 @@ export default function Tools(): React.JSX.Element {
               {MODEL_APPS.has(t.id) &&
                 t.installed &&
                 (() => {
-                  const server = llms.find((l) => l.toolId === t.id)
+                  const server = llms.find((l) => l.toolId === t.id && l.online !== false)
                   const result = tests[t.id]
                   if (!server)
                     return (
@@ -212,6 +224,8 @@ export default function Tools(): React.JSX.Element {
         })}
       </div>
 
+      {mailOpen && <MailDelivery onClose={() => setMailOpen(false)} onSaved={setRelay} />}
+
       <h2 className="section-title">Everything else</h2>
       <div className="grid-2" style={{ marginBottom: 12 }}>
         <div className="card glass">
@@ -221,7 +235,7 @@ export default function Tools(): React.JSX.Element {
             </span>
             <div style={{ flex: 1 }}>
               <div className="card-title">Mail inbox</div>
-              <div className="hint">Every email your apps send lands here and never leaves this Mac.</div>
+              <div className="hint">Every email your apps send lands here. {relaySummary(relay)}.</div>
             </div>
           </div>
           <CopyField value="smtp://127.0.0.1:1025" />
@@ -229,6 +243,9 @@ export default function Tools(): React.JSX.Element {
             <span className="status" data-s={mailpit?.status}>
               {mailpit?.status === 'running' ? 'Catching mail' : mailpit?.status === 'not-installed' ? 'Mailpit is not installed' : 'Mailpit is off'}
             </span>
+            <button className="btn" onClick={() => setMailOpen(true)}>
+              Delivery…
+            </button>
             <button className="btn btn-primary" disabled={mailpit?.status !== 'running'} onClick={() => api.invoke('sites:open-url', 'http://127.0.0.1:8025')}>
               Open inbox
             </button>
@@ -245,18 +262,33 @@ export default function Tools(): React.JSX.Element {
               <div className="hint">The share button on each site uses this tunnel.</div>
             </div>
           </div>
-          <div className="seg" role="radiogroup" aria-label="Tunnel provider" style={{ alignSelf: 'flex-start' }}>
-            {(['cloudflare', 'ngrok'] as const).map((p) => (
+          <div className="seg" role="radiogroup" aria-label="Tunnel provider" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+            {(
+              [
+                ['cloudflare', 'Cloudflare'],
+                ['localhostrun', 'localhost.run'],
+                ['pinggy', 'Pinggy'],
+                ['ngrok', 'ngrok']
+              ] as const
+            ).map(([p, label]) => (
               <button key={p} role="radio" aria-checked={settings.shareProvider === p} onClick={() => updateSettings({ shareProvider: p })}>
-                {p === 'cloudflare' ? 'Cloudflare' : 'ngrok'}
+                {label}
               </button>
             ))}
           </div>
           <div className="card-foot">
             <span className="hint">
-              {settings.shareProvider === 'cloudflare' ? 'No account needed.' : settings.ngrokToken ? 'Authtoken saved.' : 'Add your authtoken in Settings.'}
+              {settings.shareProvider === 'cloudflare'
+                ? 'No account. Links last until you stop sharing.'
+                : settings.shareProvider === 'localhostrun'
+                  ? 'No account and nothing to install. Uses SSH, which every Mac has.'
+                  : settings.shareProvider === 'pinggy'
+                    ? 'No account and nothing to install. Free links last 60 minutes.'
+                    : settings.ngrokToken
+                      ? 'Authtoken saved.'
+                      : 'ngrok needs a free account and its authtoken in Settings.'}
             </span>
-            {(settings.shareProvider === 'cloudflare' ? tools.cloudflared : tools.ngrok) ? (
+            {settings.shareProvider === 'localhostrun' || settings.shareProvider === 'pinggy' || (settings.shareProvider === 'cloudflare' ? tools.cloudflared : tools.ngrok) ? (
               <span className="tag tag-ok">Ready</span>
             ) : (
               <button

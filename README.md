@@ -40,6 +40,7 @@ It was built for people moving from **Laragon** on Windows who want the same "it
 - **Databases.** MySQL, MariaDB, PostgreSQL, Redis, Memcached, MongoDB and Meilisearch, plus phpMyAdmin and Adminer, with backups and snapshots.
 - **Your servers.** SSH terminal, SFTP and FTP file browser, and one-click deployment.
 - **GitHub.** Create, browse, clone, download and delete repositories, and push to main, a branch, a tag or a release.
+- **Security.** AI code review of a site, a GitHub repository or an Azure DevOps repository, by Claude Code or your own model, plus Nuclei web scans and a check for leaked keys.
 - **An API client.** Works like Postman: import collections and environments, write tests, run whole collections, and copy any request as code.
 - **AI.** Claude Code, Codex, OpenCode, vMLX, LM Studio and more, and a direct connection so Claude Code can drive Laramac.
 - **Safety.** Snapshots of any site's files and database, reset without uninstalling, and updates that keep everything.
@@ -248,7 +249,27 @@ Requests are sent by Laramac itself, so the browser's cross-site limits do not a
 
 Connect once, with your GitHub CLI sign-in or a personal access token (kept encrypted in the Keychain), and see all your public and private repositories, with search and filters. **New repository** creates one (private or public, with a README if you like) and can clone it into your projects folder straight away. Click a repository's name to see its branches, releases, recent commits, pull requests and issues. **Clone to projects** puts a repository in your projects folder, ready to run; **Download ZIP** saves a copy anywhere. **Edit** changes a repository's description, website and visibility, and **Delete** removes it after you type its name. When your token is missing a permission (deleting needs `delete_repo`), Laramac says exactly which one to add. Pushing happens from each site (see [Push to GitHub](#push-to-github)).
 
+### Security
+
+<img src="docs/screenshots/security.png" alt="A code review report" width="820">
+
+**Code review.** Pick a site in www, one of your GitHub repositories, or any Git address (Azure DevOps, GitLab, Bitbucket; add a token for private ones, used once and not saved). Choose the reviewer and what to look for (security, bugs, or everything):
+
+- **Claude Code** reads the whole project itself in read-only mode: it can open and search files, but not change or run anything.
+- **Your model** (LM Studio, Ollama, vMLX, oMLX, or a cloud API you added) reads the most important files first, in parts, and the parts are merged into one report.
+
+The report gives each problem a severity, the file and line, what is wrong and how to fix it. Laramac also checks every file for leaked keys and passwords (private keys, AWS, GitHub, Stripe, Slack, Google, OpenAI and Anthropic keys, passwords written into code), without storing them. Reports are kept under Past reviews; **Fix with AI** opens your coding agent in the project with a fix request ready to paste.
+
+**Web scan.** Nuclei runs thousands of community checks against a local site (sent through your web server as that site) or an address you are allowed to test. Checks that could harm a site are left out, requests are rate limited, and anything outside your Mac asks you to confirm first. **Explain with AI** says which findings matter and how to fix them. For testing behind a login, use Burp Suite, which has its own scanner and AI.
+
 ### Tools and AI
+
+**Model servers.** Laramac finds LM Studio (1234), Ollama (11434), vMLX and oMLX (8000), Jan, GPT4All and llama.cpp by themselves, and you can add any other address, in the OpenAI format (`/v1/chat/completions`) or the Anthropic format (`/v1/messages`), with an API key if the server wants one: another port, a machine on your network, or a cloud API such as Anthropic, OpenAI or OpenRouter. Keys are encrypted in your Keychain. Each server shows whether it answers, with **Test** and **Use**.
+
+**Mail delivery.** Mailpit always keeps a copy of every email. **Delivery…** on its card can also pass mail on to real inboxes through Resend, Mailtrap, Postmark, SendGrid, Mailgun, Amazon SES, Brevo, Gmail or any SMTP server: every message, or only the ones you release in Mailpit. Send a test email from the same window.
+
+**Public links** work with Cloudflare, localhost.run or Pinggy (no account needed for any of them), or ngrok with your authtoken. Laramac puts a small relay in front of localhost.run and Pinggy, so a link only ever reaches the site you shared.
+
 
 <img src="docs/screenshots/tools.png" alt="Tools and AI" width="820">
 
@@ -274,7 +295,7 @@ Everything Laramac has installed, with its size: PHP versions, database servers,
 - **Open to other devices.** Lets phones and computers on your network open your sites.
 - **Addresses.** `localhost/folder`, `name.localhost`, and extra names per site.
 - **Web servers.** Make Apache or Nginx the main one and change their ports.
-- **Glass style.** Smoked (dark tinted glass everywhere, the default) or Frosted (light glass that follows your Mac's light and dark mode). Pop-ups and menus always use smoked glass.
+- **Glass style.** Pick from previews: Smoked (dark tinted glass, the default), Aurora (brighter, purple, pink and cyan), Midnight (near black, most contrast) or Frosted (light glass that follows light and dark mode). Pop-ups and menus always use dark glass.
 
   <img src="docs/screenshots/overview-frosted.png" alt="The Frosted glass style" width="640">
 - **Downloads, connections and notifications.**

@@ -53,6 +53,12 @@ export const TOUR: Step[] = [
     body: 'Test APIs like in Postman, import your Postman collections, and manage your GitHub repositories without leaving the app.'
   },
   {
+    target: '[data-tour="security"]',
+    page: 'security',
+    title: 'Security',
+    body: 'Have Claude Code or your own model review the code of a site, a GitHub repository or an Azure DevOps repository, and scan your sites with Nuclei for known problems.'
+  },
+  {
     target: '[data-tour="tools"]',
     page: 'tools',
     title: 'Tools and AI',

@@ -72,7 +72,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out[key] = bool(value, key)
         break
       case 'glassStyle':
-        out.glassStyle = oneOf(value, ['smoke', 'frost'] as const, 'The glass style')
+        out.glassStyle = oneOf(value, ['smoke', 'frost', 'aurora', 'midnight'] as const, 'The glass style')
         break
       case 'defaultPhp':
         out.defaultPhp = value === null ? null : assertMinor(value)
@@ -99,7 +99,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.aiTool = typeof value === 'string' && /^[a-z0-9-]{1,32}$/.test(value) ? value : fail('Unknown AI tool.')
         break
       case 'shareProvider':
-        out.shareProvider = oneOf(value, ['cloudflare', 'ngrok'] as const, 'Tunnel provider')
+        out.shareProvider = oneOf(value, ['cloudflare', 'ngrok', 'localhostrun', 'pinggy'] as const, 'Tunnel provider')
         break
       case 'ngrokToken':
         out.ngrokToken = typeof value === 'string' && /^[A-Za-z0-9_-]{0,200}$/.test(value) ? value : fail('That ngrok token has unexpected characters.')

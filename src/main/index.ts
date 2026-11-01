@@ -23,6 +23,11 @@ import { createFromStarter } from './starterrun'
 import { devFromScript, devLogFile, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
 import { STARTERS, starterById } from '../shared/starters'
 import { collectSiteLogs, explainSite } from './sitedoctor'
+import * as models from './models'
+import * as mailrelay from './mailrelay'
+import * as review from './review'
+import * as scan from './scan'
+import { normalize } from 'path'
 import { buildTrayMenu, type TrayAction, type TrayItem } from './traymenu'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
@@ -737,6 +742,125 @@ function registerIpc(): void {
     encrypt: (s) => safeStorage.encryptString(s).toString('base64'),
     decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64'))
   }
+  models.setModelCrypto(keychain)
+  mailrelay.setMailCrypto(keychain)
+  handle('mail:relay', () => mailrelay.getRelay())
+  handle('mail:save-relay', async (input) => {
+    let r
+    try {
+      r = mailrelay.saveRelay(input)
+    } catch (err) {
+      throw new ValidationError((err as Error).message)
+    }
+    // Mailpit reads its relay settings when it starts.
+    if (services.list().find((x) => x.id === 'mailpit')?.status === 'running') {
+      await services.stop('mailpit')
+      await services.start('mailpit')
+    }
+    return r
+  })
+  handle('mail:test', (to) => mailrelay.sendTestMail(String(to)))
+
+  // ---- Code review and web scans. Everything stays read-only on your code.
+  handle('review:run', async (req) => {
+    if (!req || typeof req !== 'object' || !req.source) throw new ValidationError('That review request is not valid.')
+    const reviewer = req.reviewer === 'claude' ? 'claude' : 'model'
+    const focus = (['security', 'bugs', 'all'] as const).includes(req.focus) ? req.focus : 'security'
+    const st = getSettings()
+    if (reviewer === 'model' && !st.llm.model) throw new ValidationError('Pick a model on the Tools page or in the Assistant first.')
+    const src = req.source
+    const label = src.kind === 'site' ? src.site : src.kind === 'github' ? src.repo : src.url.replace(/^https:\/\//, '').replace(/\.git$/, '')
+    const result = await jobs.run(`Reviewing ${label}`, async (update) => {
+      let root: string
+      let name: string
+      if (src.kind === 'site') {
+        const site = siteByName(src.site)
+        root = site.path
+        name = site.name
+      } else if (src.kind === 'github') {
+        if (typeof src.repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(src.repo)) throw new ValidationError('Pick a repository.')
+        update(null, `Downloading ${src.repo}`)
+        let tok: string | null = null
+        try {
+          tok = github.account() ? ghTok() : null
+        } catch {
+          tok = null
+        }
+        root = await review.cloneForReview(`https://github.com/${src.repo}.git`, tok, src.repo.replace('/', '-'))
+        name = src.repo
+      } else {
+        if (typeof src.url !== 'string') throw new ValidationError('Enter the repository address.')
+        update(null, 'Downloading the repository')
+        const nameFromUrl = src.url.replace(/\.git$/, '').split('/').filter(Boolean).pop() ?? 'repo'
+        root = await review.cloneForReview(src.url.trim(), typeof src.token === 'string' && src.token.trim() ? src.token.trim() : null, nameFromUrl)
+        name = nameFromUrl
+      }
+      return review.runReview({ root, name, reviewer, focus, modelName: st.llm.model }, update)
+    })
+    activity.push('success', `Reviewed ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings, ${result.secrets.length} keys in files.`)
+    return result
+  })
+  handle('review:list', () => review.listReviews())
+  handle('review:read', (id) => review.readReview(String(id)))
+  handle('review:delete', (id) => {
+    review.deleteReview(String(id))
+    return review.listReviews()
+  })
+  handle('review:open', async (id, what) => {
+    const info = review.listReviews().find((r) => r.id === id)
+    if (!info) throw new ValidationError('That review is gone.')
+    // Only folders Laramac itself reviewed: a site, or a copy in the reviews folder.
+    const folder = normalize(info.folder)
+    const allowed = folder.startsWith(normalize(review.reviewSourcesDir()) + '/') || scanSites().some((s) => s.path === folder)
+    if (what === 'report') await shell.openPath(join(review.reviewsDir(), `${info.id}.md`))
+    else if (!allowed || !existsSync(folder)) throw new ValidationError('The reviewed folder is no longer there.')
+    else if (what === 'folder') await shell.openPath(folder)
+    else {
+      const prompt = `Read the code review in ${join(review.reviewsDir(), `${info.id}.md`)} and fix the findings, most severe first. Explain each change.`
+      await launchAiTool(getSettings().aiTool, folder).catch(() => openClaudeCode(folder))
+      clipboard.writeText(prompt)
+      activity.push('info', 'Fix request copied', 'Paste it into your AI tool to start fixing the findings.')
+    }
+  })
+  handle('scan:status', async () => ({ installed: existsSync(scan.nucleiBinary()), version: await scan.nucleiVersion() }))
+  handle('scan:run', async (target, siteName) => {
+    let opts: scan.ScanOptions
+    if (siteName) {
+      const site = siteByName(siteName)
+      const { httpPort } = getSettings()
+      opts = { url: `http://127.0.0.1:${httpPort}`, host: site.domain }
+    } else {
+      if (typeof target !== 'string' || !/^https?:\/\/[^\s]+$/.test(target)) throw new ValidationError('Enter a full address, like https://example.com.')
+      opts = { url: target }
+      const host = new URL(target).hostname
+      const local = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(host) || host.endsWith(`.${getSettings().tld}`)
+      if (!local) {
+        const answer = await dialog.showMessageBox(mainWindow!, {
+          type: 'warning',
+          buttons: ['Cancel', 'I am allowed to test it'],
+          defaultId: 0,
+          cancelId: 0,
+          message: `Scan ${host}?`,
+          detail: 'Only scan sites you own or have written permission to test. Scanning other people’s sites can be against the law and their terms.'
+        })
+        if (answer.response !== 1) throw new ValidationError('Scan cancelled.')
+      }
+    }
+    return jobs.run(`Scanning ${siteName ?? target}`, async (update) => {
+      if (!existsSync(scan.nucleiBinary())) await scan.installNuclei(update)
+      return scan.runNuclei(opts, update)
+    })
+  })
+  handle('llm:servers', () => models.listServers())
+  handle('llm:save', (input) => {
+    if (!input || typeof input !== 'object') throw new ValidationError('That server is not valid.')
+    try {
+      return models.saveServer(input)
+    } catch (err) {
+      throw new ValidationError((err as Error).message)
+    }
+  })
+  handle('llm:delete', (id) => models.deleteServer(String(id)))
   handle('ssh:list', () => ssh.listServers())
   handle('ssh:save', (input) => ssh.saveServer(input as SshServerInput, keychain))
   handle('ssh:delete', (id) => ssh.deleteServer(String(id)))

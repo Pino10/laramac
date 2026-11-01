@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Database, FolderGit2, Send, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench, Rocket } from 'lucide-react'
+import { ArrowDownToLine, Database, FolderGit2, Send, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench, Rocket, ShieldCheck } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
 
@@ -16,6 +16,7 @@ export const NAV: Item[][] = [
     { id: 'servers', label: 'Servers', icon: <Server size={16} /> },
     { id: 'api', label: 'API client', icon: <Send size={16} /> },
     { id: 'github', label: 'GitHub', icon: <FolderGit2 size={16} /> },
+    { id: 'security', label: 'Security', icon: <ShieldCheck size={16} /> },
     { id: 'tools', label: 'Tools', icon: <Wrench size={16} /> },
     { id: 'packages', label: 'Packages', icon: <Package size={16} /> }
   ],

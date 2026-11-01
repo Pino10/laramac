@@ -8,6 +8,7 @@ import { goArch } from '../platform'
 import { mailpitUrl } from '../versions'
 import { ManagedProcess } from '../process'
 import { mailpitBinary } from '../webconf'
+import { mailpitRelayArgs } from '../mailrelay'
 
 const proc = new ManagedProcess('Mailpit')
 
@@ -46,7 +47,8 @@ export const mailpit: ServiceImpl = {
           '--listen',
           '127.0.0.1:8025',
           '--database',
-          join(dirs.mailpit(), 'mailpit.db')
+          join(dirs.mailpit(), 'mailpit.db'),
+          ...mailpitRelayArgs()
         ],
         logFile: join(dirs.logs(), 'mailpit.log')
       },

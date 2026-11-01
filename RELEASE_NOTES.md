@@ -1,20 +1,22 @@
-## New in 0.14
+## New in 0.15
 
-### A guided tour
-- The first time Laramac opens, a one-minute tour points at each part of the app and says what it is for. Replay it from Settings, or type "tour" in the ⌘K command bar.
+### Security
+- **Code review** of a site in www, a GitHub repository, or any Git address including **Azure DevOps** (with a token for private ones, used once and not saved).
+- Reviewed by **Claude Code** (read-only: it can read and search, not change or run anything) or by **your own model**.
+- Reports list each problem with its severity, file and line, what is wrong and the fix. **Fix with AI** opens your coding agent in the project with the request ready to paste.
+- A built-in check finds **leaked keys and passwords** in files.
+- **Web scan** with Nuclei against a local site or an address you are allowed to test, without harmful checks, with **Explain with AI**. Laramac installs Nuclei the first time.
 
-### Site doctor: errors explained by your local AI
-- A new stethoscope button on every site reads its recent logs (Laravel, Symfony, WordPress or Django, the dev server output, and the PHP, Apache and Nginx lines about that site) and asks your local model what is wrong and how to fix it.
-- Passwords, tokens, keys, cookies and database passwords are blanked before anything is sent.
-- Ask follow-up questions, open any log it read, or press **Fix with Claude Code** to hand it to your coding agent inside the project.
+### Every model server you use
+- Add any address in the **OpenAI or Anthropic format**, with an API key if needed: other ports, another machine, or Anthropic, OpenAI and OpenRouter. Keys stay encrypted in your Keychain.
+- Found by themselves: LM Studio, Ollama, **vMLX and oMLX** (port 8000), Jan, GPT4All and llama.cpp.
+- Each server shows if it answers, with **Test** and **Use**. **oMLX** and **Burp Suite** have their own cards.
 
-### The menu bar does much more
-- See how many services and dev servers are running.
-- Switch any service or dev server on or off.
-- Open any site in the browser, your editor, your AI tool or Finder.
-- Start a new project straight from the menu.
+### Mail delivery
+- Mailpit still keeps every email. It can now also send mail for real through Resend, Mailtrap, Postmark, SendGrid, Mailgun, Amazon SES, Brevo, Gmail or any SMTP server: everything, or only what you release. Send a test email to check.
 
-### Everywhere else
-- ⌘K finds every starter ("react", "django", "c#"), starts and stops dev servers, and opens the tour. Names now rank above keywords, so "react" gives React first.
-- The Overview's New project shortcut and the empty Sites page now lead to Starters.
-- Answers from AI show steps, code and bold text cleanly.
+### Public links without an account
+- New: **localhost.run** and **Pinggy**, over the SSH every Mac has. A small relay makes sure a link only reaches the site you shared.
+
+### Glass styles
+- Two new styles, **Aurora** and **Midnight**, picked from live previews in Settings.

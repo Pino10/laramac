@@ -454,7 +454,7 @@ export interface AppSettings {
   tld: string
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
-  glassStyle: 'smoke' | 'frost'
+  glassStyle: 'smoke' | 'frost' | 'aurora' | 'midnight'
   /** The first-run tour has been seen. */
   tourDone: boolean
   defaultPhp: string | null
@@ -469,7 +469,7 @@ export interface AppSettings {
   /** Ports of the other web server, so both can run together. */
   secondaryHttpPort: number
   secondaryHttpsPort: number
-  shareProvider: 'cloudflare' | 'ngrok'
+  shareProvider: 'cloudflare' | 'ngrok' | 'localhostrun' | 'pinggy'
   ngrokToken: string
   editor: 'cursor' | 'vscode'
   /** Let phones and other computers on the network open your sites. Off by default. */
@@ -502,16 +502,126 @@ export interface ToolsStatus {
   platform: string
 }
 
+/** Whether Mailpit only catches mail, or also sends it on through a real provider. */
+export interface MailRelay {
+  /** catch: keep everything in Mailpit. release: send only what you release. all: send everything. */
+  mode: 'catch' | 'release' | 'all'
+  preset: string
+  host: string
+  port: number
+  security: 'starttls' | 'tls' | 'none'
+  username: string
+  /** Sender to use for every message, or empty to keep each app's own. */
+  from: string
+  hasPassword: boolean
+}
+
+export interface MailRelayInput extends Omit<MailRelay, 'hasPassword'> {
+  /** A new password, null to remove it, or left out to keep it. */
+  password?: string | null
+}
+
+export type ReviewFocus = 'security' | 'bugs' | 'all'
+
+export type ReviewSource = { kind: 'site'; site: string } | { kind: 'github'; repo: string } | { kind: 'git'; url: string; token?: string }
+
+export interface ReviewRequest {
+  source: ReviewSource
+  reviewer: 'claude' | 'model'
+  focus: ReviewFocus
+}
+
+export interface SecretHit {
+  file: string
+  line: number
+  kind: string
+}
+
+export interface ReviewInfo {
+  id: string
+  title: string
+  folder: string
+  reviewer: 'claude' | 'model'
+  focus: ReviewFocus
+  at: string
+  counts: Record<'critical' | 'high' | 'medium' | 'low', number>
+  secrets: number
+}
+
+export interface ReviewResult {
+  id: string
+  title: string
+  folder: string
+  reviewer: 'claude' | 'model'
+  markdown: string
+  secrets: SecretHit[]
+  files: number
+  ms: number
+  reportPath: string
+  counts: Record<'critical' | 'high' | 'medium' | 'low', number>
+}
+
+export interface ScanFinding {
+  template: string
+  name: string
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical' | 'unknown'
+  matched: string
+  description?: string
+  remediation?: string
+  reference?: string[]
+}
+
+export interface ScanResult {
+  target: string
+  findings: ScanFinding[]
+  ms: number
+}
+
+export type ModelApi = 'openai' | 'anthropic'
+
+/** A model server you added yourself. The key stays in the main process. */
+export interface ModelServer {
+  id: string
+  name: string
+  baseUrl: string
+  api: ModelApi
+  hasKey: boolean
+}
+
+export interface ModelServerInput {
+  id?: string
+  name: string
+  baseUrl: string
+  api: ModelApi
+  /** A new key, null to remove the key, or left out to keep the current one. */
+  key?: string | null
+}
+
 export interface LocalLlm {
-  /** Ollama, LM Studio, vMLX, or Custom. */
+  /** Set for servers you saved. */
+  id?: string
+  /** LM Studio, Ollama, vMLX (:8000), or the name you gave it. */
   provider: string
   /** The AI tool card this server belongs to, when known. */
-  toolId?: 'ollama' | 'lmstudio' | 'vmlx'
+  toolId?: 'ollama' | 'lmstudio' | 'vmlx' | 'omlx'
   baseUrl: string
+  api: ModelApi
   /** Chat models only (embedding models cannot chat), loaded ones first. */
   models: string[]
   /** Models already in memory, which answer straight away. */
   loaded: string[]
+  /** Not on this Mac: prompts leave it. */
+  remote: boolean
+  saved: boolean
+  /** For saved servers: whether it answered just now. */
+  online?: boolean
+}
+
+export interface LlmTest {
+  ok: boolean
+  ms: number
+  reply?: string
+  error?: string
 }
 
 export interface SiteLogSource {
@@ -521,12 +631,6 @@ export interface SiteLogSource {
   text: string
 }
 
-export interface LlmTest {
-  ok: boolean
-  ms: number
-  reply?: string
-  error?: string
-}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -611,6 +715,19 @@ export interface Channels {
   'ai:detect': { args: []; result: LocalLlm[] }
   'ai:chat': { args: [ChatMessage[]]; result: string }
   'ai:test': { args: [string, string]; result: LlmTest }
+  'llm:servers': { args: []; result: ModelServer[] }
+  'mail:relay': { args: []; result: MailRelay }
+  'review:run': { args: [ReviewRequest]; result: ReviewResult }
+  'review:list': { args: []; result: ReviewInfo[] }
+  'review:read': { args: [string]; result: string }
+  'review:delete': { args: [string]; result: ReviewInfo[] }
+  'review:open': { args: [string, 'report' | 'folder' | 'agent']; result: void }
+  'scan:run': { args: [string, string | null]; result: ScanResult }
+  'scan:status': { args: []; result: { installed: boolean; version: string | null } }
+  'mail:save-relay': { args: [MailRelayInput]; result: MailRelay }
+  'mail:test': { args: [string]; result: void }
+  'llm:save': { args: [ModelServerInput]; result: ModelServer[] }
+  'llm:delete': { args: [string]; result: ModelServer[] }
   'sites:doctor': { args: [string, ChatMessage[]]; result: { reply: string; sources: SiteLogSource[] } }
   'sites:open-log': { args: [string, string]; result: void }
   'import:choose': { args: []; result: ImportPlan | null }

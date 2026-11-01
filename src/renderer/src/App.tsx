@@ -19,6 +19,7 @@ import Servers from './pages/Servers'
 import Packages from './pages/Packages'
 import ApiClient from './pages/ApiClient'
 import Starters from './pages/Starters'
+import Security from './pages/Security'
 import GitHub from './pages/GitHub'
 import Updates from './pages/Updates'
 import UpdateBanner from './components/UpdateBanner'
@@ -30,7 +31,9 @@ function Shell(): React.JSX.Element {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
   }, [appInfo])
   useEffect(() => {
-    document.documentElement.dataset.glass = settings?.glassStyle ?? 'smoke'
+    const style = settings?.glassStyle ?? 'smoke'
+    document.documentElement.dataset.glass = style
+    document.documentElement.dataset.tone = style === 'frost' ? 'light' : 'dark'
   }, [settings?.glassStyle])
 
   // ⌘K command bar, ⌘1 to ⌘7 pages, ⌘N new project.
@@ -77,6 +80,7 @@ function Shell(): React.JSX.Element {
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
               {page === 'starters' && <Starters />}
+              {page === 'security' && <Security />}
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}
               {page === 'servers' && <Servers />}

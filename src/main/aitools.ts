@@ -78,6 +78,18 @@ export const AI_TOOLS: ToolDef[] = [
     appleSiliconOnly: true
   },
   {
+    id: 'omlx',
+    name: 'oMLX',
+    description: 'Fast MLX model server for Apple Silicon, run from the menu bar',
+    cli: {
+      find: ['omlx'],
+      install: 'brew tap jundot/omlx https://github.com/jundot/omlx && brew install omlx',
+      launch: 'omlx serve'
+    },
+    app: { names: ['oMLX.app'], url: 'https://github.com/jundot/omlx/releases/latest' },
+    appleSiliconOnly: true
+  },
+  {
     id: 'lmstudio',
     name: 'LM Studio',
     description: 'Download, chat with and serve local models',
@@ -98,6 +110,12 @@ export const AI_TOOLS: ToolDef[] = [
       launch: 'ollama list'
     },
     app: { names: ['Ollama.app'], url: 'https://ollama.com/download' }
+  },
+  {
+    id: 'burp',
+    name: 'Burp Suite',
+    description: 'Web security testing, including logged-in scans, with its own AI',
+    app: { names: ['Burp Suite Professional.app', 'Burp Suite Community Edition.app'], url: 'https://portswigger.net/burp/releases' }
   },
   {
     id: 'openclaw',

@@ -216,10 +216,10 @@ export default function Settings(): React.JSX.Element {
 
       <h2 className="section-title">Connections</h2>
       <div className="panel">
-        <TextRow label="ngrok authtoken" hint="Only needed when sharing with ngrok." value={settings.ngrokToken} secret wide onSave={(v) => updateSettings({ ngrokToken: v })} />
+        <TextRow label="ngrok authtoken" hint="Only for ngrok, which needs a free account. Cloudflare, localhost.run and Pinggy need none." value={settings.ngrokToken} secret wide onSave={(v) => updateSettings({ ngrokToken: v })} />
         <TextRow
-          label="Local model address"
-          hint="Any OpenAI-compatible server, such as Ollama, LM Studio or vMLX."
+          label="Model in use"
+          hint="The server the Assistant, site doctor and code review use. Add, test and switch servers in Tools › Model servers."
           value={settings.llm.baseUrl}
           wide
           onSave={(v) => updateSettings({ llm: { ...settings.llm, baseUrl: v } })}
@@ -244,23 +244,31 @@ export default function Settings(): React.JSX.Element {
             Take the tour
           </button>
         </div>
-        <div className="row row-set">
+        <div className="row row-set" style={{ borderBottom: 0 }}>
           <div className="row-main">
             <div className="row-title">Glass style</div>
-            <div className="row-sub">Smoked is dark, tinted glass everywhere. Frosted is light glass that follows your Mac's light and dark mode.</div>
+            <div className="row-sub">How the panels, pop-ups and menus look. It changes straight away.</div>
           </div>
-          <div className="seg" role="radiogroup" aria-label="Glass style">
-            {(
-              [
-                ['smoke', 'Smoked'],
-                ['frost', 'Frosted']
-              ] as const
-            ).map(([id, label]) => (
-              <button key={id} role="radio" aria-checked={(settings.glassStyle ?? 'smoke') === id} onClick={() => updateSettings({ glassStyle: id })}>
-                {label}
-              </button>
-            ))}
-          </div>
+        </div>
+        <div className="glass-picker" role="radiogroup" aria-label="Glass style">
+          {(
+            [
+              ['smoke', 'Smoked', 'Dark tinted glass over soft violet light.'],
+              ['aurora', 'Aurora', 'Brighter glass soaked in purple, pink and cyan.'],
+              ['midnight', 'Midnight', 'Near black and quiet, with the most contrast.'],
+              ['frost', 'Frosted', 'Light glass that follows light and dark mode.']
+            ] as const
+          ).map(([id, label, hint]) => (
+            <button key={id} className="gp-tile" role="radio" aria-checked={(settings.glassStyle ?? 'smoke') === id} onClick={() => updateSettings({ glassStyle: id })}>
+              <span className={`gp-preview gp-${id}`} aria-hidden>
+                <span className="gp-side" />
+                <span className="gp-card" />
+                <span className="gp-pop" />
+              </span>
+              <strong>{label}</strong>
+              <small>{hint}</small>
+            </button>
+          ))}
         </div>
         <div className="row row-set">
           <div className="row-main">
