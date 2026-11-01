@@ -6,8 +6,8 @@
  * GitHub sign-in you added on Laramac's GitHub page, so updates keep working
  * for you during testing.
  */
-export const RELEASE_REPOS = ['Pino10/laramac-releases', 'Pino10/laramac']
-const UA = 'Laramac (+https://github.com/Pino10/laramac-releases)'
+export const RELEASE_REPOS = ['Pino10/laramac']
+const UA = 'Laramac (+https://github.com/Pino10/laramac)'
 
 let tokenFn: () => string | null = () => null
 export function setDownloadToken(fn: () => string | null): void {

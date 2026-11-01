@@ -1,13 +1,13 @@
 #!/bin/bash
 # Installs or updates Laramac without the "Open Anyway" step.
-#   curl -fsSL https://raw.githubusercontent.com/Pino10/laramac-releases/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash
 #
 # The DMG is downloaded with curl (which macOS does not flag as quarantined),
 # checked against the release's SHA256SUMS.txt and the app's code signature,
 # then copied to /Applications. Your settings and data in ~/.laramac are kept.
 set -euo pipefail
 
-REPO="Pino10/laramac-releases"
+REPO="Pino10/laramac"
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 fail() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
 

@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ vars.MAC_RUNNER == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","macOS","ARM64"]') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

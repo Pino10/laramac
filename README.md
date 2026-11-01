@@ -50,14 +50,14 @@ It was built for people moving from **Laragon** on Windows who want the same "it
 ### Option 1: one line in Terminal (recommended)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Pino10/laramac-releases/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash
 ```
 
 This downloads the newest release for your Mac, checks it against the published SHA-256 checksum and its code signature, and installs it in Applications. macOS does not ask you to approve it in Privacy & Security. Run the same line again any time to reinstall or update.
 
 ### Option 2: download the DMG
 
-1. Download `Laramac-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from [Releases](https://github.com/Pino10/laramac-releases/releases/latest).
+1. Download `Laramac-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from [Releases](https://github.com/Pino10/laramac/releases/latest).
 2. Drag Laramac to Applications and open it.
 3. The first time, macOS says it cannot verify the developer. Click **Done**, open **System Settings › Privacy & Security**, scroll down and click **Open Anyway**.
 
