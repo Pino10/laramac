@@ -8,7 +8,7 @@ export default function JobsBar(): React.JSX.Element | null {
   return (
     <div className="stack-br no-drag" role="status" aria-live="polite">
       {jobs.map((job) => (
-        <div key={job.id} className="job">
+        <div key={job.id} className="job glass">
           <div className="job-top">
             <span>{job.label}</span>
             <span

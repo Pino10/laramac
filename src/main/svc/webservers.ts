@@ -47,7 +47,8 @@ async function writeNginxConf(): Promise<void> {
       errorLog: join(dirs.logs(), 'nginx-error.log'),
       accessLog: join(dirs.logs(), 'nginx-access.log'),
       fastcgiParamsFile: paramsFile,
-      tempDir: tmp
+      tempDir: tmp,
+      allowLan: settings.allowLan
     })
   )
 }
@@ -155,7 +156,8 @@ async function writeApacheConf(layout: ApacheLayout): Promise<void> {
       pidFile: join(dirs.run(), 'httpd.pid'),
       errorLog: join(dirs.logs(), 'apache-error.log'),
       accessLog: join(dirs.logs(), 'apache-access.log'),
-      serverRoot: layout.serverRoot
+      serverRoot: layout.serverRoot,
+      allowLan: settings.allowLan
     })
   )
 }

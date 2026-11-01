@@ -1,21 +1,11 @@
-import {
-  Database,
-  Globe,
-  LayoutDashboard,
-  MessageSquare,
-  Settings as SettingsIcon,
-  Terminal,
-  Wrench
-} from 'lucide-react'
-import { useApp } from '../store'
-
-export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'tools' | 'assistant' | 'settings'
+import { Database, Globe, LayoutDashboard, MessageSquare, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
+import { useApp, type Page } from '../store'
 
 type Item = { id: Page; label: string; icon: React.ReactNode }
 
-const groups: Item[][] = [
+export const NAV: Item[][] = [
   [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={16} /> },
     { id: 'sites', label: 'Sites', icon: <Globe size={16} /> }
   ],
   [
@@ -29,30 +19,27 @@ const groups: Item[][] = [
   ]
 ]
 
-export default function Sidebar({
-  page,
-  onChange
-}: {
-  page: Page
-  onChange: (p: Page) => void
-}): React.JSX.Element {
-  const { services } = useApp()
-  const running = services.filter((s) => s.status === 'running').length
-  const installed = services.filter((s) => s.status !== 'not-installed').length
+export const PAGE_ORDER: Page[] = NAV.flat().map((i) => i.id)
+
+export default function Sidebar(): React.JSX.Element {
+  const { page, setPage, services, sites } = useApp()
+  const installed = services.filter((s) => s.status !== 'not-installed')
+  const running = installed.filter((s) => s.status === 'running').length
+  const failing = services.some((s) => s.status === 'error')
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar glass">
       <div className="sidebar-top drag" />
       <div className="brand">
-        <span className="brand-mark">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-            <path d="M2 1.5v9h8" stroke="currentColor" strokeWidth="2" strokeLinecap="square" />
+        <span className="brand-mark" aria-hidden>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 1.5v8.5h7.5" stroke="currentColor" strokeWidth="2.2" />
           </svg>
         </span>
         Laramac
       </div>
-      <nav className="nav no-drag" aria-label="Main">
-        {groups.map((items, i) => (
+      <nav className="nav" aria-label="Main">
+        {NAV.map((items, i) => (
           <div key={i} className="nav">
             {i > 0 && <div className="nav-gap" />}
             {items.map((it) => (
@@ -60,18 +47,24 @@ export default function Sidebar({
                 key={it.id}
                 className="nav-item"
                 aria-current={page === it.id ? 'page' : undefined}
-                onClick={() => onChange(it.id)}
+                onClick={() => setPage(it.id)}
               >
                 {it.icon}
                 {it.label}
+                <span className="nav-key" aria-hidden>
+                  ⌘{PAGE_ORDER.indexOf(it.id) + 1}
+                </span>
               </button>
             ))}
           </div>
         ))}
       </nav>
       <div className="sidebar-foot">
-        <span className="lamp" data-s={running > 0 ? 'running' : 'stopped'} />
-        {installed === 0 ? 'Nothing installed yet' : `${running} of ${installed} running`}
+        <span className="lamp" data-s={failing ? 'error' : running > 0 ? 'running' : 'stopped'} />
+        <div>
+          <strong>{installed.length === 0 ? 'Not set up yet' : `${running} of ${installed.length} running`}</strong>
+          {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+        </div>
       </div>
     </aside>
   )

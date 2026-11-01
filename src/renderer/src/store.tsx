@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ActivityItem,
+  AppInfo,
   AppSettings,
   JobInfo,
   LocalLlm,
@@ -14,7 +16,18 @@ export interface Toast {
   text: string
 }
 
+export type Page = 'dashboard' | 'sites' | 'php' | 'databases' | 'tools' | 'assistant' | 'settings'
+
 interface AppCtx {
+  page: Page
+  setPage: (p: Page) => void
+  newProject: boolean
+  setNewProject: (open: boolean) => void
+  paletteOpen: boolean
+  setPaletteOpen: (open: boolean) => void
+  activity: ActivityItem[]
+  clearActivity: () => void
+  appInfo: AppInfo | null
   services: ServiceInfo[]
   sites: SiteInfo[]
   jobs: JobInfo[]
@@ -53,6 +66,11 @@ function readable(err: unknown): string {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const [page, setPage] = useState<Page>('dashboard')
+  const [newProject, setNewProject] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [services, setServices] = useState<ServiceInfo[]>([])
   const [sites, setSites] = useState<SiteInfo[]>([])
   const [jobs, setJobs] = useState<JobInfo[]>([])
@@ -109,14 +127,21 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     []
   )
 
+  const clearActivity = useCallback(() => {
+    api().invoke('activity:clear').then(setActivity)
+  }, [])
+
   useEffect(() => {
+    api().invoke('app:info').then(setAppInfo)
     api().invoke('settings:get').then(setSettings)
     api().invoke('jobs:list').then(setJobs)
+    api().invoke('activity:list').then(setActivity)
     refreshAll()
     const offs = [
       api().on('services:changed', setServices),
       api().on('jobs:changed', setJobs),
-      api().on('sites:changed', setSites)
+      api().on('sites:changed', setSites),
+      api().on('activity:changed', setActivity)
     ]
     window.addEventListener('focus', refreshAll)
     return () => {
@@ -136,6 +161,15 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
 
   const value = useMemo<AppCtx>(
     () => ({
+      page,
+      setPage,
+      newProject,
+      setNewProject,
+      paletteOpen,
+      setPaletteOpen,
+      activity,
+      clearActivity,
+      appInfo,
       services,
       sites,
       jobs,
@@ -155,7 +189,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       act,
       notify
     }),
-    [services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [page, newProject, paletteOpen, activity, clearActivity, appInfo, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

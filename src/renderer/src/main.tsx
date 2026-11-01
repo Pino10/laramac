@@ -6,8 +6,6 @@ import '@fontsource/poppins/latin-600.css'
 import './styles.css'
 import App from './App'
 
-document.documentElement.dataset.native = String(window.laramac.platform === 'darwin')
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

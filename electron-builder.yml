@@ -22,3 +22,11 @@ dmg:
   title: Laramac ${version}
   artifactName: Laramac-${version}-${arch}.dmg
 npmRebuild: false
+# Electron's built-in security switches: the app cannot be run as a plain Node.js
+# process, and Node debugging flags and NODE_OPTIONS are ignored.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableCookieEncryption: true
+  onlyLoadAppFromAsar: true

@@ -65,6 +65,11 @@ class ServiceManager extends EventEmitter {
     })
   }
 
+  /** Re-sends the list, for example after a process exits on its own. */
+  refresh(): void {
+    this.publish()
+  }
+
   private publish(): void {
     this.emit('changed', this.list())
   }
@@ -78,10 +83,9 @@ class ServiceManager extends EventEmitter {
       await impl.start()
       this.transient.delete(id)
     } catch (err) {
-      this.transient.set(id, {
-        status: 'error',
-        error: err instanceof Error ? err.message : String(err)
-      })
+      const message = err instanceof Error ? err.message : String(err)
+      this.transient.set(id, { status: 'error', error: message })
+      this.emit('failed', impl.name, message)
     }
     this.publish()
   }

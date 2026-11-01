@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
+import { Search } from 'lucide-react'
 import { AppProvider, useApp } from './store'
-import Sidebar, { type Page } from './components/Sidebar'
+import Sidebar, { PAGE_ORDER } from './components/Sidebar'
 import JobsBar from './components/JobsBar'
+import CommandPalette from './components/CommandPalette'
+import Activity from './components/Activity'
+import NewProject from './components/NewProject'
 import Dashboard from './pages/Dashboard'
 import Sites from './pages/Sites'
 import Php from './pages/Php'
@@ -11,31 +15,68 @@ import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 
 function Shell(): React.JSX.Element {
-  const [page, setPage] = useState<Page>('dashboard')
-  const { toast } = useApp()
+  const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject } = useApp()
+
+  useEffect(() => {
+    document.documentElement.dataset.material = appInfo?.material ?? 'none'
+  }, [appInfo])
+
+  // ⌘K command bar, ⌘1 to ⌘7 pages, ⌘N new project.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      if (key === 'k') {
+        e.preventDefault()
+        setPaletteOpen(!paletteOpen)
+      } else if (key === 'n') {
+        e.preventDefault()
+        setNewProject(true)
+      } else if (/^[1-7]$/.test(key)) {
+        e.preventDefault()
+        setPage(PAGE_ORDER[Number(key) - 1])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [paletteOpen, setPaletteOpen, setNewProject, setPage])
 
   return (
-    <div className="shell">
-      <Sidebar page={page} onChange={setPage} />
-      <main className="main">
-        <div className="titlebar drag" />
-        <div className="main-inner">
-          {page === 'dashboard' && <Dashboard />}
-          {page === 'sites' && <Sites />}
-          {page === 'php' && <Php />}
-          {page === 'databases' && <Databases />}
-          {page === 'tools' && <Tools />}
-          {page === 'assistant' && <Assistant />}
-          {page === 'settings' && <Settings />}
-        </div>
-      </main>
+    <>
+      <div className="canvas" aria-hidden />
+      <div className="shell">
+        <Sidebar />
+        <main className="main">
+          <header className="topbar drag">
+            <button className="search-pill glass" onClick={() => setPaletteOpen(true)}>
+              <Search size={14} />
+              Search or run a command
+              <span className="kbd">⌘K</span>
+            </button>
+            <Activity />
+          </header>
+          <div className="scroll">
+            <div className="main-inner" key={page}>
+              {page === 'dashboard' && <Dashboard />}
+              {page === 'sites' && <Sites />}
+              {page === 'php' && <Php />}
+              {page === 'databases' && <Databases />}
+              {page === 'tools' && <Tools />}
+              {page === 'assistant' && <Assistant />}
+              {page === 'settings' && <Settings />}
+            </div>
+          </div>
+        </main>
+      </div>
       <JobsBar />
+      <CommandPalette />
+      {newProject && <NewProject onClose={() => setNewProject(false)} />}
       {toast && (
-        <div className="toast no-drag" data-kind={toast.kind} role="status">
+        <div className="toast" data-kind={toast.kind} role="status">
           {toast.text}
         </div>
       )}
-    </div>
+    </>
   )
 }
 

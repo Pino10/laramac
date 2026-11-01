@@ -24,8 +24,8 @@ export default function NewProject({ onClose }: { onClose: () => void }): React.
   }
 
   return (
-    <div className="scrim no-drag" onClick={onClose}>
-      <div className="dialog" role="dialog" aria-label="New project" onClick={(e) => e.stopPropagation()}>
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass" role="dialog" aria-label="New project" onMouseDown={(e) => e.stopPropagation()}>
         <h2 className="page-title" style={{ fontSize: 16, marginBottom: 14 }}>
           New project
         </h2>

@@ -2,7 +2,7 @@
 
 A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
 
-**Status: v0.3, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+**Status: v0.4, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
 
 ## What it does
 
@@ -16,7 +16,10 @@ A free, open-source local development environment for macOS, inspired by [Larago
 - **New projects:** blank PHP, WordPress (database created and configured), or Laravel (via Composer, `.env` wired to MySQL and Mailpit).
 - **Editors:** open any site in Cursor or VS Code.
 - **AI:** connect any local model (Ollama, LM Studio, or any OpenAI-compatible server). The assistant proposes actions and you press the button. Open Claude Code in any site folder with PHP, Composer and MySQL on its PATH.
-- **Interface:** a flat, precise design in Poppins, with light and dark themes and a translucent sidebar. Menu bar app.
+- **Interface:** a live map of your stack on the Overview, where connections carry a moving current when both ends are running. Native Liquid Glass on macOS 26 (vibrancy on earlier versions), Poppins, light and dark themes.
+- **Keyboard:** ⌘K opens a command bar for every site, service and action. ⌘1 to ⌘7 switch pages, ⌘N starts a new project.
+- **Notifications:** macOS notifications and an in-app activity list for finished installs, shared links and services that stop unexpectedly.
+- **Menu bar:** start and stop everything, open phpMyAdmin, the mail inbox or your projects folder.
 
 ## Install (unsigned build)
 
@@ -68,6 +71,22 @@ Releases are built by GitHub Actions: push a tag like `v0.2.0` and DMGs are atta
 - `src/renderer`: the React interface.
 - `src/shared`: types shared by both sides, including the typed IPC channel map.
 - `tests`: unit tests plus end-to-end tests against real servers.
+
+## Security
+
+Laramac runs servers on your Mac, so it is built to stay closed by default:
+
+- **Only this Mac can reach your sites.** Nginx refuses requests from other machines and Apache listens on loopback. Turn on "Open to other devices" in Settings to test from a phone. Every database, PHP-FPM, Mailpit and the DNS server listen on 127.0.0.1 only.
+- **The local certificate authority can only vouch for your local suffix.** It carries an X.509 name constraint, so even a leaked key could not impersonate a real website. Keys are readable only by you.
+- **The interface cannot drive the system directly.** The page runs sandboxed with context isolation, a strict Content Security Policy, no navigation and no permissions. Every request it makes is checked in the main process: settings are validated field by field, paths must be your own sites, versions must be plain numbers, and only web addresses can be opened.
+- **Admin rights are used once,** to write `/etc/resolver/<suffix>`. The suffix is limited to reserved names (`test`, `internal`, `lan`, `example`) and checked again before the command runs.
+- **Downloads use HTTPS.** PostgreSQL and Composer are also checked against their published SHA-256 checksums.
+- **Electron's own security switches** are set in the build: the app cannot be run as a plain Node.js process, and `NODE_OPTIONS` and debugging flags are ignored.
+- Settings (which can hold your ngrok token) are saved with owner-only permissions.
+
+The test suite includes attacks: a forged certificate for a real domain, path-traversal version strings, shell metacharacters in settings, and requests from another machine on the network.
+
+Report security problems privately through GitHub's security advisories for this repository.
 
 ## Known limits
 

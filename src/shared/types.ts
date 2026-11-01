@@ -64,6 +64,23 @@ export interface JobInfo {
   error?: string
 }
 
+export interface ActivityItem {
+  id: string
+  at: number
+  kind: 'info' | 'success' | 'error'
+  title: string
+  body?: string
+}
+
+/** How the window is drawn: native Liquid Glass (macOS 26), classic vibrancy, or plain. */
+export type Material = 'liquid-glass' | 'vibrancy' | 'none'
+
+export interface AppInfo {
+  material: Material
+  platform: string
+  version: string
+}
+
 export interface LlmConfig {
   baseUrl: string
   model: string
@@ -84,6 +101,9 @@ export interface AppSettings {
   shareProvider: 'cloudflare' | 'ngrok'
   ngrokToken: string
   editor: 'cursor' | 'vscode'
+  /** Let phones and other computers on the network open your sites. Off by default. */
+  allowLan: boolean
+  notifications: boolean
   siteConfig: Record<string, SiteConfig>
   llm: LlmConfig
 }
@@ -147,6 +167,9 @@ export interface Channels {
   'tools:open-external': { args: [string]; result: void }
   'ai:detect': { args: []; result: LocalLlm[] }
   'ai:chat': { args: [ChatMessage[]]; result: string }
+  'activity:list': { args: []; result: ActivityItem[] }
+  'activity:clear': { args: []; result: ActivityItem[] }
+  'app:info': { args: []; result: AppInfo }
 }
 
 export type ChannelName = keyof Channels
@@ -155,6 +178,7 @@ export interface Events {
   'services:changed': ServiceInfo[]
   'jobs:changed': JobInfo[]
   'sites:changed': SiteInfo[]
+  'activity:changed': ActivityItem[]
 }
 
 export interface LaramacApi {

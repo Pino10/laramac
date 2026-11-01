@@ -4,7 +4,7 @@ import { execFile } from 'child_process'
 import type { ServiceImpl } from './types'
 import { dirs } from '../paths'
 import { getSettings } from '../settings'
-import { downloadFile, extract, removeQuarantine } from '../download'
+import { downloadFile, extract, removeQuarantine, verifySha256 } from '../download'
 import { jobs } from '../jobs'
 import { compareVersions, fetchPostgresVersions, postgresJarUrl } from '../versions'
 import { ManagedProcess, tailFile } from '../process'
@@ -58,6 +58,8 @@ export const postgres: ServiceImpl = {
       const staging = join(dirs.downloads(), `postgres-${version}-staging`)
       rmSync(staging, { recursive: true, force: true })
       await downloadFile(postgresJarUrl(version), jar, (p) => update(p, `Downloading PostgreSQL ${version}`))
+      update(null, 'Checking the download')
+      await verifySha256(jar, `${postgresJarUrl(version)}.sha256`)
 
       // The jar is a zip holding one .txz archive with the real binaries.
       update(null, `Unpacking PostgreSQL ${version}`)

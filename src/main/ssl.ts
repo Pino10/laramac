@@ -1,9 +1,10 @@
 import { execFile } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { dirs } from './paths'
 import { isMac } from './platform'
+import { getSettings } from './settings'
 
 function openssl(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -17,10 +18,22 @@ function openssl(args: string[]): Promise<void> {
 const caKey = (): string => join(dirs.certs(), 'laramac-ca.key')
 export const caCertPath = (): string => join(dirs.certs(), 'laramac-ca.pem')
 
-/** Creates the local certificate authority once. Browsers trust it after trustCa(). */
-export async function ensureCa(): Promise<void> {
-  if (existsSync(caKey()) && existsSync(caCertPath())) return
-  mkdirSync(dirs.certs(), { recursive: true })
+const caTldFile = (): string => join(dirs.certs(), 'laramac-ca.tld')
+
+/**
+ * Creates the local certificate authority. It carries a name constraint, so even if its key
+ * leaked it could only vouch for names under the local suffix (for example *.test), never for
+ * real websites. Changing the suffix creates a new authority and new site certificates.
+ */
+export async function ensureCa(tld: string = getSettings().tld): Promise<void> {
+  const current = existsSync(caTldFile()) ? readFileSync(caTldFile(), 'utf8').trim() : null
+  if (existsSync(caKey()) && existsSync(caCertPath()) && current === tld) return
+
+  mkdirSync(dirs.certs(), { recursive: true, mode: 0o700 })
+  chmodSync(dirs.certs(), 0o700)
+  // Old certificates were signed by the old authority, so they go too.
+  for (const f of readdirSync(dirs.certs())) rmSync(join(dirs.certs(), f), { force: true })
+
   const cnf = join(dirs.certs(), 'ca.cnf')
   writeFileSync(
     cnf,
@@ -29,16 +42,18 @@ export async function ensureCa(): Promise<void> {
       'distinguished_name = req_dn',
       'prompt = no',
       '[req_dn]',
-      'CN = Laramac Local CA',
+      `CN = Laramac Local CA (.${tld} only)`,
       'O = Laramac',
       '[v3_ca]',
-      'basicConstraints = critical,CA:TRUE',
+      'basicConstraints = critical,CA:TRUE,pathlen:0',
       'keyUsage = critical,keyCertSign,cRLSign',
       'subjectKeyIdentifier = hash',
+      `nameConstraints = critical,permitted;DNS:${tld}`,
       ''
     ].join('\n')
   )
   await openssl(['genrsa', '-out', caKey(), '2048'])
+  chmodSync(caKey(), 0o600)
   await openssl([
     'req',
     '-x509',
@@ -56,6 +71,7 @@ export async function ensureCa(): Promise<void> {
     '-extensions',
     'v3_ca'
   ])
+  writeFileSync(caTldFile(), tld)
 }
 
 export function certFor(domain: string): { cert: string; key: string } | undefined {
@@ -66,10 +82,14 @@ export function certFor(domain: string): { cert: string; key: string } | undefin
 
 /** Issues a certificate for `domain` and `*.domain`, signed by the local CA. */
 export async function ensureSiteCert(domain: string): Promise<{ cert: string; key: string }> {
+  const tld = getSettings().tld
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(domain) || !domain.endsWith(`.${tld}`)) {
+    throw new Error(`Certificates are only issued for .${tld} names.`)
+  }
+  await ensureCa(tld)
   const existing = certFor(domain)
   if (existing) return existing
 
-  await ensureCa()
   const key = join(dirs.certs(), `${domain}.key`)
   const csr = join(dirs.certs(), `${domain}.csr`)
   const cert = join(dirs.certs(), `${domain}.crt`)
@@ -86,6 +106,7 @@ export async function ensureSiteCert(domain: string): Promise<{ cert: string; ke
     ].join('\n')
   )
   await openssl(['req', '-new', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', csr, '-subj', `/CN=${domain}`])
+  chmodSync(key, 0o600)
   await openssl([
     'x509',
     '-req',

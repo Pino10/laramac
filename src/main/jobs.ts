@@ -33,12 +33,14 @@ class JobManager extends EventEmitter {
       job.status = 'done'
       job.percent = 100
       this.publish()
+      this.emit('finished', job)
       setTimeout(() => this.remove(id), 4000)
       return result
     } catch (err) {
       job.status = 'error'
       job.error = err instanceof Error ? err.message : String(err)
       this.publish()
+      this.emit('finished', job)
       setTimeout(() => this.remove(id), 15000)
       throw err
     }

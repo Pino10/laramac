@@ -1,6 +1,7 @@
 import { createSocket, type Socket } from 'dgram'
 import { execFile } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
+import { ALLOWED_TLDS } from './validate'
 
 /** Port the built-in DNS server listens on. 5353 is taken by macOS mDNS, so we avoid it. */
 export const DNS_PORT = 53535
@@ -117,6 +118,10 @@ export function runAsAdmin(shellCommand: string, prompt: string): Promise<void> 
 
 /** Creates /etc/resolver/<tld> so macOS sends *.tld lookups to our DNS server. One-time, needs a password. */
 export function installResolver(tld: string): Promise<void> {
+  // This runs as administrator, so the suffix is checked again here, not only in settings.
+  if (!(ALLOWED_TLDS as readonly string[]).includes(tld)) {
+    return Promise.reject(new Error('That domain suffix is not allowed.'))
+  }
   const cmd = `mkdir -p /etc/resolver && printf 'nameserver 127.0.0.1\\nport ${DNS_PORT}\\n' > ${resolverFile(tld)}`
   return runAsAdmin(cmd, 'Laramac needs to set up .' + tld + ' domains on this Mac.')
 }

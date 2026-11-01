@@ -1,6 +1,6 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import type { AppSettings } from '../shared/types'
 import { dirs } from './paths'
 
@@ -19,6 +19,8 @@ const defaults = (): AppSettings => ({
   shareProvider: 'cloudflare',
   ngrokToken: '',
   editor: 'cursor',
+  allowLan: false,
+  notifications: true,
   siteConfig: {},
   llm: { baseUrl: 'http://127.0.0.1:11434/v1', model: '' }
 })
@@ -52,8 +54,10 @@ export function setSettings(patch: Partial<AppSettings>): AppSettings {
     ...patch,
     llm: { ...current.llm, ...(patch.llm ?? {}) }
   }
-  mkdirSync(dirs.root(), { recursive: true })
-  writeFileSync(file(), JSON.stringify(cache, null, 2))
+  mkdirSync(dirs.root(), { recursive: true, mode: 0o700 })
+  // Holds the ngrok token, so only this user may read it.
+  writeFileSync(file(), JSON.stringify(cache, null, 2), { mode: 0o600 })
+  chmodSync(file(), 0o600)
   return cache
 }
 

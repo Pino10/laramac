@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto'
 import { join } from 'path'
 import type { ToolsStatus } from '../shared/types'
 import { dirs } from './paths'
-import { downloadFile, extract, makeExecutable, removeQuarantine } from './download'
+import { downloadFile, extract, makeExecutable, removeQuarantine, verifySha256 } from './download'
 import { jobs } from './jobs'
 import { brewPrefix, goArch, isMac } from './platform'
 import {
@@ -75,6 +75,7 @@ export async function installAdminer(): Promise<void> {
 export async function installComposer(): Promise<void> {
   await jobs.run('Installing Composer', async (update) => {
     await downloadFile(COMPOSER_URL, composerPhar(), (p) => update(p, 'Downloading Composer'))
+    await verifySha256(composerPhar(), `${COMPOSER_URL}.sha256sum`)
   })
   refreshShims()
 }

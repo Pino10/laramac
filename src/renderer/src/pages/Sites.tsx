@@ -1,9 +1,7 @@
-import { useState } from 'react'
 import { Code, ExternalLink, FolderOpen, Plus, Share2, Terminal } from 'lucide-react'
 import type { SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
-import NewProject from '../components/NewProject'
 
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
@@ -15,8 +13,7 @@ const kindLabel: Record<SiteInfo['kind'], string> = {
 }
 
 export default function Sites(): React.JSX.Element {
-  const { sites, settings, tools, php, act, busy, setSites, notify } = useApp()
-  const [creating, setCreating] = useState(false)
+  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject } = useApp()
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
   const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
@@ -34,7 +31,7 @@ export default function Sites(): React.JSX.Element {
         <button className="btn" onClick={() => api.invoke('www:reveal')}>
           <FolderOpen size={14} /> Open folder
         </button>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>
+        <button className="btn btn-primary" onClick={() => setNewProject(true)}>
           <Plus size={14} /> New project
         </button>
       </PageHead>
@@ -157,7 +154,6 @@ export default function Sites(): React.JSX.Element {
           ))}
         </div>
       )}
-      {creating && <NewProject onClose={() => setCreating(false)} />}
     </>
   )
 }

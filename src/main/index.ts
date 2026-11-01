@@ -1,18 +1,20 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { watch, type FSWatcher } from 'fs'
 import { join } from 'path'
-import type { ChannelName, Channels, Events, SiteInfo } from '../shared/types'
+import { pathToFileURL } from 'url'
+import type { ChannelName, Channels, ChatMessage, Events, Material, ProjectKind, SiteConfig, SiteInfo } from '../shared/types'
 import { ensureDirs } from './paths'
 import { ensureWww, getSettings, setSettings } from './settings'
 import { scanSites, setSiteConfig } from './sites'
 import { services } from './services'
 import { jobs } from './jobs'
-import { installMinor, listVersions, removeMinor, installedMinors } from './php'
+import { activity } from './activity'
+import { installMinor, installedMinors, listVersions, removeMinor, stopAllFpm } from './php'
 import { DNS_PORT, installResolver, startDnsServer, stopDnsServer } from './dns'
 import { ensureSiteCert, trustCa } from './ssl'
 import {
-  installCloudflared,
   installAdminer,
+  installCloudflared,
   installComposer,
   installNgrok,
   installPhpMyAdmin,
@@ -21,19 +23,22 @@ import {
 } from './tools'
 import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
-import {
-  detectLlms,
-  installClaudeCode,
-  openClaudeCode,
-  openInEditor
-} from './integrations'
+import { detectLlms, installClaudeCode, openClaudeCode, openInEditor } from './integrations'
 import { assistantChat } from './ai'
-import { stopAllFpm } from './php'
+import { processEvents, tailFile } from './process'
+import { phpmyadminInstalled } from './webconf'
+import { macMajor } from './platform'
+import { assertMinor, isWebUrl, sanitizeSettingsPatch, ValidationError } from './validate'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let watcher: FSWatcher | null = null
 let quitting = false
+let material: Material = 'none'
+
+const isMac = process.platform === 'darwin'
+const RENDERER_URL = process.env['ELECTRON_RENDERER_URL']
+const RENDERER_FILE = join(__dirname, '../renderer/index.html')
 
 function send<K extends keyof Events>(event: K, payload: Events[K]): void {
   mainWindow?.webContents.send(event, payload)
@@ -61,61 +66,66 @@ function watchWww(): void {
   }
 }
 
-/** Applies the macOS 26 Liquid Glass effect when available, else falls back to vibrancy. */
-function applyGlass(win: BrowserWindow): void {
-  if (process.platform !== 'darwin' || !getSettings().glass) return
+// ------------------------------------------------------------------ Window
+
+/** Loads the Liquid Glass module only on macOS 26+, where NSGlassEffectView exists. */
+function liquidGlass(): { addView: (h: Buffer, o?: object) => number } | null {
+  if (!isMac || !getSettings().glass || macMajor() < 26) return null
   try {
-    // Optional native module: only works on macOS 26+. Loaded lazily so older systems still run.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const liquidGlass = require('electron-liquid-glass')
-    win.webContents.once('did-finish-load', () => {
-      liquidGlass.addView(win.getNativeWindowHandle(), { cornerRadius: 16 })
-    })
+    return require('electron-liquid-glass')
   } catch {
-    win.setVibrancy('under-window')
+    return null
   }
 }
 
 function createWindow(): void {
-  const isMac = process.platform === 'darwin'
+  const glass = liquidGlass()
+  material = glass ? 'liquid-glass' : isMac && getSettings().glass ? 'vibrancy' : 'none'
 
   mainWindow = new BrowserWindow({
-    width: 1120,
-    height: 760,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1240,
+    height: 820,
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     title: 'Laramac',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
-    trafficLightPosition: { x: 18, y: 18 },
-    transparent: isMac,
-    vibrancy: isMac ? 'under-window' : undefined,
+    trafficLightPosition: { x: 20, y: 20 },
+    // Liquid Glass needs a transparent window and must not be combined with vibrancy.
+    transparent: material === 'liquid-glass',
+    vibrancy: material === 'vibrancy' ? 'sidebar' : undefined,
     visualEffectState: 'active',
-    backgroundColor: isMac ? '#00000000' : '#101014',
+    backgroundColor: material === 'none' ? '#0f1218' : '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      sandbox: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      spellcheck: false
     }
   })
 
-  applyGlass(mainWindow)
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
-
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url)
-    return { action: 'deny' }
-  })
-
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  if (glass && mainWindow) {
+    const win = mainWindow
+    win.setWindowButtonVisibility(true)
+    win.webContents.once('did-finish-load', () => {
+      try {
+        glass.addView(win.getNativeWindowHandle(), {})
+      } catch {
+        // Native effect unavailable: the CSS fallback still looks right.
+      }
+    })
   }
 
+  mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  if (RENDERER_URL) mainWindow.loadURL(RENDERER_URL)
+  else mainWindow.loadFile(RENDERER_FILE)
 }
 
 function showWindow(): void {
@@ -127,43 +137,135 @@ function showWindow(): void {
   }
 }
 
+function isAppUrl(url: string): boolean {
+  if (RENDERER_URL) return url.startsWith(RENDERER_URL)
+  return url === pathToFileURL(RENDERER_FILE).href || url.startsWith(pathToFileURL(RENDERER_FILE).href + '#')
+}
+
+/** Locks every web contents down: no navigation away, no popups, no webviews, no permissions. */
+function hardenWebContents(): void {
+  app.on('web-contents-created', (_e, contents) => {
+    contents.on('will-navigate', (event, url) => {
+      if (!isAppUrl(url)) event.preventDefault()
+    })
+    contents.on('will-attach-webview', (event) => event.preventDefault())
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isWebUrl(url)) void shell.openExternal(url)
+      return { action: 'deny' }
+    })
+  })
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'clipboard-sanitized-write')
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'clipboard-sanitized-write')
+}
+
 function createTray(): void {
   const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"><circle cx="9" cy="9" r="6" fill="black"/></svg>'
-  const icon = nativeImage.createFromDataURL(
-    'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64')
-  )
+    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"><path d="M5 3v12h9" stroke="black" stroke-width="2.4" fill="none"/></svg>'
+  const icon = nativeImage.createFromDataURL('data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64'))
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Laramac')
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Open Laramac', click: showWindow },
-      { type: 'separator' },
-      { label: 'Start All', click: () => void services.startAll() },
-      { label: 'Stop All', click: () => void services.stopAll() },
-      { type: 'separator' },
-      { label: 'Open www Folder', click: () => shell.openPath(ensureWww()) },
-      { type: 'separator' },
-      { label: 'Quit Laramac', role: 'quit' }
-    ])
-  )
+  const rebuild = (): void => {
+    const tld = getSettings().tld
+    tray?.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: 'Open Laramac', click: showWindow },
+        { type: 'separator' },
+        { label: 'Start All', click: () => void services.startAll() },
+        { label: 'Stop All', click: () => void services.stopAll() },
+        { type: 'separator' },
+        {
+          label: 'Open phpMyAdmin',
+          enabled: phpmyadminInstalled(),
+          click: () => void shell.openExternal(`http://phpmyadmin.${tld}`)
+        },
+        { label: 'Open Mail Inbox', click: () => void shell.openExternal('http://127.0.0.1:8025') },
+        { label: 'Open www Folder', click: () => void shell.openPath(ensureWww()) },
+        { type: 'separator' },
+        { label: 'Quit Laramac', role: 'quit' }
+      ])
+    )
+  }
+  rebuild()
+  tray.on('mouse-enter', rebuild)
+  jobs.on('finished', rebuild)
 }
 
-/** Registers a typed IPC handler; the channel map in shared/types keeps both sides in sync. */
+// ------------------------------------------------------------------ IPC
+
+/**
+ * Registers a typed IPC handler. Requests are refused unless they come from Laramac's own
+ * page in the main window, so other content can never drive the app.
+ */
 function handle<K extends ChannelName>(
   channel: K,
   fn: (...args: Channels[K]['args']) => Promise<Channels[K]['result']> | Channels[K]['result']
 ): void {
-  ipcMain.handle(channel, (_e, ...args) => fn(...(args as Channels[K]['args'])))
+  ipcMain.handle(channel, (e: IpcMainInvokeEvent, ...args) => {
+    const frame = e.senderFrame
+    if (!mainWindow || !frame || frame !== mainWindow.webContents.mainFrame || !isAppUrl(frame.url)) {
+      throw new Error('Request refused.')
+    }
+    return fn(...(args as Channels[K]['args']))
+  })
 }
 
+/** A site the renderer refers to must be one of the scanned sites. */
+function siteByName(name: unknown): SiteInfo {
+  const site = typeof name === 'string' ? scanSites().find((s) => s.name === name) : undefined
+  if (!site) throw new ValidationError('That site does not exist.')
+  return site
+}
+
+/** Paths from the renderer may only be site folders or the www folder itself. */
+function sitePath(path: unknown): string {
+  if (typeof path === 'string' && path === ensureWww()) return path
+  const site = typeof path === 'string' ? scanSites().find((s) => s.path === path) : undefined
+  if (!site) throw new ValidationError('That folder is not one of your sites.')
+  return site.path
+}
+
+function cleanSiteConfig(cfg: unknown): SiteConfig {
+  if (!cfg || typeof cfg !== 'object') throw new ValidationError('Site settings are not valid.')
+  const c = cfg as Record<string, unknown>
+  const out: SiteConfig = {}
+  for (const key of Object.keys(c)) {
+    if (key === 'php') out.php = assertMinor(c.php)
+    else if (key === 'secure') {
+      if (typeof c.secure !== 'boolean') throw new ValidationError('HTTPS must be on or off.')
+      out.secure = c.secure
+    } else throw new ValidationError(`Unknown site setting: ${key}`)
+  }
+  return out
+}
+
+function cleanMessages(messages: unknown): ChatMessage[] {
+  if (!Array.isArray(messages) || messages.length > 100) throw new ValidationError('Too many messages.')
+  return messages.map((m) => {
+    const role = (m as ChatMessage)?.role
+    const content = (m as ChatMessage)?.content
+    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || content.length > 20000) {
+      throw new ValidationError('A message is not valid.')
+    }
+    return { role, content }
+  })
+}
+
+const PROJECT_KINDS: ProjectKind[] = ['blank', 'wordpress', 'laravel']
+const TOOLS = ['phpmyadmin', 'adminer', 'cloudflared', 'ngrok', 'composer'] as const
+
 function registerIpc(): void {
+  handle('app:info', () => ({ material, platform: process.platform, version: app.getVersion() }))
+
   handle('settings:get', () => getSettings())
   handle('settings:set', (patch) => {
-    const before = getSettings().wwwPath
-    const next = setSettings(patch)
-    if (next.wwwPath !== before) watchWww()
+    const clean = sanitizeSettingsPatch(patch)
+    const before = getSettings()
+    const next = setSettings(clean)
+    if (next.wwwPath !== before.wwwPath) watchWww()
+    if (next.allowLan !== before.allowLan || next.httpPort !== before.httpPort) void services.reloadWeb()
     notifySitesChanged()
     return next
   })
@@ -181,36 +283,39 @@ function registerIpc(): void {
 
   handle('sites:list', () => listSites())
   handle('sites:set-config', async (name, cfg) => {
-    setSiteConfig(name, cfg)
-    if (cfg.secure) {
-      const site = scanSites().find((s) => s.name === name)
-      if (site) await ensureSiteCert(site.domain)
-    }
+    const site = siteByName(name)
+    const clean = cleanSiteConfig(cfg)
+    if (clean.php && !installedMinors().includes(clean.php)) throw new ValidationError(`PHP ${clean.php} is not installed.`)
+    if (clean.secure) await ensureSiteCert(site.domain)
+    setSiteConfig(site.name, clean)
     notifySitesChanged()
     return listSites()
   })
   handle('sites:create', async (kind, name) => {
+    if (!PROJECT_KINDS.includes(kind)) throw new ValidationError('Unknown project type.')
     await createProject(kind, name)
+    activity.push('success', `Created ${name}`, `New ${kind === 'blank' ? 'PHP' : kind} project in your www folder.`)
     notifySitesChanged()
     return listSites()
   })
   handle('sites:open-folder', async (path) => {
-    await shell.openPath(path)
+    await shell.openPath(sitePath(path))
   })
   handle('sites:open-url', async (url) => {
-    if (/^https?:\/\//.test(url)) await shell.openExternal(url)
+    if (!isWebUrl(url)) throw new ValidationError('Only web addresses can be opened.')
+    await shell.openExternal(url)
   })
-  handle('sites:open-editor', (path) => openInEditor(getSettings().editor, path))
-  handle('sites:open-claude', (path) => openClaudeCode(path))
+  handle('sites:open-editor', (path) => openInEditor(getSettings().editor, sitePath(path)))
+  handle('sites:open-claude', (path) => openClaudeCode(sitePath(path)))
   handle('sites:share', async (name) => {
-    const site = scanSites().find((s) => s.name === name)
-    if (!site) throw new Error('Site not found.')
+    const site = siteByName(name)
     const url = await shareSite(site)
+    activity.push('success', `${site.name} is public`, url)
     notifySitesChanged()
     return url
   })
   handle('sites:unshare', async (name) => {
-    await unshareSite(name)
+    await unshareSite(siteByName(name).name)
     notifySitesChanged()
   })
   handle('www:reveal', async () => {
@@ -219,19 +324,23 @@ function registerIpc(): void {
 
   handle('php:list', () => listVersions())
   handle('php:install', async (minor) => {
-    await installMinor(minor)
+    await installMinor(assertMinor(minor))
     refreshShims()
     notifySitesChanged()
     return listVersions()
   })
   handle('php:remove', async (minor) => {
-    await removeMinor(minor)
+    const m = assertMinor(minor)
+    if (!installedMinors().includes(m)) throw new ValidationError(`PHP ${m} is not installed.`)
+    await removeMinor(m)
     refreshShims()
     notifySitesChanged()
     return listVersions()
   })
   handle('php:set-default', async (minor) => {
-    if (installedMinors().includes(minor)) setSettings({ defaultPhp: minor })
+    const m = assertMinor(minor)
+    if (!installedMinors().includes(m)) throw new ValidationError(`PHP ${m} is not installed.`)
+    setSettings({ defaultPhp: m })
     refreshShims()
     notifySitesChanged()
     return listVersions()
@@ -241,13 +350,16 @@ function registerIpc(): void {
   handle('tools:setup-dns', async () => {
     await installResolver(getSettings().tld)
     await startDnsServer(() => getSettings().tld)
+    activity.push('success', `.${getSettings().tld} domains are on`)
     return toolsStatus()
   })
   handle('tools:trust-ca', async () => {
     await trustCa()
+    activity.push('success', 'Local HTTPS is trusted')
     return toolsStatus()
   })
   handle('tools:install', async (tool) => {
+    if (!TOOLS.includes(tool)) throw new ValidationError('Unknown tool.')
     if (tool === 'phpmyadmin') await installPhpMyAdmin()
     else if (tool === 'adminer') await installAdminer()
     else if (tool === 'cloudflared') await installCloudflared()
@@ -258,28 +370,48 @@ function registerIpc(): void {
   })
   handle('tools:install-claude', () => installClaudeCode())
   handle('tools:open-external', async (url) => {
-    if (/^https?:\/\//.test(url)) await shell.openExternal(url)
+    if (!isWebUrl(url)) throw new ValidationError('Only web addresses can be opened.')
+    await shell.openExternal(url)
   })
 
   handle('ai:detect', () => detectLlms())
-  handle('ai:chat', (messages) => assistantChat(messages))
+  handle('ai:chat', (messages) => assistantChat(cleanMessages(messages)))
+
+  handle('activity:list', () => activity.list())
+  handle('activity:clear', () => activity.clear())
 
   services.on('changed', (list) => send('services:changed', list))
+  services.on('failed', (name: string, message: string) => activity.push('error', `${name} could not start`, message))
   jobs.on('changed', (list) => send('jobs:changed', list))
+  jobs.on('finished', (job: { status: string; label: string; error?: string }) => {
+    if (job.status === 'done') activity.push('success', job.label.replace(/^Installing/, 'Installed'))
+    else activity.push('error', `${job.label} failed`, job.error)
+  })
+  activity.on('changed', (items) => send('activity:changed', items))
+  processEvents.on('crashed', (name: string, code: number | null, logFile: string) => {
+    activity.push('error', `${name} stopped unexpectedly`, tailFile(logFile, 3) || `Exit code ${code}`)
+    services.refresh()
+  })
 }
 
-app.whenReady().then(async () => {
+// ------------------------------------------------------------------ Lifecycle
+
+app.whenReady().then(() => {
   ensureDirs()
   ensureWww()
   refreshShims()
+  hardenWebContents()
   registerIpc()
   watchWww()
   createWindow()
   createTray()
 
-  // The built-in DNS server resolves *.test to this Mac. It listens on an unprivileged port.
+  activity.isFocused = () => BrowserWindow.getFocusedWindow() !== null
+  activity.onNotificationClick = showWindow
+
+  // The built-in DNS server resolves *.test to this Mac. It listens on 127.0.0.1 only.
   startDnsServer(() => getSettings().tld).catch((err) =>
-    console.error(`DNS server could not start on port ${DNS_PORT}:`, err)
+    activity.push('error', 'Domain lookups could not start', `Port ${DNS_PORT} is busy: ${err instanceof Error ? err.message : err}`)
   )
 
   app.on('activate', showWindow)
@@ -287,7 +419,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // Keep running in the menu bar on macOS, like Laragon stays in the tray.
-  if (process.platform !== 'darwin') app.quit()
+  if (!isMac) app.quit()
 })
 
 app.on('before-quit', (event) => {

@@ -178,6 +178,23 @@ describe.skipIf(!canRun)('real Nginx + PHP-FPM', () => {
     expect(verify).toContain('OK')
   })
 
+  it('refuses requests from other machines on the network', async () => {
+    const { networkInterfaces } = await import('os')
+    const lan = Object.values(networkInterfaces())
+      .flat()
+      .find((i) => i && i.family === 'IPv4' && !i.internal)?.address
+    if (!lan) return
+    const res = await new Promise<number>((resolve, reject) => {
+      const req = httpRequest({ host: lan, port: HTTP, path: '/', headers: { Host: 'blog.test' } }, (r) => {
+        r.resume()
+        resolve(r.statusCode ?? 0)
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    expect(res).toBe(403)
+  })
+
   it('blocks hidden files like .env', async () => {
     const res = await get(HTTP, 'blog.test', '/.env')
     expect(res.status).toBe(403)

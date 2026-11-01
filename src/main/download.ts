@@ -1,4 +1,5 @@
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from 'fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from 'fs'
+import { createHash } from 'crypto'
 import { dirname } from 'path'
 import { execFile } from 'child_process'
 import { Readable } from 'stream'
@@ -64,6 +65,38 @@ export async function urlExists(url: string): Promise<boolean> {
     return ok && !(res.headers.get('content-type') ?? '').includes('text/html')
   } catch {
     return false
+  }
+}
+
+export function sha256File(path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256')
+    createReadStream(path)
+      .on('data', (c) => hash.update(c))
+      .on('error', reject)
+      .on('end', () => resolve(hash.digest('hex')))
+  })
+}
+
+/** Reads the first SHA-256 hex digest from a checksum file's text. */
+export function parseSha256(text: string): string | null {
+  const m = /\b([a-f0-9]{64})\b/i.exec(text)
+  return m ? m[1].toLowerCase() : null
+}
+
+/**
+ * Checks a download against the checksum its publisher serves next to it.
+ * Deletes the file and throws when they differ, so a tampered download is never used.
+ */
+export async function verifySha256(file: string, checksumUrl: string): Promise<void> {
+  const res = await fetch(checksumUrl, { redirect: 'follow' })
+  if (!res.ok) throw new Error(`Could not fetch the checksum for ${file} (${res.status}).`)
+  const expected = parseSha256(await res.text())
+  if (!expected) throw new Error('The published checksum could not be read.')
+  const actual = await sha256File(file)
+  if (actual !== expected) {
+    rmSync(file, { force: true })
+    throw new Error('The download did not match its published checksum and was deleted.')
   }
 }
 

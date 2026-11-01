@@ -3,6 +3,9 @@ import { createWriteStream, existsSync, readFileSync } from 'fs'
 import { connect } from 'net'
 import { EventEmitter } from 'events'
 
+/** Every managed process reports unexpected exits here, so the app can tell the user. */
+export const processEvents = new EventEmitter()
+
 export function waitForPort(port: number, timeoutMs: number, host = '127.0.0.1'): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   return new Promise((resolve) => {
@@ -81,7 +84,10 @@ export class ManagedProcess extends EventEmitter {
         log.end()
         if (this.child === child) this.child = null
         resolve(code)
-        if (!this.stopping) this.emit('crashed', code)
+        if (!this.stopping) {
+          this.emit('crashed', code)
+          processEvents.emit('crashed', this.name, code, spec.logFile)
+        }
       })
       child.once('error', () => resolve(-1))
     })

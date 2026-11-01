@@ -16,12 +16,28 @@ export default function Settings(): React.JSX.Element {
       </h2>
       <div className="panel">
         <TextRow label="Projects folder" hint="Every folder inside becomes a site." value={settings.wwwPath} wide onSave={(v) => updateSettings({ wwwPath: v })} />
-        <TextRow
-          label="Domain suffix"
-          hint={tools?.dnsReady ? 'Sites open at name.suffix.' : 'Changing it means turning on domains again from the Dashboard.'}
-          value={settings.tld}
-          onSave={(v) => updateSettings({ tld: v.replace(/[^a-z0-9]/gi, '').toLowerCase() || 'test' })}
-        />
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Domain suffix</div>
+            <div className="row-sub">
+              {tools?.dnsReady ? 'Sites open at name.suffix.' : 'After changing it, turn on addresses again from the Overview.'} Only reserved names are offered, so real websites are never affected.
+            </div>
+          </div>
+          <select className="input" aria-label="Domain suffix" value={settings.tld} onChange={(e) => updateSettings({ tld: e.target.value })}>
+            {['test', 'internal', 'lan', 'example'].map((t) => (
+              <option key={t} value={t}>
+                .{t}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Open to other devices</div>
+            <div className="row-sub">Lets phones and computers on your network open your sites. Off keeps everything on this Mac.</div>
+          </div>
+          <Switch on={settings.allowLan} label="Open to other devices" onChange={() => updateSettings({ allowLan: !settings.allowLan })} />
+        </div>
       </div>
 
       <h2 className="section-title">Ports</h2>
@@ -65,14 +81,21 @@ export default function Settings(): React.JSX.Element {
         />
       </div>
 
-      <h2 className="section-title">Appearance</h2>
+      <h2 className="section-title">Appearance and alerts</h2>
       <div className="panel">
         <div className="row row-set">
           <div className="row-main">
-            <div className="row-title">Translucent sidebar</div>
-            <div className="row-sub">Uses macOS Liquid Glass where available. Restart Laramac to apply.</div>
+            <div className="row-title">Notifications</div>
+            <div className="row-sub">Tell me when installs finish, links are shared, or a service stops on its own.</div>
           </div>
-          <Switch on={settings.glass} label="Translucent sidebar" onChange={() => updateSettings({ glass: !settings.glass })} />
+          <Switch on={settings.notifications} label="Notifications" onChange={() => updateSettings({ notifications: !settings.notifications })} />
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Liquid Glass</div>
+            <div className="row-sub">Native glass on macOS 26, translucency on earlier versions. Restart Laramac to apply.</div>
+          </div>
+          <Switch on={settings.glass} label="Liquid Glass" onChange={() => updateSettings({ glass: !settings.glass })} />
         </div>
       </div>
     </>
