@@ -487,6 +487,8 @@ export interface PhpIniOptions {
   timezone?: string
   /** MySQL's socket, so 'localhost' in a project's config reaches Laramac's MySQL. */
   mysqlSocket?: string
+  /** Full path of xdebug.so, when Xdebug is turned on. */
+  xdebug?: string | null
 }
 
 /**
@@ -574,6 +576,21 @@ export function generatePhpIni(o: PhpIniOptions): string {
   }
   if (o.sendmail) lines.push('', '[mail function]', `sendmail_path = "${o.sendmail}"`, 'mail.add_x_header = On')
 
+  if (o.xdebug) {
+    lines.push(
+      '',
+      '[xdebug]',
+      `zend_extension = "${o.xdebug}"`,
+      // Step debugging only; profiling and tracing stay off so pages stay fast.
+      'xdebug.mode = debug',
+      // Every request tries to reach your editor; with nothing listening it carries on at once.
+      'xdebug.start_with_request = yes',
+      'xdebug.client_host = 127.0.0.1',
+      'xdebug.client_port = 9003',
+      // No warning in the log on every request when the editor is not listening.
+      'xdebug.log_level = 0'
+    )
+  }
   if (o.custom && o.custom.trim()) {
     lines.push('', '; ---- Your settings (php.custom.ini) ----', o.custom.trim())
   }

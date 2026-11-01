@@ -111,6 +111,8 @@ export interface PhpBuild {
   /** SHA-256 list covering both archives, when the source publishes one. */
   sumsUrl: string | null
   source: 'laramac' | 'static-php'
+  /** xdebug.so for this exact build, when it was built. */
+  xdebugUrl?: string
 }
 
 interface ReleaseAsset {
@@ -133,7 +135,8 @@ export function parseLaramacPhpAssets(assets: ReleaseAsset[], arch = phpArch()):
     if (!cli || !sums) continue
     const minor = minorOf(v)
     if (out[minor] && compareVersions(out[minor].version, v) >= 0) continue
-    out[minor] = { version: v, cliUrl: cli, fpmUrl: a.browser_download_url, sumsUrl: sums, source: 'laramac' }
+    const xdebug = byName.get(`php-${v}-xdebug-macos-${arch}.tar.gz`)
+    out[minor] = { version: v, cliUrl: cli, fpmUrl: a.browser_download_url, sumsUrl: sums, source: 'laramac', ...(xdebug ? { xdebugUrl: xdebug } : {}) }
   }
   return out
 }

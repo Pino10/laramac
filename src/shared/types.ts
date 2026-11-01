@@ -111,6 +111,10 @@ export interface PhpVersionInfo {
   updateAvailable: boolean
   /** Compiled-in extensions of the installed build. */
   extensions: string[]
+  /** xdebug.so is installed beside this version. */
+  xdebug: boolean
+  /** A build with Xdebug can be downloaded for this version. */
+  xdebugAvailable: boolean
 }
 
 export interface JobInfo {
@@ -465,6 +469,8 @@ export interface AppSettings {
   tourDone: boolean
   /** Send dump() and dd() to the Dumps window instead of the page. */
   dumps: boolean
+  /** Xdebug loaded into PHP (step debugging). Off by default: it slows PHP down. */
+  xdebug: boolean
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
@@ -697,6 +703,18 @@ export interface ChatMessage {
 export type ProjectKind = 'blank' | 'wordpress' | 'laravel'
 
 /** What Laramac found inside a file or folder chosen for import. */
+export interface ImportSetupStep {
+  id: 'env' | 'composer' | 'node' | 'build' | 'python' | 'go' | 'dotnet' | 'migrate'
+  label: string
+  /** The command, as shown to the person. */
+  detail: string
+  command: string[]
+  /** A second command run right after the first. */
+  then?: string[]
+  /** Runs code from the project (install scripts, migrations). */
+  runsCode: boolean
+}
+
 export interface ImportPlan {
   id: string
   sourceName: string
@@ -711,6 +729,14 @@ export interface ImportPlan {
   configFile: 'wp-config.php' | '.env' | null
   hasVendor: boolean
   warnings: string[]
+  /** What it takes to get the project running, for the person to agree to. */
+  setup: ImportSetupStep[]
+  /** The dev server command, for projects that run their own server. */
+  dev: string | null
+  /** Framework, when it can be told: Next.js, Vue, Django... */
+  framework: string | null
+  /** Where it came from: a file or folder on this Mac, or a Git address. */
+  from: 'file' | 'git'
 }
 
 export interface ImportAnswers {
@@ -720,7 +746,10 @@ export interface ImportAnswers {
   database: string
   updateConfig: boolean
   replaceUrl: boolean
-  composerInstall: boolean
+  /** Ids of the setup steps to run. */
+  setup: string[]
+  /** Set up the dev server and start it. */
+  startDev: boolean
 }
 
 export interface ImportResult {
@@ -728,6 +757,10 @@ export interface ImportResult {
   database: string | null
   skipped: number
   sites: SiteInfo[]
+  /** Setup steps that did not finish, with the reason. */
+  failed: { label: string; error: string }[]
+  /** The address to open: the dev server when there is one. */
+  url: string | null
 }
 
 /** Every request the renderer can make to the main process. */
@@ -805,6 +838,8 @@ export interface Channels {
   'sites:doctor': { args: [string, ChatMessage[]]; result: { reply: string; sources: SiteLogSource[] } }
   'sites:open-log': { args: [string, string]; result: void }
   'import:choose': { args: []; result: ImportPlan | null }
+  'php:xdebug': { args: [boolean]; result: PhpVersionInfo[] }
+  'import:git': { args: [string, string]; result: ImportPlan }
   'import:run': { args: [string, ImportAnswers]; result: ImportResult }
   'import:cancel': { args: [string]; result: void }
   'activity:list': { args: []; result: ActivityItem[] }

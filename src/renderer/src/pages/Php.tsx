@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { ArrowUpCircle, FileCog, Puzzle } from 'lucide-react'
+import { ArrowUpCircle, Bug, FileCog, Puzzle } from 'lucide-react'
 import type { PhpVersionInfo } from '@shared/types'
 import { useApp } from '../store'
-import { PageHead } from '../ui'
+import { PageHead, Switch } from '../ui'
 
 export default function Php(): React.JSX.Element {
-  const { php, settings, act, busy, setPhp, jobs, sites, setPage } = useApp()
+  const { php, settings, act, busy, setPhp, jobs, sites, setPage, updateSettings } = useApp()
   const api = window.laramac
   const [extsFor, setExtsFor] = useState<PhpVersionInfo | null>(null)
   const installing = jobs.some((j) => j.status === 'running' && j.label.includes('PHP'))
@@ -54,11 +54,48 @@ export default function Php(): React.JSX.Element {
         </div>
       ) : (
         <div className="php-hero glass">
-          <div className="php-num dim">—</div>
+          <div className="php-num dim">·</div>
           <div>
             <div className="card-title">No PHP yet</div>
             <div className="dim">Install the newest version below to get started.</div>
           </div>
+        </div>
+      )}
+
+      {def && (
+        <div className={`xdebug-card glass${settings?.xdebug ? ' on' : ''}`}>
+          <span className="xdebug-icon">
+            <Bug size={18} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="card-title">
+              Xdebug {settings?.xdebug ? <span className="tag tag-accent">On</span> : <span className="tag">Off</span>}
+            </div>
+            <div className="dim">
+              {settings?.xdebug
+                ? 'PHP pauses at your breakpoints. In VS Code or Cursor, install “PHP Debug” and press Run › Start Debugging (Listen for Xdebug). PhpStorm: click the phone icon. Turn it off when you are done: it slows PHP down.'
+                : 'Step through your code line by line in VS Code, Cursor or PhpStorm. It stays off until you need it, because it makes PHP slower.'}
+            </div>
+            {!settings?.xdebug && php.some((p) => p.installed && !p.xdebug) && (
+              <div className="hint" style={{ marginTop: 4 }}>
+                {php.some((p) => p.installed && !p.xdebug && p.xdebugAvailable)
+                  ? 'Turning it on updates your PHP to a build that includes Xdebug.'
+                  : 'Xdebug arrives with the next PHP build, usually within a day.'}
+              </div>
+            )}
+          </div>
+          <Switch
+            on={!!settings?.xdebug}
+            label="Xdebug"
+            disabled={busy.has('xdebug') || installing}
+            onChange={async () => {
+              const r = await act('xdebug', () => api.invoke('php:xdebug', !settings?.xdebug))
+              if (r) {
+                setPhp(r)
+                await updateSettings({})
+              }
+            }}
+          />
         </div>
       )}
 

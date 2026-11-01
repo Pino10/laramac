@@ -1,6 +1,9 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'fs'
-import { cancelImport, importSql, inspect, runImport } from './importer'
+import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
+import { runtimesFor } from './importsetup'
+import { expandCommand } from './starterrun'
+import { ensureRuntimes } from './runtimes'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
 import { cleanRemotePath, deploy } from './deploy'
@@ -41,10 +44,10 @@ import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
 import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
 import * as ssh from './ssh'
-import { customIniPath, ensureCustomIni } from './php'
+import { customIniPath, ensureCustomIni, ensureXdebug, xdebugPath } from './php'
 import { safeStorage } from 'electron'
 import type { ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
-import { activeMysql, mysqlClientPath } from './svc/mysql'
+import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
 import type { ImportAnswers } from '../shared/types'
@@ -422,7 +425,8 @@ function cleanAnswers(v: unknown): ImportAnswers {
     database: str('database'),
     updateConfig: flag('updateConfig'),
     replaceUrl: flag('replaceUrl'),
-    composerInstall: flag('composerInstall')
+    setup: Array.isArray(a.setup) ? a.setup.filter((x): x is string => typeof x === 'string').slice(0, 20) : [],
+    startDev: flag('startDev')
   }
 }
 
@@ -645,6 +649,17 @@ function registerIpc(): void {
       .map((s) => s.id as 'mysql' | 'mariadb')
     return inspect(res.filePaths[0], engines)
   })
+  handle('import:git', async (url, token) => {
+    const engines = services
+      .list()
+      .filter((s) => (s.id === 'mysql' || s.id === 'mariadb') && s.status !== 'not-installed')
+      .map((s) => s.id as 'mysql' | 'mariadb')
+    try {
+      return await inspectGit(String(url ?? ''), String(token ?? ''), engines)
+    } catch (err) {
+      throw new ValidationError((err as Error).message)
+    }
+  })
 
   handle('import:run', async (id, answers) => {
     const a = cleanAnswers(answers)
@@ -661,24 +676,41 @@ function registerIpc(): void {
           const v = activeMysql()
           return v ? mysqlClientPath(v) : null
         },
-        composerInstall: async (dir, onLine) => {
-          const minor = defaultMinor()
-          if (!minor) throw new Error('Install PHP first.')
-          if (!existsSync(composerPhar())) await installComposer()
-          await runStreaming(
-            phpBinary(minor),
-            ['-c', phpIniPath(minor), composerPhar(), 'install', '--no-interaction', '--prefer-dist'],
-            dir,
-            { COMPOSER_HOME: join(app.getPath('home'), '.laramac', 'composer') },
-            onLine
-          )
+        dbPassword: (engine) => dbPassword(engine),
+        createDb: async (name) => {
+          if (!services.list().some((x) => x.id === 'mysql' && x.status !== 'not-installed')) return false
+          await services.start('mysql')
+          return createMysqlDb(name)
+        },
+        runStep: async (argv, dir, onLine) => {
+          // Runtimes the command needs (Node.js, Python, Go...) are installed first, like Starters does.
+          const needs = runtimesFor([{ id: 'node', label: '', detail: '', command: argv, runsCode: true }], null).filter((r) => r !== 'php')
+          if (needs.length) await ensureRuntimes(needs)
+          let php: { bin: string; ini: string; composer: string } | null = null
+          if (argv[0] === 'php' || argv[0] === 'composer') {
+            const minor = defaultMinor()
+            if (!minor) throw new Error('Install PHP on the PHP page first.')
+            if (!existsSync(composerPhar())) await installComposer()
+            php = { bin: phpBinary(minor), ini: phpIniPath(minor), composer: composerPhar() }
+          }
+          await runQuiet(expandCommand(argv, php), dir, { ...runtimeEnv(), COMPOSER_HOME: join(app.getPath('home'), '.laramac', 'composer') }, onLine)
         }
       })
     )
     const parts = [result.site ? `Site ${result.site}` : null, result.database ? `database ${result.database}` : null].filter(Boolean)
     activity.push('success', `Imported ${a.name}`, `${parts.join(' and ')} ready.${result.skipped ? ` ${result.skipped} lines that change databases or users were skipped.` : ''}`)
+    for (const f of result.failed) activity.push('error', `${a.name}: ${f.label} did not finish`, f.error)
+    let url: string | null = result.site ? siteByName(result.site).url : null
+    if (result.site && result.dev) {
+      const port = await pickDevPort()
+      setSiteConfig(result.site, { dev: { ...result.dev, port } })
+      const site = siteByName(result.site)
+      await startDev(site, { ...result.dev, port }).catch((err) => activity.push('error', `${a.name} dev server did not start`, (err as Error).message.slice(0, 300)))
+      url = site.url
+    }
     notifySitesChanged()
-    return { ...result, sites: listSites() }
+    const { dev: _dev, ...rest } = result
+    return { ...rest, url, sites: listSites() }
   })
 
   handle('import:cancel', (id) => cancelImport(String(id)))
@@ -952,6 +984,20 @@ function registerIpc(): void {
     setSettings({ dumps: !!on })
     await restartPhp()
     return { enabled: !!on, running: dumps.dumpServerRunning() }
+  })
+  handle('php:xdebug', async (on) => {
+    if (on) {
+      // Versions installed before Xdebug was available get it by updating to the newest build.
+      const missing = installedMinors().filter((m) => !existsSync(xdebugPath(m)))
+      for (const m of missing) await ensureXdebug(m).catch((err) => activity.push('error', `Xdebug for PHP ${m}`, (err as Error).message.slice(0, 200)))
+      if (!installedMinors().some((m) => existsSync(xdebugPath(m)))) {
+        throw new ValidationError('Xdebug is not ready for your PHP versions yet. Laramac’s PHP builds add it within a day; try again tomorrow.')
+      }
+    }
+    setSettings({ xdebug: !!on })
+    await restartPhp()
+    activity.push('info', on ? 'Xdebug is on' : 'Xdebug is off', on ? 'PHP pauses at your breakpoints when your editor listens on port 9003.' : 'PHP runs at full speed again.')
+    return listVersions()
   })
   handle('dumps:open-file', async (file, line) => {
     // Only files inside a site may be opened from a dump.

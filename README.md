@@ -110,7 +110,7 @@ Every folder in your projects folder is a site. Laramac recognises **Laravel, Wo
 
 **New projects.** Blank PHP, WordPress (with its database created and `wp-config.php` filled in) or Laravel (through Composer, with `.env` pointed at MySQL and Mailpit).
 
-**Import.** Bring in a site from Laragon, a server backup or a teammate: a `.zip`, `.tar.gz`, folder or `.sql` dump. Laramac finds the project and its database inside, asks a few questions, copies the files, loads the database and updates `wp-config.php` or `.env`.
+**Import.** Bring in any project: Laravel, WordPress, React, Vue, Next.js, Django, Go, .NET and more, from a `.zip`, `.tar.gz`, a folder, a `.sql` dump, or straight from a Git address (GitHub, Azure DevOps, GitLab, Bitbucket). Laramac works out what it is and lists what it takes to run it: packages to install (Composer, npm, pnpm, yarn, bun, Python, Go, .NET), a `.env` with a new app key, the database and its tables, and the dev server. You tick what to run, and the site opens when it is done, the same as a new project from Starters.
 
 #### Snapshots
 
@@ -217,6 +217,8 @@ The bug button next to the bell opens **Dumps**. Turn it on and `dump()` and `dd
 <img src="docs/screenshots/php.png" alt="PHP versions" width="820">
 
 Install any version from 8.0 to 8.5 and keep several side by side. Laramac follows php.net: a daily build turns each new release into a ready-to-run build for Apple Silicon and Intel, and the app offers it as an update. Every build has the common extensions compiled in (such as mysqli, pdo_mysql, intl, gd, zip and opcache; **Extensions** lists every one). Laramac writes a `php.ini` tuned for local development and for that version, and **Edit php.ini** gives you a file of your own settings that always wins. Composer is included.
+
+**Xdebug.** Turn it on with one switch to step through your code in VS Code, Cursor or PhpStorm (port 9003). It stays off until you need it, since it slows PHP down; while off, it is not loaded at all.
 
 ### Databases
 
@@ -448,6 +450,8 @@ npm run dist       # build a DMG (macOS)
 | `src/renderer` | The React interface. One file per page in `src/pages`. |
 | `src/shared` | Types shared by both, including the typed IPC channel map. |
 | `tests` | Unit and end-to-end tests. |
+
+For releases, PHP builds and fixing things, see [MAINTAINING.md](MAINTAINING.md).
 | `.github/workflows` | Builds and signs the DMGs, and builds every new PHP release for macOS. |
 
 ## Contributing

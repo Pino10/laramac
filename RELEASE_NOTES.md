@@ -1,3 +1,19 @@
+## New in 0.17
+
+### Import any project
+- **Every kind of project:** Laravel, WordPress, React, Vue, Next.js, Nuxt, Svelte, Angular, Django, FastAPI, Flask, Go, .NET and more. Laramac shows what it found ("Next.js project") and what it takes to run it.
+- **Get it running:** install packages (Composer, npm, pnpm, yarn, bun, Python, Go, .NET), create `.env` from `.env.example` with a new app key, build the front end, create the database tables, and start the dev server. You tick what runs; the site opens when it is done, like a new project from Starters.
+- **Clone from Git:** paste a GitHub, Azure DevOps, GitLab or Bitbucket address (and a token for private ones, used once and not saved). The full history comes along, so you can keep working in it.
+- If a step does not finish, the import still completes and tells you which step and why.
+
+### Xdebug
+- One switch on the PHP page. While it is off, Xdebug is not loaded at all, so PHP runs at full speed. Turn it on to step through your code in VS Code, Cursor or PhpStorm.
+- Laramac's daily PHP builds now include Xdebug as a separate file. Versions you already have get it the first time you switch Xdebug on.
+
+### For the owner
+- **MAINTAINING.md:** how releases, PHP builds and fixes work, without needing any chat. **CLAUDE.md** does the same for AI assistants.
+- Imports now use your MySQL root password, if you set one.
+
 ## New in 0.16.1
 
 - **Gallery menu:** the ⋯ menu on a gallery card now opens above the cards instead of hiding inside.

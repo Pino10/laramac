@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, Check, Database, FolderOpen, Globe, Upload } from 'lucide-react'
+import { CircleAlert, Check, Database, FolderOpen, GitBranch, Globe, Play, Upload, Wrench } from 'lucide-react'
 import type { ImportAnswers, ImportPlan, ImportResult } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram } from '../ui'
@@ -32,6 +32,8 @@ export default function ImportWizard(): React.JSX.Element | null {
   const [plan, setPlan] = useState<ImportPlan | null>(null)
   const [answers, setAnswers] = useState<ImportAnswers | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [gitUrl, setGitUrl] = useState('')
+  const [gitToken, setGitToken] = useState('')
   const tld = settings?.tld ?? 'test'
 
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function ImportWizard(): React.JSX.Element | null {
       setPlan(null)
       setAnswers(null)
       setResult(null)
+      setGitToken('')
     }
   }, [importOpen])
 
@@ -51,9 +54,7 @@ export default function ImportWizard(): React.JSX.Element | null {
     setImportOpen(false)
   }
 
-  const choose = async (): Promise<void> => {
-    const p = await act('import-choose', () => api.invoke('import:choose'))
-    if (!p) return
+  const begin = (p: ImportPlan): void => {
     setPlan(p)
     setAnswers({
       name: p.suggestedName,
@@ -62,9 +63,19 @@ export default function ImportWizard(): React.JSX.Element | null {
       database: p.suggestedDb,
       updateConfig: !!p.configFile,
       replaceUrl: true,
-      composerInstall: false
+      setup: p.setup.filter((x) => !(x.id === 'migrate' && p.sqlFiles.length > 0)).map((x) => x.id),
+      startDev: !!p.dev
     })
     setStep('review')
+  }
+  const choose = async (): Promise<void> => {
+    const p = await act('import-choose', () => api.invoke('import:choose'))
+    if (p) begin(p)
+  }
+  const clone = async (): Promise<void> => {
+    const p = await act('import-git', () => api.invoke('import:git', gitUrl.trim(), gitToken))
+    setGitToken('')
+    if (p) begin(p)
   }
 
   const run = async (): Promise<void> => {
@@ -96,16 +107,46 @@ export default function ImportWizard(): React.JSX.Element | null {
               Import a project
             </h2>
             <p className="page-desc" style={{ marginBottom: 18 }}>
-              Bring a site in from Laragon, a server backup or a teammate. Files go to your projects folder, the database goes
-              into MySQL or MariaDB, and the config is pointed at both.
+              Any project: Laravel, WordPress, React, Vue, Next.js, Django, Go, .NET and more. Laramac finds what it is, installs
+              what it needs, sets up the database and dev server, and opens it.
             </p>
-            <button className="dropzone" onClick={choose} disabled={busy.has('import-choose')}>
+            <button className="dropzone" onClick={choose} disabled={busy.has('import-choose') || busy.has('import-git')}>
               <span className="dropzone-icon">
                 <Upload size={20} />
               </span>
               <strong style={{ fontSize: 14 }}>{busy.has('import-choose') ? 'Reading what you chose' : 'Choose a file or folder'}</strong>
               <span className="hint">.zip, .tar.gz, .tgz, a project folder, or a .sql / .sql.gz dump</span>
             </button>
+            <div className="or-line">
+              <span>or clone it from Git</span>
+            </div>
+            <div className="git-import">
+              <GitBranch size={15} style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
+              <input
+                className="input mono"
+                placeholder="https://github.com/you/project"
+                value={gitUrl}
+                onChange={(e) => setGitUrl(e.target.value)}
+                aria-label="Repository address"
+                onKeyDown={(e) => e.key === 'Enter' && /^https:\/\/\S+$/.test(gitUrl.trim()) && void clone()}
+              />
+              <input
+                className="input mono"
+                type="password"
+                autoComplete="off"
+                placeholder="Token, if private"
+                value={gitToken}
+                onChange={(e) => setGitToken(e.target.value)}
+                aria-label="Access token"
+                style={{ width: 150 }}
+              />
+              <button className="btn" disabled={!/^https:\/\/\S+$/.test(gitUrl.trim()) || busy.has('import-git')} onClick={clone}>
+                {busy.has('import-git') ? 'Cloning…' : 'Clone'}
+              </button>
+            </div>
+            <div className="hint" style={{ marginTop: 6 }}>
+              GitHub, Azure DevOps, GitLab or Bitbucket. The token is used once and not saved.
+            </div>
             <div className="hint" style={{ marginTop: 14 }}>
               Moving from Laragon? Put your project folder from <code>C:\laragon\www</code> and its .sql export (from HeidiSQL or
               phpMyAdmin) into one zip. Laramac finds both.
@@ -129,10 +170,9 @@ export default function ImportWizard(): React.JSX.Element | null {
                 <div className="found-row">
                   {plan.kind ? <Monogram id={plan.kind} /> : <FolderOpen size={16} />}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{kindName[plan.kind ?? 'php'] ?? 'Website'} project</div>
+                    <div style={{ fontWeight: 500 }}>{plan.framework ?? kindName[plan.kind ?? 'php'] ?? 'Website'} project</div>
                     <div className="hint">
-                      {plan.configFile ? `Settings in ${plan.configFile}` : 'No config file found'}
-                      {!plan.hasVendor && ' · vendor folder missing'}
+                      {plan.from === 'git' ? 'Cloned with its full history' : plan.configFile ? `Settings in ${plan.configFile}` : 'No config file found'}
                     </div>
                   </div>
                 </div>
@@ -254,21 +294,41 @@ export default function ImportWizard(): React.JSX.Element | null {
                 </span>
               </label>
             )}
-            {plan.hasProject && !plan.hasVendor && (
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={answers.composerInstall}
-                  disabled={!tools?.composer && !settings}
-                  onChange={(e) => set({ composerInstall: e.target.checked })}
-                />
-                <span>
-                  Install Composer packages
-                  <span className="hint" style={{ display: 'block' }}>
-                    Runs the project's own Composer scripts. Only turn this on for code you trust.
-                  </span>
-                </span>
-              </label>
+            {plan.hasProject && (plan.setup.length > 0 || plan.dev) && (
+              <div className="setup-list">
+                <div className="setup-head">
+                  <Wrench size={13} /> Get it running
+                </div>
+                {plan.setup.map((st) => (
+                  <label key={st.id} className="check">
+                    <input
+                      type="checkbox"
+                      checked={answers.setup.includes(st.id)}
+                      onChange={(e) => set({ setup: e.target.checked ? [...answers.setup, st.id] : answers.setup.filter((x) => x !== st.id) })}
+                    />
+                    <span>
+                      {st.label}
+                      <span className="hint mono" style={{ display: 'block' }}>
+                        {st.detail}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+                {plan.dev && (
+                  <label className="check">
+                    <input type="checkbox" checked={answers.startDev} onChange={(e) => set({ startDev: e.target.checked })} />
+                    <span>
+                      <Play size={11} style={{ verticalAlign: -1 }} /> Start the dev server and open it at {domain}
+                      <span className="hint mono" style={{ display: 'block' }}>
+                        {plan.dev}
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {plan.setup.some((st) => st.runsCode) && (
+                  <div className="hint">These run the project&apos;s own install scripts. Leave them off for code you don&apos;t trust.</div>
+                )}
+              </div>
             )}
 
             <div className="end" style={{ marginTop: 18 }}>
@@ -315,6 +375,14 @@ export default function ImportWizard(): React.JSX.Element | null {
             {result.skipped > 0 && (
               <p className="hint">{result.skipped} lines that would switch databases or change users were skipped.</p>
             )}
+            {result.failed.map((f) => (
+              <div key={f.label} className="warn">
+                <CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  <strong>{f.label} did not finish.</strong> {f.error}
+                </span>
+              </div>
+            ))}
             <div className="end" style={{ marginTop: 20 }}>
               <button className="btn" onClick={() => setImportOpen(false)}>
                 Close
@@ -325,7 +393,7 @@ export default function ImportWizard(): React.JSX.Element | null {
                 </button>
               )}
               {result.site && (
-                <button className="btn btn-primary" onClick={() => api.invoke('sites:open-url', `http://${domain}`)}>
+                <button className="btn btn-primary" onClick={() => api.invoke('sites:open-url', result.url ?? `http://${domain}`)}>
                   Open site
                 </button>
               )}

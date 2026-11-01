@@ -13,6 +13,7 @@ import { ManagedProcess } from './process'
 export const phpBinary = (minor: string): string => join(dirs.php(minor), 'php')
 export const fpmBinary = (minor: string): string => join(dirs.php(minor), 'php-fpm')
 export const phpIniPath = (minor: string): string => join(dirs.conf(), `php-${minor}.ini`)
+export const xdebugPath = (minor: string): string => join(dirs.php(minor), 'xdebug.so')
 const fpmConfPath = (minor: string): string => join(dirs.conf(), `php-fpm-${minor}.conf`)
 
 export function installedMinors(): string[] {
@@ -66,7 +67,9 @@ export async function listVersions(): Promise<PhpVersionInfo[]> {
         installed: have,
         isDefault: def === minor,
         updateAvailable: !!have && !!builds[minor] && compareVersions(builds[minor].version, have) > 0,
-        extensions: have ? installedExtensions(minor) : []
+        extensions: have ? installedExtensions(minor) : [],
+        xdebug: !!have && existsSync(xdebugPath(minor)),
+        xdebugAvailable: !!builds[minor]?.xdebugUrl
       }
     })
 }
@@ -91,9 +94,10 @@ export async function installMinor(minor: string): Promise<void> {
     mkdirSync(staging, { recursive: true })
     const sums = build.sumsUrl ? await (await fetch(build.sumsUrl, { headers: { 'User-Agent': USER_AGENT } })).text() : null
 
-    const parts: ['cli' | 'fpm', string][] = [
+    const parts: ['cli' | 'fpm' | 'xdebug', string][] = [
       ['cli', build.cliUrl],
-      ['fpm', build.fpmUrl]
+      ['fpm', build.fpmUrl],
+      ...(build.xdebugUrl ? [['xdebug', build.xdebugUrl] as ['xdebug', string]] : [])
     ]
     for (let i = 0; i < parts.length; i++) {
       const [kind, url] = parts[i]
@@ -141,6 +145,15 @@ export async function installMinor(minor: string): Promise<void> {
   }
 }
 
+/** Adds xdebug.so to an installed version that does not have it, by updating to a build that does. */
+export async function ensureXdebug(minor: string): Promise<boolean> {
+  if (existsSync(xdebugPath(minor))) return true
+  const build = (await resolvePhpBuilds(getSettings().phpFlavor))[minor]
+  if (!build?.xdebugUrl) return false
+  await installMinor(minor)
+  return existsSync(xdebugPath(minor))
+}
+
 export async function removeMinor(minor: string): Promise<void> {
   await stopFpm(minor)
   rmSync(dirs.php(minor), { recursive: true, force: true })
@@ -181,7 +194,8 @@ export function writePhpConfig(minor: string, sendmail?: string): void {
       extensions: installedExtensions(minor),
       custom,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      mysqlSocket: join(dirs.run(), 'mysql.sock')
+      mysqlSocket: join(dirs.run(), 'mysql.sock'),
+      xdebug: getSettings().xdebug && existsSync(xdebugPath(minor)) ? xdebugPath(minor) : null
     })
   )
   writeFileSync(

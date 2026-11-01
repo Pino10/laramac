@@ -394,8 +394,8 @@ describe.skipIf(!MARIADBD || process.platform !== 'linux')('real import into Mar
     const plan = await inspect(archive, ['mariadb'])
     const result = await runImport(
       plan.id,
-      { name: plan.suggestedName, sqlFile: plan.sqlFiles[0].path, engine: 'mariadb', database: 'shop_local', updateConfig: true, replaceUrl: true, composerInstall: false },
-      { update: () => undefined, ensureRunning: async () => undefined, clientFor: () => CLIENT, composerInstall: async () => undefined }
+      { name: plan.suggestedName, sqlFile: plan.sqlFiles[0].path, engine: 'mariadb', database: 'shop_local', updateConfig: true, replaceUrl: true, setup: [], startDev: false },
+      { update: () => undefined, ensureRunning: async () => undefined, clientFor: () => CLIENT, runStep: async () => undefined, createDb: async () => true, dbPassword: () => '' }
     )
     expect(result.site).toBe('shop')
     expect(q("SELECT option_value FROM shop_local.wp_options WHERE option_name='siteurl'")).toBe('http://shop.local')

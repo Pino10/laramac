@@ -31,6 +31,9 @@ import { ensureWww, getSettings } from './settings'
 import { detectKind, slug } from './sites'
 import { validateProjectName } from './creator'
 import { patchLaravelEnv } from './configgen'
+import { envFromExample, frameworkName, looksLikeProject, planSetup } from './importsetup'
+import type { DevConfig, ImportSetupStep } from '../shared/types'
+import { execFile } from 'child_process'
 
 /** Hard limits so a hostile or broken archive cannot fill the disk. */
 export const LIMITS = { bytes: 20 * 1024 ** 3, entries: 400_000 }
@@ -179,7 +182,6 @@ function folderSize(root: string): number {
 
 // ------------------------------------------------------------------ Detection
 
-const MARKERS = ['artisan', 'wp-config.php', 'wp-settings.php', 'composer.json', 'index.php', 'index.html', 'package.json']
 
 interface Found {
   projectDir: string | null
@@ -194,7 +196,7 @@ export function scan(root: string): Found {
   const walk = (dir: string, depth: number): void => {
     if (depth > 5) return
     const names = readdirSync(dir)
-    const score = MARKERS.filter((m) => names.includes(m)).length
+    const score = looksLikeProject(names)
     if (score > 0 && (!best || depth < best.depth || (depth === best.depth && score > best.score))) {
       best = { dir, depth, score }
     }
@@ -308,6 +310,45 @@ export async function inspect(source: string, installedEngines: ('mysql' | 'mari
         )
       }
     }
+    return analyze(id, staging, name, warnings, installedEngines, 'file')
+  } catch (err) {
+    rmSync(staging, { recursive: true, force: true })
+    throw err instanceof ImportError ? err : new ImportError(err instanceof Error ? err.message : String(err))
+  }
+}
+
+/** Clones a Git repository (full history, so you can keep working in it) and inspects it like a folder. */
+export async function inspectGit(url: string, token: string, installedEngines: ('mysql' | 'mariadb')[]): Promise<ImportPlan> {
+  const clean = url.trim()
+  if (!/^https:\/\/[^\s'"]+$/.test(clean)) throw new ImportError('Use the https address of the repository.')
+  const id = randomBytes(8).toString('hex')
+  const staging = join(stagingRoot(), id)
+  const content = join(staging, 'content')
+  mkdirSync(content, { recursive: true, mode: 0o700 })
+  const name = (new URL(clean).pathname.split('/').filter(Boolean).pop() ?? 'project').replace(/\.git$/, '') || 'project'
+  try {
+    const origin = new URL(clean).origin
+    const user = new URL(clean).hostname === 'github.com' ? 'x-access-token' : /gitlab/.test(new URL(clean).hostname) ? 'oauth2' : 'pat'
+    // The token goes in a header for this one command; it is never written into the project.
+    const auth = token.trim() ? ['-c', `http.${origin}/.extraheader=AUTHORIZATION: basic ${Buffer.from(`${user}:${token.trim()}`).toString('base64')}`] : []
+    await new Promise<void>((res, rej) => {
+      execFile('git', [...auth, 'clone', '--quiet', clean, join(content, name)], { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, timeout: 15 * 60 * 1000, maxBuffer: 1024 * 1024 }, (err, _o, stderr) => {
+        if (!err) return res()
+        const msg = String(stderr || err.message)
+        rej(new ImportError(/Authentication|403|401|could not read Username|not found/i.test(msg) ? 'The repository could not be read. Check the address, and add a token if it is private.' : `Cloning failed: ${msg.trim().split('\n').pop()}`))
+      })
+    })
+    if (folderSize(content) > LIMITS.bytes) throw new ImportError('That repository is too large to import.')
+    return analyze(id, staging, name, [], installedEngines, 'git')
+  } catch (err) {
+    rmSync(staging, { recursive: true, force: true })
+    throw err instanceof ImportError ? err : new ImportError(err instanceof Error ? err.message : String(err))
+  }
+}
+
+function analyze(id: string, staging: string, name: string, warnings: string[], installedEngines: ('mysql' | 'mariadb')[], from: 'file' | 'git'): ImportPlan {
+  const content = join(staging, 'content')
+  {
     const removed = removeLinks(content)
     if (removed) warnings.push(`${removed} links inside the folder were left out for safety.`)
 
@@ -342,9 +383,6 @@ export async function inspect(source: string, installedEngines: ('mysql' | 'mari
       const head = /\.gz$/i.test(firstSql.path) ? '' : readHead(join(content, firstSql.path), 8 * 1024 * 1024)
       oldUrl = findSiteUrl(head)
     }
-    if (projectAbs && kind === 'laravel' && !existsSync(join(projectAbs, 'vendor'))) {
-      warnings.push('The vendor folder is missing. Turn on "Install Composer packages" or run composer install later.')
-    }
     if (!projectAbs && found.sqlFiles.length === 0) {
       throw new ImportError('No website files or SQL dumps were found in that import.')
     }
@@ -364,15 +402,18 @@ export async function inspect(source: string, installedEngines: ('mysql' | 'mari
       oldUrl,
       configFile,
       hasVendor: projectAbs ? existsSync(join(projectAbs, 'vendor')) : true,
-      warnings
+      warnings,
+      ...(() => {
+        const sp = projectAbs ? planSetup(projectAbs, kind, false) : { steps: [], dev: null }
+        return { setup: sp.steps, dev: sp.dev ? sp.dev.command.join(' ').replace(/\{port\}/g, 'PORT') : null }
+      })(),
+      framework: projectAbs ? frameworkName(projectAbs, kind) : null,
+      from
     }
     sessions.set(id, { id, staging, plan })
     // Remember where the project is inside the staging folder.
     writeFileSync(join(staging, 'project'), found.projectDir ?? '')
     return plan
-  } catch (err) {
-    rmSync(staging, { recursive: true, force: true })
-    throw err instanceof ImportError ? err : new ImportError(err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -602,7 +643,11 @@ export function rewriteWpConfig(text: string, db: string, host: string, url: str
 export interface RunDeps {
   ensureRunning: (engine: 'mysql' | 'mariadb') => Promise<void>
   clientFor: (engine: 'mysql' | 'mariadb') => string | null
-  composerInstall: (dir: string, onLine: (l: string) => void) => Promise<void>
+  /** Runs a setup command in the project, with Laramac's PHP, Composer and runtimes. */
+  runStep: (argv: string[], dir: string, onLine: (l: string) => void) => Promise<void>
+  /** Creates an empty MySQL database; false when MySQL is not installed. */
+  createDb: (name: string) => Promise<boolean>
+  dbPassword: (engine: 'mysql' | 'mariadb') => string
   update: (pct: number | null, label?: string) => void
 }
 
@@ -618,7 +663,11 @@ export function validateAnswers(plan: ImportPlan, a: ImportAnswers): void {
 }
 
 /** Moves the project into www, loads the database and rewires the config. */
-export async function runImport(id: string, a: ImportAnswers, deps: RunDeps): Promise<{ site: string | null; database: string | null; skipped: number }> {
+export async function runImport(
+  id: string,
+  a: ImportAnswers,
+  deps: RunDeps
+): Promise<{ site: string | null; database: string | null; skipped: number; failed: { label: string; error: string }[]; dev: Omit<DevConfig, 'port'> | null }> {
   const session = sessions.get(id)
   if (!session) throw new ImportError('This import has expired. Choose the file again.')
   const { plan, staging } = session
@@ -630,6 +679,8 @@ export async function runImport(id: string, a: ImportAnswers, deps: RunDeps): Pr
   const tld = getSettings().tld
   const url = `http://${slug(a.name)}.${tld}`
   let skipped = 0
+  const failed: { label: string; error: string }[] = []
+  let dev: Omit<DevConfig, 'port'> | null = null
 
   try {
     // 1. Database first, so a bad dump does not leave a half-imported site behind.
@@ -661,31 +712,63 @@ export async function runImport(id: string, a: ImportAnswers, deps: RunDeps): Pr
         cpSync(from, target, { recursive: true })
       }
 
+      // The steps are worked out again from the files themselves, so only known commands run.
+      const chosen = new Set(a.setup)
+      const plan2 = planSetup(target, plan.kind, !!a.sqlFile)
+      const steps = plan2.steps.filter((s) => chosen.has(s.id))
+      const madeEnv = steps.some((s) => s.id === 'env')
+      if (madeEnv && !existsSync(join(target, '.env'))) {
+        writeFileSync(join(target, '.env'), envFromExample(readFileSync(join(target, '.env.example'), 'utf8')), { mode: 0o600 })
+      }
+
       // 3. Config.
-      if (a.updateConfig) {
+      if (a.updateConfig || (madeEnv && a.sqlFile)) {
         const host = a.engine === 'mysql' ? '127.0.0.1' : '127.0.0.1:3307'
         const wp = join(target, 'wp-config.php')
         const env = join(target, '.env')
         if (existsSync(wp)) {
           writeFileSync(wp, rewriteWpConfig(readFileSync(wp, 'utf8'), a.database, host, a.replaceUrl ? url : null))
         } else if (existsSync(env)) {
-          let text = patchLaravelEnv(readFileSync(env, 'utf8'), a.database, `${slug(a.name)}.${tld}`)
+          let text = patchLaravelEnv(readFileSync(env, 'utf8'), a.database, `${slug(a.name)}.${tld}`, deps.dbPassword(a.engine))
           if (a.engine === 'mariadb') text = text.replace(/^DB_PORT=.*$/m, 'DB_PORT=3307')
           if (!a.replaceUrl && plan.oldUrl) text = text.replace(/^APP_URL=.*$/m, `APP_URL=${plan.oldUrl}`)
           writeFileSync(env, text)
         }
       }
 
-      // 4. Composer, only when asked: it runs scripts from the project.
-      if (a.composerInstall && existsSync(join(target, 'composer.json'))) {
-        deps.update(null, 'Installing Composer packages')
-        await deps.composerInstall(target, (l) => deps.update(null, `Composer: ${l.slice(0, 60)}`))
+      // A new .env without a database dump: SQLite works as is, MySQL gets an empty database.
+      const envFile = join(target, '.env')
+      if (madeEnv && !a.sqlFile && existsSync(envFile)) {
+        let text = readFileSync(envFile, 'utf8').replace(/^APP_URL=.*$/m, `APP_URL=http://${slug(a.name)}.${tld}`)
+        const conn = /^DB_CONNECTION=(\w+)/m.exec(text)?.[1] ?? 'sqlite'
+        if (conn === 'sqlite') {
+          const db = join(target, 'database', 'database.sqlite')
+          if (!existsSync(db) && existsSync(dirname(db))) writeFileSync(db, '')
+        } else if (conn === 'mysql' || conn === 'mariadb') {
+          text = patchLaravelEnv(text, a.database, `${slug(a.name)}.${tld}`, deps.dbPassword('mysql'))
+          if (!(await deps.createDb(a.database).catch(() => false))) failed.push({ label: `Create the ${a.database} database`, error: 'MySQL is not installed or not running. Install it on the Databases page.' })
+        }
+        writeFileSync(envFile, text)
       }
+
+      // 4. Setup steps the person agreed to. They run the project's own scripts.
+      for (const [i, s] of steps.filter((x) => x.command.length > 0).entries()) {
+        deps.update(Math.round((i / Math.max(steps.length, 1)) * 100), s.label)
+        try {
+          await deps.runStep(s.command, target, (l) => deps.update(null, `${s.label}: ${l.slice(0, 60)}`))
+          if (s.then) await deps.runStep(s.then, target, (l) => deps.update(null, `${s.label}: ${l.slice(0, 60)}`))
+        } catch (err) {
+          failed.push({ label: s.label, error: (err as Error).message.split('\n').slice(-3).join(' ').slice(0, 300) })
+        }
+      }
+      if (a.startDev) dev = plan2.dev
     }
     return {
       site: plan.hasProject ? a.name : null,
       database: a.sqlFile ? a.database : null,
-      skipped
+      skipped,
+      failed,
+      dev
     }
   } finally {
     cancelImport(id)
