@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Camera, Code, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, UploadCloud, X } from 'lucide-react'
-import type { DeployResult, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
+import { Camera, Code, GitBranch, Tag, Rocket, GitCommitHorizontal, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, UploadCloud, X } from 'lucide-react'
+import type { DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
@@ -25,6 +25,7 @@ export default function Sites(): React.JSX.Element {
   const aiName = AI_NAMES[settings?.aiTool ?? 'claude'] ?? 'AI tool'
   const [snapFor, setSnapFor] = useState<SiteInfo | null>(null)
   const [deployFor, setDeployFor] = useState<SiteInfo | null>(null)
+  const [pushFor, setPushFor] = useState<SiteInfo | null>(null)
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -139,6 +140,9 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn label={`${aiName} in ${site.name}`} title={`Open ${aiName} here`} onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
                   <Terminal size={18} />
                 </IconBtn>
+                <IconBtn label={`Push ${site.name} to GitHub`} title="Push to GitHub" onClick={() => setPushFor(site)}>
+                  <GitBranch size={18} />
+                </IconBtn>
                 <IconBtn label={`Deploy ${site.name}`} title="Deploy to a server" onClick={() => setDeployFor(site)}>
                   <UploadCloud size={18} />
                 </IconBtn>
@@ -171,6 +175,7 @@ export default function Sites(): React.JSX.Element {
       )}
       {snapFor && <SnapshotsDialog site={snapFor} onClose={() => setSnapFor(null)} />}
       {deployFor && <DeployDialog site={deployFor} onClose={() => setDeployFor(null)} />}
+      {pushFor && <PushDialog site={pushFor} onClose={() => setPushFor(null)} />}
     </>
   )
 }
@@ -426,6 +431,197 @@ function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }
         )}
       </div>
       {askDialog}
+    </div>
+  )
+}
+
+const PUSH_MODES: { id: GitPushOptions['mode']; title: string; desc: string }[] = [
+  { id: 'main', title: 'Update main', desc: 'Your changes go straight onto the main branch.' },
+  { id: 'branch', title: 'New branch', desc: 'Keep main as it is and push to a branch you can review first.' },
+  { id: 'tag', title: 'New version tag', desc: 'Update main and mark this point as a version, like v1.2.0.' },
+  { id: 'release', title: 'New release', desc: 'A version tag plus a GitHub release with notes.' }
+]
+
+function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+  const { act, busy, notify, setPage } = useApp()
+  const api = window.laramac
+  const [acc, setAcc] = useState<boolean | null>(null)
+  const [st, setSt] = useState<(GitSiteStatus & { next: string }) | null>(null)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [target, setTarget] = useState<'new' | string>('new')
+  const [newName, setNewName] = useState(site.name)
+  const [priv, setPriv] = useState(true)
+  const [mode, setMode] = useState<GitPushOptions['mode']>('main')
+  const [message, setMessage] = useState('')
+  const [branch, setBranch] = useState('')
+  const [tag, setTag] = useState('')
+  const [notes, setNotes] = useState('')
+  const [replace, setReplace] = useState(false)
+  const [done, setDone] = useState<GitPushResult | null>(null)
+
+  useEffect(() => {
+    void api.invoke('github:account').then(async (a) => {
+      setAcc(!!a.account)
+      if (!a.account) return
+      const s = await api.invoke('github:site-status', site.path)
+      setSt(s)
+      setTag(s.next)
+      if (!s.remote) setRepos(await api.invoke('github:repos').catch(() => []))
+    })
+  }, [api, site.path])
+
+  const run = async (): Promise<void> => {
+    const o: GitPushOptions = { mode, message, branch, tag, notes, replace }
+    if (!st?.remote) {
+      if (target === 'new') o.create = { name: newName.trim(), private: priv }
+      else o.repo = target
+    }
+    const r = await act(`push-${site.name}`, () => api.invoke('github:push', site.path, o))
+    if (r) {
+      setDone(r)
+      notify({ kind: 'info', text: `${site.name} is on GitHub.` })
+    }
+  }
+
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass snap-dialog push-dialog" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="snap-head">
+          <div>
+            <h2 className="page-title">Push {site.name} to GitHub</h2>
+            <p className="page-desc" style={{ marginTop: 4 }}>
+              {st?.remote ? (
+                <>
+                  To <span className="mono">{st.remote}</span>
+                  {st.changed ? `, with ${st.changed} changed ${st.changed === 1 ? 'file' : 'files'}` : ', nothing new to commit'}.
+                </>
+              ) : (
+                'Commits everything in the site (except .env, node_modules and logs) and sends it to GitHub.'
+              )}
+            </p>
+          </div>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </div>
+
+        {acc === false ? (
+          <div className="empty-state" style={{ padding: '28px 8px' }}>
+            <strong>Connect GitHub first</strong>
+            <span>Sign in once on the GitHub page, then push from here.</span>
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: 10 }}
+              onClick={() => {
+                onClose()
+                setPage('github')
+              }}
+            >
+              Go to GitHub
+            </button>
+          </div>
+        ) : done ? (
+          <div className="deploy-result" style={{ marginTop: 18 }}>
+            <strong>Pushed</strong>
+            <span>
+              Commit {done.commit} is on GitHub as {done.mode === 'main' ? `the newest ${done.ref}` : done.mode === 'branch' ? `branch ${done.ref}` : `${done.mode} ${done.ref}`}.
+            </span>
+            {done.url && (
+              <button className="link" style={{ alignSelf: 'flex-start', marginTop: 6 }} onClick={() => api.invoke('tools:open-external', done.url!)}>
+                {done.mode === 'branch' ? 'Open a pull request on GitHub' : 'Open on GitHub'}
+              </button>
+            )}
+          </div>
+        ) : st === null ? (
+          <div className="hint" style={{ padding: '24px 0' }}>Looking at the project…</div>
+        ) : (
+          <div className="deploy-form">
+            {!st.remote && (
+              <div className="field">
+                <label htmlFor="push-repo">Repository</label>
+                <select id="push-repo" className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
+                  <option value="new">Create a new repository</option>
+                  {repos.map((r) => (
+                    <option key={r.fullName} value={r.fullName}>
+                      {r.fullName} {r.private ? '(private)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {target === 'new' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input className="input mono" style={{ flex: 1 }} value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="New repository name" />
+                    <div className="seg" role="radiogroup" aria-label="Visibility">
+                      <button role="radio" aria-checked={priv} onClick={() => setPriv(true)}>
+                        <Lock size={12} /> Private
+                      </button>
+                      <button role="radio" aria-checked={!priv} onClick={() => setPriv(false)}>
+                        Public
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <span className="field-label" style={{ marginTop: 6 }}>
+              How should it go up?
+            </span>
+            <div className="push-modes" role="radiogroup">
+              {PUSH_MODES.map((m) => (
+                <button key={m.id} className="choice" role="radio" aria-checked={mode === m.id} onClick={() => setMode(m.id)}>
+                  <span className="push-mode-title">
+                    {m.id === 'main' ? <GitCommitHorizontal size={15} /> : m.id === 'branch' ? <GitBranch size={15} /> : m.id === 'tag' ? <Tag size={15} /> : <Rocket size={15} />} {m.title}
+                  </span>
+                  <span className="row-sub" style={{ whiteSpace: 'normal' }}>
+                    {m.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="field">
+              <label htmlFor="push-msg">What changed</label>
+              <input id="push-msg" className="input" placeholder="Fix the contact form" value={message} onChange={(e) => setMessage(e.target.value)} />
+            </div>
+            {mode === 'branch' && (
+              <div className="field">
+                <label htmlFor="push-branch">Branch name</label>
+                <input id="push-branch" className="input mono" placeholder="feature/new-header" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              </div>
+            )}
+            {(mode === 'tag' || mode === 'release') && (
+              <div className="field">
+                <label htmlFor="push-tag">Version</label>
+                <input id="push-tag" className="input mono" value={tag} onChange={(e) => setTag(e.target.value)} />
+                {st.lastTag && <span className="hint">The last version was {st.lastTag}.</span>}
+              </div>
+            )}
+            {mode === 'release' && (
+              <div className="field">
+                <label htmlFor="push-notes">Release notes</label>
+                <textarea id="push-notes" className="apic-code" style={{ minHeight: 90, fontFamily: 'inherit' }} placeholder="Leave empty and GitHub writes them from your commits." value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
+            )}
+            {mode !== 'branch' && (
+              <label className="check">
+                <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /> Replace what is on GitHub if it has changes this Mac does not
+              </label>
+            )}
+            <div className="end" style={{ marginTop: 8 }}>
+              <button className="btn" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy.has(`push-${site.name}`) || (mode === 'branch' && !branch.trim()) || ((mode === 'tag' || mode === 'release') && !tag.trim()) || (!st.remote && target === 'new' && !newName.trim())}
+                onClick={run}
+              >
+                <GitBranch size={15} /> {busy.has(`push-${site.name}`) ? 'Pushing…' : mode === 'release' ? 'Push and release' : 'Push'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -180,6 +180,118 @@ export interface SftpListing {
   entries: SftpEntry[]
 }
 
+export interface GitHubAccount {
+  login: string
+  name: string | null
+}
+
+export interface GitHubRepo {
+  fullName: string
+  name: string
+  private: boolean
+  description: string | null
+  language: string | null
+  updatedAt: string
+  defaultBranch: string
+  url: string
+  cloneUrl: string
+  stars: number
+  fork: boolean
+  archived: boolean
+  homepage: string | null
+}
+
+export interface GitSiteStatus {
+  isRepo: boolean
+  branch: string | null
+  /** owner/name when the remote is on GitHub. */
+  remote: string | null
+  changed: number
+  lastTag: string | null
+}
+
+export interface GitPushOptions {
+  /** main: update the main branch. branch: a new branch. tag: main plus a version tag. release: tag plus a GitHub release. */
+  mode: 'main' | 'branch' | 'tag' | 'release'
+  message: string
+  branch?: string
+  base?: string
+  tag?: string
+  notes?: string
+  /** Overwrite what is on GitHub when it has commits this Mac does not. */
+  replace?: boolean
+  /** Push to this existing repository (owner/name). */
+  repo?: string
+  /** Or create a new one. */
+  create?: { name: string; private: boolean }
+}
+
+export interface GitPushResult {
+  mode: GitPushOptions['mode']
+  commit: string
+  ref: string
+  url?: string
+}
+
+export interface KV {
+  key: string
+  value: string
+  enabled: boolean
+}
+
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+
+export interface ApiRequest {
+  id: string
+  name: string
+  method: HttpMethod
+  url: string
+  query: KV[]
+  headers: KV[]
+  body: { type: 'none' | 'json' | 'text' | 'form' | 'urlencoded'; text: string; form: KV[] }
+  auth: { type: 'none' | 'bearer' | 'basic'; token: string; user: string; pass: string }
+}
+
+export interface ApiCollection {
+  id: string
+  name: string
+  requests: ApiRequest[]
+}
+
+export interface ApiEnvironment {
+  id: string
+  name: string
+  vars: KV[]
+}
+
+export interface ApiHistoryItem {
+  at: number
+  method: HttpMethod
+  url: string
+  status: number
+  ms: number
+}
+
+export interface ApiStore {
+  collections: ApiCollection[]
+  environments: ApiEnvironment[]
+  activeEnv: string | null
+  history: ApiHistoryItem[]
+}
+
+export interface ApiResponse {
+  status: number
+  statusText: string
+  ms: number
+  bytes: number
+  headers: [string, string][]
+  body: string
+  contentType: string
+  truncated: boolean
+  /** The address actually requested, after variables were filled in. */
+  url: string
+}
+
 export interface DeployResult {
   uploaded: number
   skipped: number
@@ -403,6 +515,20 @@ export interface Channels {
   'shell:write': { args: [string, string]; result: void }
   'shell:resize': { args: [string, number, number]; result: void }
   'shell:close': { args: [string]; result: void }
+  'api:load': { args: []; result: ApiStore }
+  'api:save': { args: [ApiStore]; result: void }
+  'api:send': { args: [ApiRequest, string | null]; result: ApiResponse }
+  'api:import': { args: [string]; result: ApiCollection }
+  'api:import-file': { args: []; result: ApiCollection | null }
+  'github:account': { args: []; result: { account: GitHubAccount | null; cli: boolean } }
+  'github:sign-in': { args: [string]; result: GitHubAccount }
+  'github:sign-in-cli': { args: []; result: GitHubAccount }
+  'github:sign-out': { args: []; result: void }
+  'github:repos': { args: []; result: GitHubRepo[] }
+  'github:edit': { args: [string, { description?: string; private?: boolean; homepage?: string }]; result: GitHubRepo }
+  'github:clone': { args: [string]; result: SiteInfo[] }
+  'github:site-status': { args: [string]; result: GitSiteStatus & { next: string } }
+  'github:push': { args: [string, GitPushOptions]; result: GitPushResult }
   'deploy:run': { args: [string, DeployTarget, boolean, string | null]; result: DeployResult }
   'clipboard:read': { args: []; result: string }
   'clipboard:write': { args: [string]; result: void }

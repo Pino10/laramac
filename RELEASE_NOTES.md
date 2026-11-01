@@ -1,18 +1,15 @@
 Laramac is a free, open-source local development environment for macOS.
 
-## New in 0.10
-- **Your projects work as they are.** Database host `localhost` now reaches MySQL (PHP on a Mac looks for a socket file there, which caused "SQLSTATE[HY000] [2002] No such file or directory"). `127.0.0.1` and `localhost:3306` work too, and `/tmp/mysql.sock` points at Laramac's MySQL for other tools.
-- **Laragon-style addresses.** Every project also opens at `http://localhost/name`, `http://127.0.0.1/name` and `http://name.localhost`.
-- **Your own site names.** Settings › Addresses lets you add names like `shop.local` or `api.shop.test` to any site.
-- **Deploy.** Send a site to your hosting over SFTP, FTPS or FTP from the Sites page. Only new and changed files go up, and `.env`, `node_modules` and `.git` stay on your Mac.
-- **FTP and FTPS servers.** Add shared hosting accounts under Servers and browse their files.
-- **Copy and paste in the terminal.** Select to copy, right-click to paste, or use ⌘C and ⌘V.
-- **Updates page.** The changelog for every version, and update in one click.
-- **More Liquid Glass.** Clearer panels, a lens-like sheen and lit edges.
+## New in 0.11
+- **API client.** Build, save and test API requests: methods, query, headers, JSON or form bodies, bearer and basic auth, environments with `{{variables}}`, history, pretty JSON, copy as cURL. Import from Postman, Insomnia, OpenAPI or a pasted cURL command.
+- **GitHub.** Connect your account to see all your repositories, clone them into your projects folder, and edit their details and visibility.
+- **Push to GitHub from Sites.** Choose how each push goes up: straight to main, a new branch, a version tag, or a GitHub release with notes. Your `.env` and `node_modules` stay on your Mac.
+- **New look for the logo.** The `<L>` mark in violet, with a modern L, and the app's accent colour to match.
+- **Consistent dialogs.** New project, Import and the command bar now match the rest of the app.
 
 ## Download
-- **Apple Silicon:** Laramac-0.10.0-arm64.dmg
-- **Intel:** Laramac-0.10.0-x64.dmg
+- **Apple Silicon:** Laramac-0.11.0-arm64.dmg
+- **Intel:** Laramac-0.11.0-x64.dmg
 
 Or install and update from Terminal without the "Open Anyway" step:
 `curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash`

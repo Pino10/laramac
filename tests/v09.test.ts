@@ -178,3 +178,133 @@ describe.skipIf(!PYFTP)('FTP servers', () => {
     }
   })
 })
+
+describe('API client', () => {
+  it('sends requests with environment variables, auth and bodies', async () => {
+    const { createServer } = await import('http')
+    const { sendRequest, emptyRequest, toCurl, fromCurl } = await import('../src/main/apiclient')
+    const server = createServer((req, res) => {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', () => {
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('X-Seen', 'yes')
+        res.statusCode = req.url?.startsWith('/missing') ? 404 : 201
+        res.end(JSON.stringify({ method: req.method, url: req.url, auth: req.headers.authorization, ct: req.headers['content-type'], body }))
+      })
+    })
+    await new Promise<void>((r) => server.listen(18555, '127.0.0.1', () => r()))
+    try {
+      const vars = [
+        { key: 'base', value: 'http://127.0.0.1:18555', enabled: true },
+        { key: 'token', value: 's3cret', enabled: true },
+        { key: 'off', value: 'nope', enabled: false }
+      ]
+      const req = emptyRequest()
+      req.method = 'POST'
+      req.url = '{{base}}/posts'
+      req.query = [{ key: 'page', value: '2', enabled: true }, { key: 'skip', value: 'x', enabled: false }]
+      req.auth = { type: 'bearer', token: '{{token}}', user: '', pass: '' }
+      req.body = { type: 'json', text: '{"title":"{{off}}"}', form: [] }
+      const res = await sendRequest(req, vars)
+      expect(res.status).toBe(201)
+      expect(res.headers).toContainEqual(['x-seen', 'yes'])
+      const echo = JSON.parse(res.body)
+      expect(echo).toMatchObject({ method: 'POST', url: '/posts?page=2', auth: 'Bearer s3cret', ct: 'application/json', body: '{"title":"{{off}}"}' })
+
+      const form = emptyRequest()
+      form.method = 'PUT'
+      form.url = 'http://127.0.0.1:18555/form'
+      form.body = { type: 'urlencoded', text: '', form: [{ key: 'a b', value: '1&2', enabled: true }] }
+      expect(JSON.parse((await sendRequest(form, [])).body).body).toBe('a+b=1%262')
+
+      const back = fromCurl(toCurl(req, vars))
+      expect(back).toMatchObject({ method: 'POST', url: 'http://127.0.0.1:18555/posts?page=2' })
+      expect(back.headers.find((h) => h.key === 'Authorization')?.value).toBe('Bearer s3cret')
+      expect((await sendRequest({ ...emptyRequest(), url: 'http://127.0.0.1:18555/missing' }, [])).status).toBe(404)
+      await expect(sendRequest({ ...emptyRequest(), url: 'http://127.0.0.1:18556/' }, [])).rejects.toThrow(/Nothing is answering/)
+      await expect(sendRequest({ ...emptyRequest(), url: 'file:///etc/passwd' }, [])).rejects.toThrow(/Only http/)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('imports Postman, Insomnia, OpenAPI and cURL', async () => {
+    const { importText } = await import('../src/main/apiclient')
+    const postman = importText(
+      JSON.stringify({
+        info: { name: 'Shop API', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+        item: [
+          { name: 'Orders', item: [{ name: 'List', request: { method: 'GET', url: { raw: '{{base}}/orders' }, header: [{ key: 'Accept', value: 'application/json' }] } }] },
+          { name: 'Login', request: { method: 'POST', url: '{{base}}/login', body: { mode: 'raw', raw: '{"email":"a"}', options: { raw: { language: 'json' } } }, auth: { type: 'bearer', bearer: [{ key: 'token', value: 'abc' }] } } }
+        ]
+      })
+    )
+    expect(postman.name).toBe('Shop API')
+    expect(postman.requests.map((r) => r.name)).toEqual(['Orders / List', 'Login'])
+    expect(postman.requests[1]).toMatchObject({ method: 'POST', body: { type: 'json' }, auth: { type: 'bearer', token: 'abc' } })
+
+    const insomnia = importText(JSON.stringify({ _type: 'export', resources: [{ _type: 'workspace', name: 'Radio' }, { _type: 'request', name: 'Now playing', method: 'GET', url: 'https://radio.test/api/now', headers: [], parameters: [{ name: 'limit', value: '5' }] }] }))
+    expect(insomnia).toMatchObject({ name: 'Radio', requests: [{ name: 'Now playing', query: [{ key: 'limit', value: '5' }] }] })
+
+    const openapi = importText(JSON.stringify({ openapi: '3.0.0', info: { title: 'Pets' }, servers: [{ url: 'https://api.example.com/v1' }], paths: { '/pets/{id}': { get: { summary: 'Get a pet', parameters: [{ name: 'id', in: 'path' }] }, delete: { operationId: 'deletePet' } } } }))
+    expect(openapi.requests.map((r) => `${r.method} ${r.url}`)).toEqual(['GET https://api.example.com/v1/pets/{{id}}', 'DELETE https://api.example.com/v1/pets/{{id}}'])
+
+    const curl = importText(`curl 'https://api.example.com/users' -H 'Content-Type: application/json' --data-raw '{"name":"Ada"}'`)
+    expect(curl.requests[0]).toMatchObject({ method: 'POST', url: 'https://api.example.com/users', body: { type: 'json', text: '{"name":"Ada"}' } })
+    expect(() => importText('not json')).toThrow(/cURL/)
+  })
+})
+
+describe('GitHub push', () => {
+  it('commits a site and pushes it to main, a branch, or as a version tag', async () => {
+    const { execFileSync } = await import('child_process')
+    const { mkdtempSync, writeFileSync, mkdirSync, readFileSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { publish, siteStatus, nextVersion } = await import('../src/main/github')
+    const root = mkdtempSync(join(tmpdir(), 'lm-git-'))
+    const remote = join(root, 'remote.git')
+    execFileSync('git', ['init', '--bare', '-b', 'main', remote])
+    const site = join(root, 'radio')
+    mkdirSync(join(site, 'node_modules'), { recursive: true })
+    writeFileSync(join(site, 'index.php'), 'v1')
+    writeFileSync(join(site, '.env'), 'SECRET=1')
+    writeFileSync(join(site, 'node_modules', 'x.js'), 'x')
+    const auth = { config: [], user: { name: 'Ada', email: '1+ada@users.noreply.github.com' } }
+    const show = (ref: string, f: string): string => execFileSync('git', ['--git-dir', remote, 'show', `${ref}:${f}`]).toString()
+    const files = (ref: string): string[] => execFileSync('git', ['--git-dir', remote, 'ls-tree', '-r', '--name-only', ref]).toString().trim().split('\n')
+
+    expect((await siteStatus(site)).isRepo).toBe(false)
+    const first = await publish(site, remote, { mode: 'main', message: 'First version' }, auth)
+    expect(first).toMatchObject({ mode: 'main', ref: 'main' })
+    expect(files('main').sort()).toEqual(['.gitignore', 'index.php'])
+    expect(readFileSync(join(site, '.gitignore'), 'utf8')).toContain('.env')
+    expect(execFileSync('git', ['--git-dir', remote, 'log', '-1', '--format=%an <%ae> %s', 'main']).toString().trim()).toBe('Ada <1+ada@users.noreply.github.com> First version')
+
+    writeFileSync(join(site, 'index.php'), 'v2 try')
+    await publish(site, remote, { mode: 'branch', message: 'Try a header', branch: 'feature/header' }, auth)
+    expect(show('feature/header', 'index.php')).toBe('v2 try')
+    expect(show('main', 'index.php')).toBe('v1')
+
+    const st = await siteStatus(site)
+    expect(st).toMatchObject({ isRepo: true, branch: 'main', changed: 0 })
+    expect(nextVersion(st.lastTag)).toBe('v1.0.0')
+    const tagged = await publish(site, remote, { mode: 'tag', message: 'Release', tag: 'v1.0.0', notes: 'First release' }, auth)
+    expect(tagged.ref).toBe('v1.0.0')
+    expect(show('v1.0.0', 'index.php')).toBe('v2 try')
+    expect(nextVersion((await siteStatus(site)).lastTag)).toBe('v1.0.1')
+
+    // Someone else pushes to main; a normal push is refused, "replace" overwrites.
+    const other = join(root, 'other')
+    execFileSync('git', ['clone', '-q', remote, other])
+    writeFileSync(join(other, 'index.php'), 'theirs')
+    execFileSync('git', ['-C', other, '-c', 'user.name=B', '-c', 'user.email=b@x', 'commit', '-qam', 'theirs'])
+    execFileSync('git', ['-C', other, 'push', '-q', 'origin', 'main'])
+    writeFileSync(join(site, 'index.php'), 'mine')
+    await expect(publish(site, remote, { mode: 'main', message: 'mine' }, auth)).rejects.toThrow(/Replace what is on GitHub/)
+    await publish(site, remote, { mode: 'main', message: 'mine', replace: true }, auth)
+    expect(show('main', 'index.php')).toBe('mine')
+
+    await expect(publish(site, remote, { mode: 'branch', message: 'x', branch: '../evil' }, auth)).rejects.toThrow(/branch a name/)
+  })
+})

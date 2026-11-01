@@ -4,6 +4,9 @@ import { cancelImport, importSql, inspect, runImport } from './importer'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
 import { cleanRemotePath, deploy } from './deploy'
+import * as api from './apiclient'
+import * as github from './github'
+import { readFileSync } from 'fs'
 import { listPackages, removePackage } from './packages'
 import * as snapshots from './snapshots'
 import { MCP_PORT, mcpToken, mcpUrl, startMcpServer, type McpTool } from './mcp'
@@ -19,7 +22,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni } from './php'
 import { safeStorage } from 'electron'
-import type { DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { ApiRequest, ApiStore, GitPushOptions, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -619,6 +622,91 @@ function registerIpc(): void {
   handle('shell:resize', (sid, cols, rows) => ssh.resizeShell(String(sid), Number(cols), Number(rows)))
   handle('shell:close', (sid) => ssh.closeShell(String(sid)))
   // The page has no clipboard permission of its own; the terminal reads and writes through here.
+  // ---- GitHub
+  const ghTok = (): string => github.token(keychain)
+  handle('github:account', () => ({ account: github.account(), cli: findCli(['gh']) !== null }))
+  handle('github:sign-in', (tok) => github.signIn(String(tok), keychain))
+  handle('github:sign-in-cli', async () => {
+    const cli = findCli(['gh'])
+    if (!cli) throw new Error('The GitHub CLI is not installed. Paste a token instead.')
+    const tok = await new Promise<string>((resolve, reject) =>
+      execFile(cli, ['auth', 'token'], { timeout: 10000 }, (err, out) => (err ? reject(new Error('Sign in to the GitHub CLI first with "gh auth login".')) : resolve(String(out).trim())))
+    )
+    return github.signIn(tok, keychain)
+  })
+  handle('github:sign-out', () => github.signOut())
+  handle('github:repos', () => github.listRepos(ghTok()))
+  handle('github:edit', (full, patch) => {
+    const p = (patch ?? {}) as Record<string, unknown>
+    const clean: { description?: string; private?: boolean; homepage?: string } = {}
+    if (typeof p.description === 'string') clean.description = p.description.slice(0, 350)
+    if (typeof p.private === 'boolean') clean.private = p.private
+    if (typeof p.homepage === 'string') clean.homepage = p.homepage.slice(0, 255)
+    return github.editRepo(ghTok(), String(full), clean)
+  })
+  handle('github:clone', async (full) => {
+    const name = String(full)
+    if (!github.REPO.test(name)) throw new ValidationError('Unknown repository.')
+    const acc = github.storedAccount()!
+    const tok = ghTok()
+    const folder = name.split('/')[1]
+    await jobs.run(`Cloning ${name}`, async (update) => {
+      update(null, `Cloning ${name}`)
+      await github.cloneRepo(`https://github.com/${name}.git`, join(ensureWww(), folder), github.authFor(tok, acc))
+    })
+    activity.push('success', `Cloned ${name}`, `It is in your projects folder as ${folder}.`)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('github:site-status', async (path) => {
+    const st = await github.siteStatus(sitePath(path))
+    return { ...st, next: github.nextVersion(st.lastTag) }
+  })
+  handle('github:push', async (path, opts) => {
+    const p = sitePath(path)
+    const o = opts as GitPushOptions
+    if (!['main', 'branch', 'tag', 'release'].includes(o?.mode)) throw new ValidationError('Choose how to push.')
+    const tok = ghTok()
+    const acc = github.storedAccount()!
+    const st = await github.siteStatus(p)
+    let repo = st.remote && github.REPO.test(st.remote) ? st.remote : null
+    if (!repo && o.repo && github.REPO.test(o.repo)) repo = o.repo
+    if (!repo && o.create) repo = (await github.createRepo(tok, o.create.name, o.create.private !== false)).fullName
+    if (!repo) throw new ValidationError('Choose a repository or create a new one.')
+    const name = p.split('/').pop()
+    const result = await jobs.run(`Pushing ${name} to GitHub`, async (update) => {
+      update(null, `Pushing ${name} to ${repo}`)
+      const r = await github.publish(p, `https://github.com/${repo}.git`, o, github.authFor(tok, acc))
+      if (o.mode === 'release') r.url = await github.createRelease(tok, repo!, r.ref, r.ref, o.notes ?? '')
+      else if (o.mode === 'tag') r.url = `https://github.com/${repo}/releases/tag/${encodeURIComponent(r.ref)}`
+      else if (o.mode === 'branch') r.url = `https://github.com/${repo}/compare/${encodeURIComponent(r.ref)}?expand=1`
+      else r.url = `https://github.com/${repo}/tree/${encodeURIComponent(r.ref)}`
+      return r
+    })
+    activity.push('success', `${name} pushed to GitHub`, `${repo} ${result.mode === 'main' ? result.ref : result.mode} ${result.mode === 'main' ? '' : result.ref}`.trim())
+    return result
+  })
+
+  // ---- API client
+  handle('api:load', () => api.loadStore())
+  handle('api:save', (store) => api.saveStore(store as ApiStore))
+  handle('api:send', async (req, envId) => {
+    const store = api.loadStore()
+    const env = store.environments.find((e) => e.id === envId)
+    const res = await api.sendRequest(req as ApiRequest, env?.vars ?? [])
+    store.history = [{ at: Date.now(), method: (req as ApiRequest).method, url: res.url, status: res.status, ms: res.ms }, ...store.history].slice(0, 50)
+    api.saveStore(store)
+    return res
+  })
+  handle('api:import', (text) => {
+    if (typeof text !== 'string' || text.length > 20_000_000) throw new ValidationError('That is too large to import.')
+    return api.importText(text)
+  })
+  handle('api:import-file', async () => {
+    const res = await dialog.showOpenDialog(mainWindow!, { title: 'Import requests', properties: ['openFile'], filters: [{ name: 'Postman, Insomnia or OpenAPI', extensions: ['json'] }] })
+    if (res.canceled || !res.filePaths[0]) return null
+    return api.importText(readFileSync(res.filePaths[0], 'utf8'))
+  })
   handle('deploy:run', async (path, target, force, passphrase) => {
     const p = sitePath(path)
     const site = scanSites().find((x) => x.path === p)!

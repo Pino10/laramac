@@ -1,7 +1,7 @@
 {
   "name": "laramac",
   "productName": "Laramac",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A free, open-source local development environment for macOS, inspired by Laragon.",
   "main": "./out/main/index.js",
   "author": "Laramac contributors",
@@ -42,6 +42,7 @@
     "lucide-react": "^1.66.0",
     "ssh2": "^1.17.0",
     "tar": "^7.5.22",
+    "undici": "^8.12.3",
     "yauzl": "^3.4.0"
   }
 }

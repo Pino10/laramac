@@ -50,6 +50,16 @@
 - Save your remote servers (SSH, FTPS or FTP) and open a full SSH terminal inside Laramac. Select to copy, right-click to paste.
 - Browse, upload, download, rename and delete files over SFTP.
 
+**API client**
+- Build and test API requests like Insomnia or Postman: methods, query, headers, JSON, form and multipart bodies, bearer and basic auth.
+- Environments with `{{variables}}`, request history, pretty JSON responses, copy as cURL.
+- Import Postman collections, Insomnia exports, OpenAPI (JSON) files or a pasted cURL command.
+
+**GitHub**
+- Sign in once (with the GitHub CLI or a token kept in the Keychain) and see all your public and private repositories.
+- Clone any repository into your projects folder, and edit a repository's description, website and visibility.
+- Push a site from the Sites page. Each push asks how it should go up: straight to main, a new branch, a version tag, or a GitHub release.
+
 **AI tools**
 - Connect Claude Code to Laramac in one click. It can then list your sites, start services, switch PHP, create and query databases, read logs and take snapshots while it works.
 - Install and open Claude Code, Codex, OpenCode, vMLX, LM Studio, Ollama, OpenClaw and Gemini CLI, as Mac apps or in the terminal.
