@@ -125,3 +125,16 @@ export const postgres: ServiceImpl = {
   // SIGINT is PostgreSQL's "fast shutdown": it disconnects clients and exits cleanly.
   stop: () => proc.stop(15000, 'SIGINT')
 }
+
+/** Creates a database if PostgreSQL is running. Used by the starter store. */
+export async function createPgDatabase(name: string): Promise<boolean> {
+  const version = activePostgres()
+  if (!version || !proc.running) return false
+  const safe = name.replace(/[^a-zA-Z0-9_]/g, '_')
+  try {
+    await run(bin(version, 'createdb'), ['-h', '127.0.0.1', '-p', String(PORT), '-U', 'postgres', safe])
+    return true
+  } catch (err) {
+    return /already exists/.test((err as Error).message)
+  }
+}

@@ -70,6 +70,9 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'hostDotLocalhost':
         out[key] = bool(value, key)
         break
+      case 'glassStyle':
+        out.glassStyle = oneOf(value, ['smoke', 'frost'] as const, 'The glass style')
+        break
       case 'defaultPhp':
         out.defaultPhp = value === null ? null : assertMinor(value)
         break

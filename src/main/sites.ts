@@ -3,13 +3,24 @@ import { join } from 'path'
 import type { SiteConfig, SiteInfo, SiteKind } from '../shared/types'
 import { ensureWww, getSettings, setSettings } from './settings'
 import { defaultMinor, installedMinors } from './php'
+import { isDevRunning, suggestDevScript } from './devservers'
 
 export function detectKind(dir: string): SiteKind {
   if (existsSync(join(dir, 'artisan'))) return 'laravel'
   if (existsSync(join(dir, 'wp-config.php')) || existsSync(join(dir, 'wp-content'))) return 'wordpress'
   if (existsSync(join(dir, 'bin', 'console')) && existsSync(join(dir, 'symfony.lock'))) return 'symfony'
+  if (existsSync(join(dir, 'composer.json')) && (existsSync(join(dir, 'web', 'index.php')) || existsSync(join(dir, 'public', 'index.php')))) return 'php'
   if (existsSync(join(dir, 'package.json')) && !existsSync(join(dir, 'index.php'))) return 'node'
   if (existsSync(join(dir, 'index.php')) || existsSync(join(dir, 'public', 'index.php'))) return 'php'
+  if (existsSync(join(dir, 'pyproject.toml')) || existsSync(join(dir, 'manage.py')) || existsSync(join(dir, 'requirements.txt'))) return 'python'
+  if (existsSync(join(dir, 'go.mod'))) return 'go'
+  if (existsSync(join(dir, 'Cargo.toml'))) return 'rust'
+  if (existsSync(join(dir, 'Package.swift')) || existsSync(join(dir, 'project.yml'))) return 'swift'
+  try {
+    if (readdirSync(dir).some((f) => f.endsWith('.csproj') || f.endsWith('.sln') || f.endsWith('.slnx'))) return 'dotnet'
+  } catch {
+    // Unreadable folder; fall through.
+  }
   return 'static'
 }
 
@@ -18,6 +29,8 @@ export function detectDocRoot(dir: string, kind: SiteKind): string {
   const pub = join(dir, 'public')
   if (kind === 'laravel' || kind === 'symfony') return pub
   if (existsSync(join(pub, 'index.php')) || existsSync(join(pub, 'index.html'))) return pub
+  // Drupal and Craft serve from web/.
+  if (existsSync(join(dir, 'web', 'index.php'))) return join(dir, 'web')
   return dir
 }
 
@@ -73,7 +86,12 @@ export function scanSites(): SiteInfo[] {
       kind,
       secure: !!cfg.secure,
       php,
-      aliases
+      aliases,
+      ...(cfg.dev
+        ? { dev: { port: cfg.dev.port, proxy: cfg.dev.proxy, running: isDevRunning(entry), command: cfg.dev.command.join(' ') } }
+        : kind === 'node' && suggestDevScript(full)
+          ? { devSuggestion: suggestDevScript(full)! }
+          : {})
     })
   }
 

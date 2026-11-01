@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Database, FolderGit2, Send, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
+import { ArrowDownToLine, Database, FolderGit2, Send, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench, Rocket } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
 
@@ -7,7 +7,8 @@ type Item = { id: Page; label: string; icon: React.ReactNode }
 export const NAV: Item[][] = [
   [
     { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={16} /> },
-    { id: 'sites', label: 'Sites', icon: <Globe size={16} /> }
+    { id: 'sites', label: 'Sites', icon: <Globe size={16} /> },
+    { id: 'starters', label: 'Starters', icon: <Rocket size={16} /> }
   ],
   [
     { id: 'php', label: 'PHP', icon: <Terminal size={16} /> },

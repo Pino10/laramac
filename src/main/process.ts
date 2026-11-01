@@ -44,12 +44,15 @@ export interface ProcessSpec {
   cwd?: string
   env?: NodeJS.ProcessEnv
   logFile: string
+  /** Runs in its own process group, so stopping also stops everything it started (npm, then Vite). */
+  group?: boolean
 }
 
 /** A long-running child process with log capture, readiness checks and graceful shutdown. */
 export class ManagedProcess extends EventEmitter {
   private child: ChildProcess | null = null
   private stopping = false
+  private group = false
 
   constructor(public readonly name: string) {
     super()
@@ -73,8 +76,10 @@ export class ManagedProcess extends EventEmitter {
     const child = spawn(spec.command, spec.args, {
       cwd: spec.cwd,
       env: { ...process.env, ...spec.env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: !!spec.group
     })
+    this.group = !!spec.group
     this.child = child
     child.stdout?.pipe(log, { end: false })
     child.stderr?.pipe(log, { end: false })
@@ -113,12 +118,31 @@ export class ManagedProcess extends EventEmitter {
     }
     this.stopping = true
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
+      const kill = (sig: NodeJS.Signals): void => {
+        if (this.group && child.pid) {
+          try {
+            process.kill(-child.pid, sig)
+            return
+          } catch {
+            // The group is gone; fall back to the process itself.
+          }
+        }
+        child.kill(sig)
+      }
+      const timer = setTimeout(() => kill('SIGKILL'), timeoutMs)
       child.once('exit', () => {
         clearTimeout(timer)
+        // Children that outlived the leader still go.
+        if (this.group && child.pid) {
+          try {
+            process.kill(-child.pid, 'SIGKILL')
+          } catch {
+            // Already gone.
+          }
+        }
         resolve()
       })
-      child.kill(signal)
+      kill(signal)
     })
     this.child = null
   }

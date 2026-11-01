@@ -2310,3 +2310,425 @@ html[data-material='vibrancy'] .sidebar {
 .run-row small {
   font-size: 12px;
 }
+
+/* ==========================================================================
+ * Smoked glass (Laramac 0.13)
+ *
+ * Dark, tinted glass with a strong blur: what is behind shows through as soft
+ * colour, edges catch a thin line of light, text is bright. Pop-ups, menus and
+ * tooltips always use it. With the Smoked style (the default) the whole app does.
+ * ========================================================================== */
+html[data-glass='smoke'],
+html .dialog,
+html .popover,
+html .palette,
+html .menu,
+html .toast {
+  color-scheme: dark;
+  --ink: #f5f3fb;
+  --ink-2: rgba(240, 236, 252, 0.74);
+  --ink-3: rgba(232, 228, 248, 0.5);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.15);
+  --sel: rgba(255, 255, 255, 0.08);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.09);
+  --glass-strong: rgba(255, 255, 255, 0.07);
+  --glass-solid: rgba(255, 255, 255, 0.16);
+  --glass-edge: rgba(255, 255, 255, 0.15);
+  --glass-hair: rgba(0, 0, 0, 0.35);
+  --accent: #8b5cf6;
+  --accent-text: #c4b5fd;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(167, 139, 250, 0.22);
+  --accent-softer: rgba(167, 139, 250, 0.12);
+  --ok: #4ade80;
+  --ok-soft: rgba(74, 222, 128, 0.15);
+  --warn: #fbbf24;
+  --bad: #ff8178;
+  --bad-soft: rgba(255, 129, 120, 0.15);
+  --focus: 0 0 0 3px rgba(167, 139, 250, 0.45);
+  color: var(--ink);
+}
+
+/* The window: deep violet with soft colour for the glass to pick up. */
+html[data-glass='smoke'] {
+  --canvas: 12 10 20;
+  --wash-a: rgba(124, 58, 237, 0.42);
+  --wash-b: rgba(219, 39, 119, 0.24);
+  --wash-c: rgba(14, 165, 233, 0.2);
+  --glass: rgba(26, 22, 38, 0.46);
+  --glass-sheen: rgba(255, 255, 255, 0.06);
+  --blur: saturate(170%) blur(40px);
+  --float: 0 1px 1px rgba(0, 0, 0, 0.3), 0 18px 40px -16px rgba(0, 0, 0, 0.7);
+  --float-hi: 0 2px 4px rgba(0, 0, 0, 0.35), 0 30px 70px -20px rgba(0, 0, 0, 0.8);
+}
+html[data-glass='smoke'] .canvas {
+  background:
+    radial-gradient(55% 45% at 6% 0%, var(--wash-a), transparent 70%),
+    radial-gradient(45% 40% at 100% 6%, var(--wash-b), transparent 70%),
+    radial-gradient(60% 50% at 65% 108%, var(--wash-c), transparent 70%),
+    radial-gradient(40% 35% at 30% 70%, rgba(99, 102, 241, 0.16), transparent 70%),
+    rgb(var(--canvas) / var(--canvas-alpha));
+}
+html[data-glass='smoke'] .glass,
+html[data-glass='smoke'] .panel,
+html[data-glass='smoke'] .group,
+html[data-glass='smoke'] .sidebar {
+  background:
+    linear-gradient(180deg, var(--glass-sheen) 0%, transparent 40%),
+    var(--glass);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 0 0 0.5px var(--glass-hair),
+    var(--float);
+}
+html[data-glass='smoke'] .seg-tabs button[aria-selected='true'],
+html .dialog .seg-tabs button[aria-selected='true'] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+html[data-glass='smoke'] .banner {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.28), rgba(139, 92, 246, 0.1));
+  border-color: rgba(196, 181, 253, 0.22);
+}
+
+/* ---------- Pop-ups, menus, the command bar ---------- */
+html .dialog,
+html .popover,
+html .palette,
+html .menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 42%),
+    rgba(18, 15, 27, 0.6);
+  backdrop-filter: saturate(180%) blur(44px);
+  -webkit-backdrop-filter: saturate(180%) blur(44px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    0 0 0 0.5px rgba(0, 0, 0, 0.4),
+    0 34px 80px -24px rgba(0, 0, 0, 0.65);
+}
+html .dialog .glass,
+html .dialog .panel,
+html .dialog .group {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: none;
+}
+html .scrim {
+  background: rgba(8, 6, 14, 0.26);
+  backdrop-filter: blur(3px) saturate(120%);
+  -webkit-backdrop-filter: blur(3px) saturate(120%);
+}
+html .dialog .code-block,
+html .dialog .resp-body {
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.menu-item {
+  height: 38px;
+  font-weight: 500;
+}
+.menu-item svg {
+  opacity: 0.9;
+}
+
+/* ---------- Tooltips and toasts ---------- */
+.icon-btn[data-tip]::after,
+[data-tip].dev-toggle::after,
+[data-tip].dev-logs::after {
+  background: rgba(18, 15, 27, 0.78);
+  color: #f5f3fb;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+}
+html .toast {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 60%),
+    rgba(18, 15, 27, 0.72);
+  backdrop-filter: blur(30px) saturate(170%);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f5f3fb;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 20px 50px -18px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- Starters ---------- */
+.st-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.st-cats {
+  flex-wrap: wrap;
+}
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.st-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    transform 0.25s var(--spring),
+    box-shadow 0.25s var(--ease),
+    border-color 0.2s var(--ease);
+}
+.st-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(196, 181, 253, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    var(--float-hi);
+}
+.st-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.st-card p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+  flex: 1;
+}
+.st-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.st-card-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.st-card-title strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.st-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 14px;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -8px 16px rgba(0, 0, 0, 0.18),
+    0 6px 16px -6px rgba(0, 0, 0, 0.5);
+}
+.st-needs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st-need {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  background: var(--sel);
+  color: var(--ink-3);
+}
+.st-need[data-ok='true'] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.st-dialog {
+  width: min(560px, calc(100vw - 48px));
+}
+.st-dialog .field {
+  margin-bottom: 14px;
+}
+.st-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.st-plan {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--accent-softer);
+  border: 1px solid var(--accent-soft);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.st-plan svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--accent-text);
+}
+.rt-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+}
+.rt-row + .rt-row {
+  border-top: 1px solid var(--line);
+}
+.rt-version {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 130px;
+  font-size: 13px;
+}
+.st-ready {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 120px;
+  color: var(--ok);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* ---------- Dev server pill on the Sites page ---------- */
+.dev-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  min-width: 132px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--sel);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.dev-pill[data-compact='true'] {
+  min-width: 0;
+  height: 26px;
+}
+.dev-pill[data-on='true'] {
+  background: var(--ok-soft);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  color: var(--ok);
+}
+.dev-label {
+  flex: 1;
+  padding: 0 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dev-toggle,
+.dev-logs {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+.dev-pill[data-compact='true'] .dev-toggle,
+.dev-pill[data-compact='true'] .dev-logs {
+  width: 22px;
+  height: 22px;
+}
+.dev-toggle {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.dev-pill[data-on='true'] .dev-toggle {
+  background: var(--ok);
+  color: #06210f;
+}
+.dev-toggle:hover,
+.dev-logs:hover {
+  filter: brightness(1.12);
+}
+.dev-logs:hover {
+  background: var(--sel);
+}
+[data-tip].dev-toggle::after,
+[data-tip].dev-logs::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 30;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.15s var(--ease), transform 0.2s var(--spring);
+}
+[data-tip].dev-toggle:hover::after,
+[data-tip].dev-logs:hover::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.dev-out {
+  height: 46vh;
+  overflow: auto;
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The PHP / dev server column fits its contents, so nothing slides under the HTTPS switch. */
+.site-row {
+  grid-template-columns: 36px minmax(0, 1fr) auto 140px 44px auto;
+}
+.site-row select.input,
+.site-row > .dev-pill,
+.site-row > .btn {
+  width: 140px;
+  min-width: 0;
+}
+.site-row > span:empty {
+  width: 140px !important;
+}
+.rt-row .row-main {
+  flex: 1;
+  min-width: 0;
+}

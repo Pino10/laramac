@@ -36,7 +36,8 @@ export async function buildHostConfs(): Promise<HostConfs> {
       phpPort: s.php ? phpPortFor(s.php) : null,
       secure: s.secure,
       cert,
-      aliases: s.aliases
+      aliases: s.aliases,
+      ...(s.dev?.proxy ? { proxyTo: `http://127.0.0.1:${s.dev.port}` } : {})
     })
   }
 

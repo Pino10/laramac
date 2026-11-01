@@ -13,6 +13,7 @@ const defaults = (): AppSettings => ({
   wwwPath: DEFAULT_WWW(),
   tld: 'test',
   glass: true,
+  glassStyle: 'smoke',
   defaultPhp: null,
   phpFlavor: 'full',
   mysqlVersion: 'latest',

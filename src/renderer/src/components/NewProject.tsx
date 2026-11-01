@@ -9,7 +9,7 @@ const kinds: { id: ProjectKind; title: string; hint: string }[] = [
 ]
 
 export default function NewProject({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const { act, setSites, busy, settings } = useApp()
+  const { act, setSites, busy, settings, setPage } = useApp()
   const [kind, setKind] = useState<ProjectKind>('blank')
   const [name, setName] = useState('')
   const working = busy.has('create-project')
@@ -39,6 +39,16 @@ export default function NewProject({ onClose }: { onClose: () => void }): React.
             </button>
           ))}
         </div>
+        <button
+          className="link"
+          style={{ display: 'block', marginBottom: 14, fontSize: 13 }}
+          onClick={() => {
+            onClose()
+            setPage('starters')
+          }}
+        >
+          React, Next.js, Vue, Django, C#, Go, Swift and more are in Starters →
+        </button>
         <label htmlFor="np-name" style={{ fontWeight: 500 }}>
           Folder name
         </label>

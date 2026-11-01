@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Camera,
   Code,
@@ -19,7 +19,11 @@ import {
   Trash2,
   Upload,
   UploadCloud,
-  X
+  X,
+  Loader2,
+  Play,
+  Square,
+  ScrollText
 } from 'lucide-react'
 import type { DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer } from '@shared/types'
 import { useApp } from '../store'
@@ -38,12 +42,125 @@ const AI_NAMES: Record<string, string> = {
   ollama: 'Ollama'
 }
 
+const PHP_KINDS: SiteInfo['kind'][] = ['laravel', 'wordpress', 'symfony', 'php', 'static']
+
+/** Start, stop and watch a project's own dev server (Vite, Next.js, Django, dotnet watch...). */
+function DevControl({ site, onLogs, compact }: { site: SiteInfo; onLogs: () => void; compact?: boolean }): React.JSX.Element | null {
+  const { act, busy, setSites } = useApp()
+  const api = window.laramac
+  const key = `dev-${site.name}`
+  if (site.dev) {
+    const on = site.dev.running
+    return (
+      <div className="dev-pill" data-on={on} data-compact={compact}>
+        <button
+          className="dev-toggle"
+          aria-label={on ? `Stop the ${site.name} dev server` : `Start the ${site.name} dev server`}
+          data-tip={on ? 'Stop dev server' : 'Start dev server'}
+          disabled={busy.has(key)}
+          onClick={() => act(key, () => api.invoke(on ? 'dev:stop' : 'dev:start', site.name).then(setSites))}
+        >
+          {busy.has(key) ? <Loader2 size={13} className="spin" /> : on ? <Square size={11} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+        </button>
+        {!compact && <span className="dev-label">{busy.has(key) ? (on ? 'Stopping' : 'Starting') : on ? `Running :${site.dev.port}` : 'Dev server'}</span>}
+        <button className="dev-logs" aria-label={`Dev server output for ${site.name}`} data-tip="Output" onClick={onLogs}>
+          <ScrollText size={13} />
+        </button>
+      </div>
+    )
+  }
+  if (site.devSuggestion)
+    return (
+      <button
+        className="btn btn-sm btn-tonal"
+        style={{ width: compact ? undefined : 132 }}
+        disabled={busy.has(key)}
+        title={`Run npm run ${site.devSuggestion} and open it at ${site.domain}`}
+        onClick={() => act(key, () => api.invoke('dev:setup', site.name, site.devSuggestion!).then(setSites))}
+      >
+        <Play size={12} /> Set up dev
+      </button>
+    )
+  return <span style={{ width: 132 }} />
+}
+
+function DevLogs({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+  const { act, setSites } = useApp()
+  const [text, setText] = useState('')
+  const box = useRef<HTMLPreElement>(null)
+  useEffect(() => {
+    let alive = true
+    const load = (): void => {
+      void window.laramac.invoke('dev:logs', site.name).then((t) => {
+        if (!alive) return
+        setText(t)
+        requestAnimationFrame(() => box.current && (box.current.scrollTop = box.current.scrollHeight))
+      })
+    }
+    load()
+    const t = setInterval(load, 1500)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [site.name])
+  const dev = site.dev
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass snap-dialog push-dialog" role="dialog" aria-label={`${site.name} dev server`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="snap-head">
+          <div>
+            <h2 className="page-title">{site.name} dev server</h2>
+            <p className="page-desc mono" style={{ marginTop: 4 }}>
+              {dev?.command ?? ''}
+            </p>
+          </div>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </div>
+        <pre ref={box} className="code-block dev-out">
+          {text || (dev?.running ? 'Waiting for output…' : 'Not running. Press play on the Sites page to start it.')}
+        </pre>
+        <div className="end" style={{ marginTop: 14 }}>
+          <button
+            className="btn btn-quiet danger-text"
+            style={{ marginRight: 'auto' }}
+            onClick={async () => {
+              const r = await act(`dev-${site.name}`, () => window.laramac.invoke('dev:setup', site.name, null))
+              if (r) {
+                setSites(r)
+                onClose()
+              }
+            }}
+          >
+            Remove dev server
+          </button>
+          {dev && (
+            <button className="btn" onClick={() => window.laramac.invoke('sites:open-url', `http://127.0.0.1:${dev.port}`)}>
+              Open 127.0.0.1:{dev.port}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => window.laramac.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}>
+            Open {site.domain}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
   wordpress: 'WordPress',
   symfony: 'Symfony',
   php: 'PHP',
   node: 'Node',
+  python: 'Python',
+  dotnet: '.NET',
+  go: 'Go',
+  rust: 'Rust',
+  swift: 'Swift',
   static: 'Static'
 }
 
@@ -57,6 +174,7 @@ export default function Sites(): React.JSX.Element {
   const [snapFor, setSnapFor] = useState<SiteInfo | null>(null)
   const [deployFor, setDeployFor] = useState<SiteInfo | null>(null)
   const [pushFor, setPushFor] = useState<SiteInfo | null>(null)
+  const [logsFor, setLogsFor] = useState<SiteInfo | null>(null)
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -132,23 +250,28 @@ export default function Sites(): React.JSX.Element {
                 )}
               </div>
               <div className="chips">
+                {PHP_KINDS.includes(site.kind) && (site.dev || site.devSuggestion) && <DevControl site={site} compact onLogs={() => setLogsFor(site)} />}
                 <span className="tag">{kindLabel[site.kind]}</span>
               </div>
-              <select
-                className="input"
-                aria-label={`PHP version for ${site.name}`}
-                title="PHP version"
-                value={site.php ?? ''}
-                disabled={installedPhp.length === 0}
-                onChange={(e) => act(`cfg-${site.name}`, () => api.invoke('sites:set-config', site.name, { php: e.target.value }).then(setSites))}
-              >
-                {installedPhp.length === 0 && <option value="">No PHP</option>}
-                {installedPhp.map((p) => (
-                  <option key={p.minor} value={p.minor}>
-                    PHP {p.minor}
-                  </option>
-                ))}
-              </select>
+              {PHP_KINDS.includes(site.kind) ? (
+                <select
+                  className="input"
+                  aria-label={`PHP version for ${site.name}`}
+                  title="PHP version"
+                  value={site.php ?? ''}
+                  disabled={installedPhp.length === 0}
+                  onChange={(e) => act(`cfg-${site.name}`, () => api.invoke('sites:set-config', site.name, { php: e.target.value }).then(setSites))}
+                >
+                  {installedPhp.length === 0 && <option value="">No PHP</option>}
+                  {installedPhp.map((p) => (
+                    <option key={p.minor} value={p.minor}>
+                      PHP {p.minor}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <DevControl site={site} onLogs={() => setLogsFor(site)} />
+              )}
               <span title="HTTPS">
                 <Switch
                   on={site.secure}
@@ -222,6 +345,7 @@ export default function Sites(): React.JSX.Element {
       )}
       {snapFor && <SnapshotsDialog site={snapFor} onClose={() => setSnapFor(null)} />}
       {deployFor && <DeployDialog site={deployFor} onClose={() => setDeployFor(null)} />}
+      {logsFor && <DevLogs site={sites.find((x) => x.name === logsFor.name) ?? logsFor} onClose={() => setLogsFor(null)} />}
       {pushFor && <PushDialog site={pushFor} onClose={() => setPushFor(null)} />}
     </>
   )

@@ -6,7 +6,9 @@
 export interface SiteConf {
   domain: string
   docRoot: string
-  kind: 'laravel' | 'wordpress' | 'symfony' | 'php' | 'static' | 'node'
+  kind: 'laravel' | 'wordpress' | 'symfony' | 'php' | 'static' | 'node' | 'python' | 'dotnet' | 'go' | 'rust' | 'swift'
+  /** Passes every request to a development server, such as http://127.0.0.1:5170. */
+  proxyTo?: string
   /** Port of the PHP-FPM pool serving this site, or null when PHP is not installed. */
   phpPort: number | null
   secure: boolean
@@ -140,6 +142,36 @@ function nginxPhpBlock(phpPort: number | null, o: NginxOptions): string {
     }`
 }
 
+/**
+ * Passes a site through to its dev server. The dev server sees its own address as the host,
+ * which is what Vite, Angular and others accept by default; the real name goes in X-Forwarded-Host.
+ */
+function nginxProxy(to: string, domain: string): string {
+  const upstream = to.replace(/^https?:\/\//, '').replace(/\/$/, '')
+  return `    error_page 502 504 = @devdown;
+    location / {
+        proxy_pass ${to};
+        proxy_http_version 1.1;
+        proxy_set_header Host ${upstream};
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 1h;
+        proxy_buffering off;
+    }
+    location @devdown {
+        default_type text/html;
+        return 503 '${devDownPage(domain)}';
+    }`
+}
+
+/** Shown when the dev server is not running, instead of a bare gateway error. */
+export function devDownPage(domain: string): string {
+  return `<!doctype html><meta charset=utf-8><title>${domain}</title><body style="font:15px -apple-system,system-ui;display:grid;place-items:center;height:90vh;color:#444;background:#f6f5fb"><div style="text-align:center"><h2 style="color:#7c3aed">${domain} is not running</h2><p>Start its dev server in Laramac, on the Sites page. This page reloads by itself.</p></div><script>setTimeout(function(){location.reload()},2500)</script></body>`
+}
+
 export function generateNginxConf(o: NginxOptions): string {
   const servers: string[] = []
 
@@ -165,6 +197,16 @@ ${nginxPhpBlock(o.localhost.phpPort, o)}
 
   for (const site of o.sites) {
     const secure = site.secure && !!site.cert
+    if (site.proxyTo) {
+      servers.push(`
+server {
+${nginxListen(secure, o)}
+    server_name ${site.domain} *.${site.domain}${(site.aliases ?? []).map((a) => ` ${a}`).join('')};
+${nginxSsl(site.cert, secure)}
+${nginxProxy(site.proxyTo, site.domain)}
+}`)
+      continue
+    }
     const fallback = usesFrontController(site.kind) ? '/index.php?$query_string' : '=404'
     servers.push(`
 server {
@@ -277,6 +319,9 @@ const APACHE_MODULES: [string, string][] = [
   ['headers_module', 'mod_headers.so'],
   ['proxy_module', 'mod_proxy.so'],
   ['proxy_fcgi_module', 'mod_proxy_fcgi.so'],
+  // Passes sites through to their dev servers, including live-reload WebSockets.
+  ['proxy_http_module', 'mod_proxy_http.so'],
+  ['proxy_wstunnel_module', 'mod_proxy_wstunnel.so'],
   ['socache_shmcb_module', 'mod_socache_shmcb.so'],
   ['ssl_module', 'mod_ssl.so']
 ]
@@ -329,6 +374,26 @@ export function generateApacheConf(o: ApacheOptions): string {
 </VirtualHost>`
   }
 
+  const proxyHost = (domain: string, to: string, cert: { cert: string; key: string } | undefined, secure: boolean, port: number, extraNames: string[]): string => {
+    const target = to.replace(/\/?$/, '/')
+    const ssl = secure && cert ? `\n    SSLEngine on\n    SSLCertificateFile "${cert.cert}"\n    SSLCertificateKeyFile "${cert.key}"` : ''
+    return `
+<VirtualHost *:${port}>
+    ServerName ${domain}
+    ServerAlias *.${domain}${extraNames.length ? ` ${extraNames.join(' ')}` : ''}${ssl}
+    ProxyRequests Off
+    ProxyPreserveHost Off
+    ProxyTimeout 3600
+    RequestHeader set X-Forwarded-Proto "${secure ? 'https' : 'http'}"
+    <Location />
+        ${access}
+    </Location>
+    ProxyPass / ${target} upgrade=websocket
+    ProxyPassReverse / ${target}
+    ErrorDocument 503 "${devDownPage(domain).replace(/"/g, "'")}"
+</VirtualHost>`
+  }
+
   const blocks: string[] = []
   const emit = (
     domain: string,
@@ -345,9 +410,15 @@ export function generateApacheConf(o: ApacheOptions): string {
 
   // The first virtual host answers any name Apache does not recognise, so localhost goes first.
   if (o.localhost) emit('localhost', false, o.localhost.root, o.localhost.phpPort, undefined, false, ['127.0.0.1', '[::1]'])
-  for (const s of o.sites) emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure, s.aliases ?? [])
+  for (const s of o.sites) {
+    if (s.proxyTo) {
+      blocks.push(proxyHost(s.domain, s.proxyTo, undefined, false, o.port, s.aliases ?? []))
+      if (s.secure && s.cert) blocks.push(proxyHost(s.domain, s.proxyTo, s.cert, true, o.httpsPort, s.aliases ?? []))
+    } else emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure, s.aliases ?? [])
+  }
   for (const e of o.extras) {
     if (e.root) emit(e.domain, false, e.root, e.phpPort ?? null, e.cert, e.secure)
+    else if (e.proxyTo) blocks.push(proxyHost(e.domain, e.proxyTo, undefined, false, o.port, []))
   }
 
   const types = o.mimeTypesFile

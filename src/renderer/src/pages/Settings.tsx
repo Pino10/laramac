@@ -237,6 +237,24 @@ export default function Settings(): React.JSX.Element {
         </div>
         <div className="row row-set">
           <div className="row-main">
+            <div className="row-title">Glass style</div>
+            <div className="row-sub">Smoked is dark, tinted glass everywhere. Frosted is light glass that follows your Mac's light and dark mode.</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Glass style">
+            {(
+              [
+                ['smoke', 'Smoked'],
+                ['frost', 'Frosted']
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} role="radio" aria-checked={(settings.glassStyle ?? 'smoke') === id} onClick={() => updateSettings({ glassStyle: id })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
             <div className="row-title">Liquid Glass</div>
             <div className="row-sub">Native glass on macOS 26 and later, following your system transparency slider. Restart to apply.</div>
           </div>

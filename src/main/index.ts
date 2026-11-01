@@ -18,6 +18,10 @@ import { readdirSync } from 'fs'
 import { dirs } from './paths'
 import { homedir } from 'os'
 import { checkForUpdate, installUpdate, releaseNotes } from './updater'
+import { installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
+import { createFromStarter } from './starterrun'
+import { devFromScript, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
+import { STARTERS, starterById } from '../shared/starters'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
 import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
@@ -73,6 +77,36 @@ const RENDERER_FILE = join(__dirname, '../renderer/index.html')
 
 function send<K extends keyof Events>(event: K, payload: Events[K]): void {
   mainWindow?.webContents.send(event, payload)
+}
+
+let versionCache: { at: number; data: Record<string, string> } | null = null
+
+/** Newest version of each starter's setup tool, from npm, Packagist, PyPI, crates.io or GitHub. */
+async function starterVersions(): Promise<Record<string, string>> {
+  if (versionCache && Date.now() - versionCache.at < 30 * 60 * 1000) return versionCache.data
+  const get = async (url: string): Promise<unknown> => {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Laramac (+https://github.com/Pino10/laramac)', Accept: 'application/json' }, signal: AbortSignal.timeout(12000) })
+    if (!res.ok) throw new Error(String(res.status))
+    return res.json()
+  }
+  const data: Record<string, string> = {}
+  await Promise.allSettled(
+    STARTERS.map(async (s) => {
+      const src = s.source
+      if (!src) return
+      let v: string | undefined
+      if (src.npm) v = ((await get(`https://registry.npmjs.org/${src.npm.replace('/', '%2F')}/latest`)) as { version?: string }).version
+      else if (src.packagist) {
+        const list = ((await get(`https://repo.packagist.org/p2/${src.packagist}.json`)) as { packages: Record<string, { version: string }[]> }).packages[src.packagist]
+        v = list?.find((x) => /^v?\d+\.\d+(\.\d+)?$/.test(x.version))?.version
+      } else if (src.pypi) v = ((await get(`https://pypi.org/pypi/${src.pypi}/json`)) as { info: { version: string } }).info.version
+      else if (src.crates) v = ((await get(`https://crates.io/api/v1/crates/${src.crates}`)) as { crate: { max_stable_version: string } }).crate.max_stable_version
+      else if (src.github) v = ((await get(`https://api.github.com/repos/${src.github}/releases/latest`)) as { tag_name: string }).tag_name
+      if (v) data[s.id] = v.replace(/^v/, '')
+    })
+  )
+  versionCache = { at: Date.now(), data }
+  return data
 }
 
 function listSites(): SiteInfo[] {
@@ -376,6 +410,58 @@ function registerIpc(): void {
     if (!PROJECT_KINDS.includes(kind)) throw new ValidationError('Unknown project type.')
     await createProject(kind, name)
     activity.push('success', `Created ${name}`, `New ${kind === 'blank' ? 'PHP' : kind} project in your www folder.`)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('runtimes:list', () => listRuntimes())
+  handle('runtimes:latest', () => latestVersions())
+  handle('runtimes:install', async (id) => {
+    if (!RUNTIME_IDS.includes(id)) throw new ValidationError('Unknown runtime.')
+    await installRuntime(id)
+    activity.push('success', `Installed ${id === 'python' ? 'Python' : id}`, 'Ready for new projects.')
+    return listRuntimes()
+  })
+  handle('starters:versions', () => starterVersions())
+  handle('starters:create', async (req) => {
+    if (!req || typeof req !== 'object' || typeof req.starter !== 'string' || typeof req.name !== 'string') throw new ValidationError('That request is not valid.')
+    const starter = starterById(req.starter)
+    if (!starter) throw new ValidationError('That starter does not exist.')
+    const options: Record<string, string> = {}
+    for (const [k, v] of Object.entries(req.options ?? {})) if (typeof v === 'string') options[k] = v
+    const name = req.name.trim()
+    const { devPort } = await createFromStarter({ starter: starter.id, name, options, start: !!req.start, git: !!req.git })
+    activity.push('success', `Created ${name}`, `New ${starter.name} project in your www folder.`)
+    notifySitesChanged()
+    if (devPort && req.start) {
+      const site = siteByName(name)
+      const cfg = getSettings().siteConfig[name]?.dev
+      if (cfg) await startDev(site, cfg).catch((err) => activity.push('error', `${name} dev server did not start`, (err as Error).message.slice(0, 300)))
+    }
+    return listSites()
+  })
+  handle('dev:start', async (name) => {
+    const site = siteByName(name)
+    const cfg = getSettings().siteConfig[site.name]?.dev
+    if (!cfg) throw new ValidationError('This site has no dev server set up.')
+    await startDev(site, cfg)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('dev:stop', async (name) => {
+    await stopDev(siteByName(name).name)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('dev:logs', (name) => devLogs(siteByName(name).name))
+  handle('dev:setup', async (name, script) => {
+    const site = siteByName(name)
+    if (script === null) {
+      await stopDev(site.name)
+      setSiteConfig(site.name, { dev: undefined })
+    } else {
+      if (typeof script !== 'string' || !/^[\w:.-]{1,40}$/.test(script)) throw new ValidationError('That script name is not valid.')
+      setSiteConfig(site.name, { dev: devFromScript(site.path, script, await pickDevPort()) })
+    }
     notifySitesChanged()
     return listSites()
   })
@@ -1208,6 +1294,7 @@ app.whenReady().then(() => {
   ensureDirs()
   ensureWww()
   refreshShims()
+  refreshRuntimeShims()
   hardenWebContents()
   registerIpc()
   watchWww()
@@ -1264,7 +1351,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   quitting = true
   ssh.disconnectAll()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev()]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

@@ -12,6 +12,11 @@ const kindName: Record<string, string> = {
   symfony: 'Symfony',
   php: 'PHP',
   node: 'Node',
+  python: 'Python',
+  dotnet: '.NET',
+  go: 'Go',
+  rust: 'Rust',
+  swift: 'Swift',
   static: 'Static site'
 }
 

@@ -28,7 +28,41 @@ export interface ServiceInfo {
   error?: string
 }
 
-export type SiteKind = 'laravel' | 'wordpress' | 'symfony' | 'php' | 'static' | 'node'
+export type SiteKind = 'laravel' | 'wordpress' | 'symfony' | 'php' | 'static' | 'node' | 'python' | 'dotnet' | 'go' | 'rust' | 'swift'
+
+export type RuntimeId = 'node' | 'bun' | 'python' | 'dotnet' | 'go' | 'rust' | 'swift' | 'php'
+
+export interface RuntimeInfo {
+  id: RuntimeId
+  name: string
+  description: string
+  installed: boolean
+  version: string | null
+  /** Installed by Laramac (true) or found on this Mac (false). */
+  managed: boolean
+  path: string | null
+  /** Laramac can download and install it. Swift comes from Apple instead. */
+  canInstall: boolean
+  note?: string
+}
+
+/** How a project's own development server runs. */
+export interface DevConfig {
+  command: string[]
+  port: number
+  /** name.test is passed through to the dev server. */
+  proxy: boolean
+  env?: Record<string, string>
+}
+
+export interface StarterRequest {
+  starter: string
+  name: string
+  options: Record<string, string>
+  /** Start the dev server when done. */
+  start: boolean
+  git: boolean
+}
 
 export interface SiteConfig {
   /** PHP minor version like "8.3", or undefined to use the default. */
@@ -38,6 +72,7 @@ export interface SiteConfig {
   aliases?: string[]
   /** Where Deploy sends this site. */
   deploy?: DeployTarget
+  dev?: DevConfig
 }
 
 export interface SiteInfo {
@@ -54,6 +89,9 @@ export interface SiteInfo {
   shareUrl?: string
   /** Other addresses that open this site. */
   aliases: string[]
+  dev?: { port: number; proxy: boolean; running: boolean; command: string }
+  /** A dev command found in package.json that can be set up with one click. */
+  devSuggestion?: string
 }
 
 export interface PhpVersionInfo {
@@ -415,6 +453,8 @@ export interface AppSettings {
   wwwPath: string
   tld: string
   glass: boolean
+  /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
+  glassStyle: 'smoke' | 'frost'
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
@@ -520,6 +560,15 @@ export interface Channels {
   'sites:list': { args: []; result: SiteInfo[] }
   'sites:set-config': { args: [string, SiteConfig]; result: SiteInfo[] }
   'sites:create': { args: [ProjectKind, string]; result: SiteInfo[] }
+  'runtimes:list': { args: []; result: RuntimeInfo[] }
+  'runtimes:latest': { args: []; result: Partial<Record<RuntimeId, string>> }
+  'runtimes:install': { args: [RuntimeId]; result: RuntimeInfo[] }
+  'starters:versions': { args: []; result: Record<string, string> }
+  'starters:create': { args: [StarterRequest]; result: SiteInfo[] }
+  'dev:start': { args: [string]; result: SiteInfo[] }
+  'dev:stop': { args: [string]; result: SiteInfo[] }
+  'dev:logs': { args: [string]; result: string }
+  'dev:setup': { args: [string, string | null]; result: SiteInfo[] }
   'sites:open-folder': { args: [string]; result: void }
   'sites:open-url': { args: [string]; result: void }
   'sites:open-editor': { args: [string]; result: void }

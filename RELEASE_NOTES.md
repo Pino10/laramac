@@ -1,27 +1,19 @@
-## New in 0.12
+## New in 0.13
 
-### GitHub
-- **Create a repository from Laramac.** Pick a name, description, private or public, and an optional README. It can also be cloned straight into your projects folder.
-- **Repository details.** Click a repo name to see its branches, releases, recent commits, open pull requests and issues.
-- **Delete a repository.** Type its name to confirm. If your token lacks the delete permission, Laramac says exactly which one to add.
-- **Download as ZIP** to any folder, and **Pull latest** into a site that is already linked.
-- **Push anywhere.** The push dialog still picks the linked repo, but you can now push somewhere else or create a new repo from the same place. You still choose main, a new branch, a version tag or a release.
+### Starters: every stack in one click
+- **A new Starters page** with more than 30 frameworks: Next.js, Nuxt, SvelteKit, React Router, Astro, React, Vue, Angular, Vite (Solid, Preact, Svelte, Lit, Qwik), Laravel with the React, Vue, Svelte or Livewire starter kit, Symfony, Statamic, Drupal, Craft CMS, Slim, CodeIgniter, NestJS, Hono, Elysia, FastAPI, Django, Flask, Streamlit, ASP.NET Core, .NET apps, Go, Rust, Expo, Tauri, Electron, SwiftUI, Vapor and Swift packages.
+- **Always the newest version.** Each starter runs the framework's own official setup tool. Cards show the latest release.
+- **One click does everything:** installs the language if it is missing, creates the project, the database and `.env`, runs migrations, installs packages and makes the first Git commit.
+- **Languages tab.** Node.js, Bun, Python (uv), .NET, Go and Rust, installed from their official sources with checksums verified, kept inside Laramac's folder, and updated from here. Copies you already have are used.
 
-### Servers
-- **Upload a whole folder** over SFTP or FTP, not just single files.
-- Downloads and uploads default to your www folder.
-- **Add a server from the Deploy dialog** without leaving it.
+### Dev servers at name.test
+- JavaScript, Python, C#, Go, Rust and Swift projects run their own dev server from the Sites page and open at `name.test`, live reload included, through Apache or Nginx.
+- Start, stop and watch the output. Stopping also stops everything the server started.
+- Existing JavaScript projects get a **Set up dev** button.
+- When a dev server is off, `name.test` says so and reloads by itself once it starts.
 
-### API client
-- **Works like Postman.** Import Postman collections (folders included) and Postman environments, then edit, run and save inside them.
-- **Folders** in the sidebar, which you can collapse, run and add to.
-- **Tests** on each request: status, response time, a header, a JSON value or body text. Results appear next to the response, and the sidebar shows which requests pass.
-- **Save values** from a response into the environment, such as a login token, so the next requests can use it.
-- **Collection runner.** Run a whole collection or folder in order and see what passed.
-- **Collection variables**, rename, duplicate, move to a folder, delete.
-- **Export** a collection back to Postman, and **copy any request as code**: cURL, JavaScript, PHP or Python.
-- A cleaner layout.
+### Smoked glass
+- A new look: dark, tinted glass with a strong blur and fine lit edges, for pop-ups, menus, tooltips and, with the default Smoked style, the whole app. Frosted glass is still in Settings.
 
 ### Fixed
-- Tooltips on the first site row were cut off.
-- Updates and PHP downloads work while the repository is private, using the GitHub account connected in Laramac.
+- The PHP version picker no longer slides under the HTTPS switch on the Sites page.

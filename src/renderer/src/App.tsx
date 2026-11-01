@@ -17,16 +17,20 @@ import Settings from './pages/Settings'
 import Servers from './pages/Servers'
 import Packages from './pages/Packages'
 import ApiClient from './pages/ApiClient'
+import Starters from './pages/Starters'
 import GitHub from './pages/GitHub'
 import Updates from './pages/Updates'
 import UpdateBanner from './components/UpdateBanner'
 
 function Shell(): React.JSX.Element {
-  const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject, setImportOpen } = useApp()
+  const { page, setPage, toast, appInfo, paletteOpen, setPaletteOpen, newProject, setNewProject, setImportOpen, settings } = useApp()
 
   useEffect(() => {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
   }, [appInfo])
+  useEffect(() => {
+    document.documentElement.dataset.glass = settings?.glassStyle ?? 'smoke'
+  }, [settings?.glassStyle])
 
   // ⌘K command bar, ⌘1 to ⌘7 pages, ⌘N new project.
   useEffect(() => {
@@ -70,6 +74,7 @@ function Shell(): React.JSX.Element {
               {page !== 'updates' && <UpdateBanner />}
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
+              {page === 'starters' && <Starters />}
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}
               {page === 'servers' && <Servers />}
