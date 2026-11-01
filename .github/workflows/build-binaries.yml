@@ -1,0 +1,73 @@
+name: Build server binaries
+
+# Builds a self-contained Nginx for macOS so Laramac does not need Homebrew.
+# Run it manually from the Actions tab. The result is published to a release tagged "binaries",
+# which is where the app looks for it. Until this has run, the app falls back to Homebrew.
+
+on:
+  workflow_dispatch:
+
+env:
+  NGINX_VERSION: '1.28.0'
+  PCRE2_VERSION: '10.44'
+  ZLIB_VERSION: '1.3.1'
+  OPENSSL_VERSION: '3.3.2'
+
+jobs:
+  nginx:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: amd64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - name: Download sources
+        run: |
+          curl -fsSL https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz | tar xz
+          curl -fsSL https://github.com/PCRE2Project/pcre2/releases/download/pcre2-$PCRE2_VERSION/pcre2-$PCRE2_VERSION.tar.gz | tar xz
+          curl -fsSL https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz | tar xz
+          curl -fsSL https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz | tar xz
+
+      - name: Build Nginx with libraries linked in statically
+        working-directory: nginx-${{ env.NGINX_VERSION }}
+        run: |
+          ./configure \
+            --prefix=/opt/laramac-nginx \
+            --with-pcre=../pcre2-$PCRE2_VERSION \
+            --with-zlib=../zlib-$ZLIB_VERSION \
+            --with-openssl=../openssl-$OPENSSL_VERSION \
+            --with-http_ssl_module \
+            --with-http_v2_module \
+            --with-http_realip_module \
+            --with-http_gzip_static_module \
+            --with-cc-opt="-O2"
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Check the binary
+        run: |
+          ./nginx-$NGINX_VERSION/objs/nginx -V
+          # Only system libraries may be linked dynamically.
+          otool -L ./nginx-$NGINX_VERSION/objs/nginx
+          if otool -L ./nginx-$NGINX_VERSION/objs/nginx | grep -E '/opt/homebrew|/usr/local'; then
+            echo "Binary depends on Homebrew libraries"; exit 1
+          fi
+
+      - name: Package
+        run: |
+          mkdir pkg
+          cp nginx-$NGINX_VERSION/objs/nginx pkg/nginx
+          tar -czf nginx-darwin-${{ matrix.arch }}.tar.gz -C pkg nginx
+
+      - name: Publish to the binaries release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view binaries --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create binaries --repo "$GITHUB_REPOSITORY" --title "Server binaries" \
+              --notes "Prebuilt servers used by the Laramac app. Built by the Build server binaries workflow."
+          gh release upload binaries nginx-darwin-${{ matrix.arch }}.tar.gz --repo "$GITHUB_REPOSITORY" --clobber

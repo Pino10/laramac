@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Real servers let the tests check the generated configs end to end.
+      - name: Install Nginx, Apache and PHP-FPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx-core apache2 php-fpm php-cli
+          sudo systemctl stop nginx apache2 || true
+
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
