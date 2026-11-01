@@ -164,6 +164,35 @@ export interface SftpListing {
   entries: SftpEntry[]
 }
 
+export interface McpStatus {
+  enabled: boolean
+  running: boolean
+  url: string
+  /** The command other tools can use to connect, with the token. */
+  command: string
+  claude: 'connected' | 'not-connected' | 'not-installed'
+  error: string | null
+}
+
+export interface SnapshotInfo {
+  id: string
+  site: string
+  note: string
+  createdAt: number
+  bytes: number
+  database: { engine: 'mysql' | 'mariadb'; name: string } | null
+  /** Why the database was left out, when the site has one. */
+  databaseSkipped: string | null
+}
+
+export interface PackageInfo {
+  id: string
+  group: 'php' | 'database' | 'tool' | 'brew' | 'cache'
+  name: string
+  detail: string
+  bytes: number
+}
+
 export interface DatabaseInfo {
   engine: 'mysql' | 'mariadb'
   name: string
@@ -206,6 +235,8 @@ export interface AppSettings {
   allowLan: boolean
   notifications: boolean
   autoUpdateCheck: boolean
+  /** Lets Claude Code and other AI tools work with Laramac over MCP. */
+  mcpEnabled: boolean
   /** Which AI coding tool the per-site button opens. */
   aiTool: string
   siteConfig: Record<string, SiteConfig>
@@ -337,6 +368,16 @@ export interface Channels {
   'shell:write': { args: [string, string]; result: void }
   'shell:resize': { args: [string, number, number]; result: void }
   'shell:close': { args: [string]; result: void }
+  'snapshots:list': { args: [string]; result: SnapshotInfo[] }
+  'snapshots:create': { args: [string, string]; result: SnapshotInfo[] }
+  'snapshots:restore': { args: [string, string]; result: SnapshotInfo[] }
+  'snapshots:export': { args: [string, string]; result: string | null }
+  'snapshots:delete': { args: [string, string]; result: SnapshotInfo[] }
+  'mcp:status': { args: []; result: McpStatus }
+  'mcp:enable': { args: [boolean]; result: McpStatus }
+  'mcp:connect': { args: []; result: McpStatus }
+  'packages:list': { args: []; result: PackageInfo[] }
+  'packages:remove': { args: [string]; result: PackageInfo[] }
   'db:list': { args: []; result: DatabaseInfo[] }
   'db:create': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }
   'db:drop': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }

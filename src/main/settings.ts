@@ -28,6 +28,7 @@ const defaults = (): AppSettings => ({
   allowLan: false,
   notifications: true,
   autoUpdateCheck: true,
+  mcpEnabled: false,
   aiTool: 'claude',
   siteConfig: {},
   llm: { baseUrl: 'http://127.0.0.1:11434/v1', model: '' }

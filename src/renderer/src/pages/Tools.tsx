@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Cloud, Code, ExternalLink, Mail, Package, TerminalSquare, Waypoints } from 'lucide-react'
-import type { AiTool } from '@shared/types'
+import { Cloud, Copy, Sparkles, Code, ExternalLink, Mail, Package, TerminalSquare, Waypoints } from 'lucide-react'
+import type { AiTool, McpStatus } from '@shared/types'
 import { useApp } from '../store'
-import { CopyField, PageHead } from '../ui'
+import { CopyField, PageHead, Switch } from '../ui'
 
 type Installable = 'cloudflared' | 'ngrok' | 'composer'
+
+const AI_LETTERS: Record<string, string> = { claude: 'Cc', codex: 'Cx', opencode: 'Oc', vmlx: 'vM', lmstudio: 'LM', ollama: 'Ol', openclaw: 'Ow', gemini: 'Ge' }
 
 export default function Tools(): React.JSX.Element {
   const { tools, settings, services, act, busy, setTools, updateSettings, notify } = useApp()
   const api = window.laramac
   const [ai, setAi] = useState<AiTool[]>([])
+  const [mcp, setMcp] = useState<McpStatus | null>(null)
+  useEffect(() => {
+    void api.invoke('mcp:status').then(setMcp)
+  }, [api])
 
   useEffect(() => {
     const load = (): void => void api.invoke('ai:tools').then(setAi)
@@ -26,8 +32,63 @@ export default function Tools(): React.JSX.Element {
     <>
       <PageHead title="Tools" desc="Coding agents and local models, mail, public links and Composer. Installers run in Terminal so you can see every step." />
 
+      <div className="mcp-card glass">
+        <span className="mcp-mark" aria-hidden>
+          <Sparkles size={20} />
+        </span>
+        <div className="mcp-body">
+          <strong>Let Claude Code work with Laramac</strong>
+          <span>
+            Claude Code can then see your sites, start and stop services, switch PHP versions, create databases, read logs and take snapshots while it works.
+            Only this Mac can reach it, and only with a private key.
+          </span>
+          {mcp?.error && <span style={{ color: 'var(--bad)' }}>{mcp.error}</span>}
+          <div className="mcp-actions">
+            {mcp?.claude === 'connected' ? (
+              <span className="tag tag-ok">Claude Code is connected</span>
+            ) : (
+              <button
+                className="btn btn-primary"
+                disabled={busy.has('mcp-connect') || mcp?.claude === 'not-installed'}
+                onClick={async () => {
+                  const next = await act('mcp-connect', () => api.invoke('mcp:connect'))
+                  if (next) {
+                    setMcp(next)
+                    notify({ kind: 'info', text: 'Claude Code is connected. Ask it to list your sites.' })
+                  }
+                }}
+              >
+                {busy.has('mcp-connect') ? 'Connecting…' : mcp?.claude === 'not-installed' ? 'Install Claude Code first' : 'Connect Claude Code'}
+              </button>
+            )}
+            <button
+              className="btn btn-quiet"
+              disabled={!mcp}
+              onClick={async () => {
+                if (!mcp) return
+                await navigator.clipboard.writeText(mcp.command)
+                notify({ kind: 'info', text: 'Setup command copied. It includes your private key, so keep it to yourself.' })
+              }}
+            >
+              <Copy size={14} /> Copy setup command
+            </button>
+          </div>
+        </div>
+        <span title={mcp?.enabled ? 'On' : 'Off'}>
+          <Switch
+            on={!!mcp?.enabled}
+            label="Let AI tools use Laramac"
+            disabled={!mcp || busy.has('mcp-enable')}
+            onChange={async () => {
+              const next = await act('mcp-enable', () => api.invoke('mcp:enable', !mcp?.enabled))
+              if (next) setMcp(next)
+            }}
+          />
+        </span>
+      </div>
+
       <h2 className="section-title">AI tools</h2>
-      <div className="group">
+      <div className="ai-grid">
         {ai.map((t) => {
           const isDefault = settings.aiTool === t.id
           const get = async (kind: 'cli' | 'app'): Promise<void> => {
@@ -35,46 +96,47 @@ export default function Tools(): React.JSX.Element {
             notify({ kind: 'info', text: kind === 'app' ? `Opened the ${t.name} download page.` : `Installing ${t.name} in Terminal. Come back when it finishes.` })
           }
           const open = (kind: 'cli' | 'app'): Promise<unknown> => act(`ai-${t.id}-${kind}`, () => api.invoke('ai:launch-tool', t.id, null, kind))
-          const have = t.app?.installed && t.cli?.installed ? 'App and command line' : t.app?.installed ? 'Mac app' : t.cli?.installed ? 'Command line' : ''
+          const have = t.app?.installed && t.cli?.installed ? 'Mac app and command line' : t.app?.installed ? 'Mac app' : t.cli?.installed ? 'Command line' : 'Not installed'
           return (
-            <div key={t.id} className="ai-row" data-installed={t.installed}>
-              <span className="ai-main">
-                <strong>
-                  {t.name}
-                  {isDefault && t.installed && <span className="tag tag-accent">Opens from sites</span>}
-                </strong>
-                <small>{t.description}</small>
-              </span>
-              <span className="ai-state">
-                {t.note ? <span style={{ color: 'var(--warn)' }}>{t.note}</span> : have || 'Not installed'}
-              </span>
-              <span className="end">
+            <div key={t.id} className="card glass ai-card" data-default={isDefault && t.installed}>
+              <div className="ai-top">
+                <span className="mono-tile lg" aria-hidden>
+                  {AI_LETTERS[t.id] ?? t.name.slice(0, 2)}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <strong>{t.name}</strong>
+                  <small style={t.installed ? { color: 'var(--ok)' } : undefined}>{t.note ?? have}</small>
+                </span>
+                {isDefault && t.installed && <span className="tag tag-accent">For sites</span>}
+              </div>
+              <div className="ai-desc">{t.description}</div>
+              <div className="ai-actions">
+                {t.app?.installed && (
+                  <button className="btn btn-primary btn-sm" onClick={() => open('app')}>
+                    Open app
+                  </button>
+                )}
+                {t.cli?.installed && (
+                  <button className={t.app?.installed ? 'btn btn-tonal btn-sm' : 'btn btn-primary btn-sm'} onClick={() => open('cli')}>
+                    <TerminalSquare size={14} /> Terminal
+                  </button>
+                )}
+                {t.app && !t.app.installed && (
+                  <button className="btn btn-sm" disabled={!t.available} onClick={() => get('app')}>
+                    <ExternalLink size={14} /> Get app
+                  </button>
+                )}
+                {t.cli && !t.cli.installed && (
+                  <button className="btn btn-sm" disabled={!t.available} onClick={() => get('cli')}>
+                    {t.app?.installed ? 'Add command line' : 'Install'}
+                  </button>
+                )}
                 {t.installed && !isDefault && (
                   <button className="btn btn-quiet btn-sm" title="The AI button on each site opens this tool" onClick={() => updateSettings({ aiTool: t.id })}>
                     Use for sites
                   </button>
                 )}
-                {t.app && !t.app.installed && (
-                  <button className="btn btn-quiet btn-sm" disabled={!t.available} onClick={() => get('app')}>
-                    <ExternalLink size={13} /> Get app
-                  </button>
-                )}
-                {t.cli && !t.cli.installed && (
-                  <button className="btn btn-quiet btn-sm" disabled={!t.available} onClick={() => get('cli')}>
-                    <TerminalSquare size={13} /> {t.app?.installed ? 'Add command line' : 'Install'}
-                  </button>
-                )}
-                {t.cli?.installed && (
-                  <button className="btn btn-sm" onClick={() => open('cli')}>
-                    <TerminalSquare size={13} /> Terminal
-                  </button>
-                )}
-                {t.app?.installed && (
-                  <button className="btn btn-sm" onClick={() => open('app')}>
-                    Open app
-                  </button>
-                )}
-              </span>
+              </div>
             </div>
           )
         })}

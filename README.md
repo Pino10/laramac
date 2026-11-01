@@ -37,6 +37,7 @@
 **Databases**
 - MySQL 8.4, MariaDB, PostgreSQL, Redis, Memcached, MongoDB and Meilisearch, each on its own port.
 - Create, back up, restore and delete databases from the app.
+- **Snapshots:** save a site's files and database together, go back to any snapshot, or export one and import it on another Mac.
 - phpMyAdmin with automatic sign-in, and Adminer.
 
 **Mail**
@@ -47,12 +48,14 @@
 - Browse, upload, download, rename and delete files over SFTP.
 
 **AI tools**
+- Connect Claude Code to Laramac in one click. It can then list your sites, start services, switch PHP, create and query databases, read logs and take snapshots while it works.
 - Install and open Claude Code, Codex, OpenCode, vMLX, LM Studio, Ollama, OpenClaw and Gemini CLI, as Mac apps or in the terminal.
 - Open any site in your chosen tool with one click.
 - A built-in assistant that runs on your own local model.
 
 **Everyday**
-- ⌘K command bar for every site, service and action. ⌘1 to ⌘8 switch pages.
+- **Packages** shows everything Laramac installed with its size, so you can remove what you no longer use.
+- ⌘K command bar for every site, service and action. ⌘1 to ⌘9 switch pages.
 - Menu bar controls, macOS notifications and an activity list.
 - Updates install from inside the app. Settings, PHP versions, databases and sites are kept.
 - **Settings › Reset** clears software, data or settings without uninstalling. Your projects are never touched.
@@ -60,8 +63,12 @@
 
 ## Getting started
 
-1. Download the DMG for your Mac from [Releases](https://github.com/Pino10/laramac/releases/latest) (`arm64` for Apple Silicon, `x64` for Intel) and drag Laramac to Applications.
-2. Open Laramac. The first time, macOS asks you to confirm: click **Done**, open **System Settings › Privacy & Security**, and click **Open Anyway**.
+1. Install with one line in Terminal. It downloads the newest release, checks its checksum and signature, and puts Laramac in Applications without the "Open Anyway" step:
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash
+   ```
+   Or download the DMG from [Releases](https://github.com/Pino10/laramac/releases/latest) and drag Laramac to Applications. The first time, macOS asks you to confirm in **System Settings › Privacy & Security › Open Anyway**.
+2. Open Laramac. Updates after that install from inside the app.
 3. On the Overview, press **Set up my stack**. Laramac installs PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on `.test` addresses with HTTPS.
 4. Create a project from **Sites › New project**, or drop a folder into `~/Laramac/www`.
 
@@ -89,6 +96,7 @@ Laramac runs a small DNS server on `127.0.0.1:53535` that answers every `*.test`
 - **Admin rights are used once**, to write `/etc/resolver/test`.
 - **Every download is verified.** PHP builds, PostgreSQL, Composer and app updates are checked against published SHA-256 checksums, and updates are signature-checked before they install.
 - **SSH host keys are pinned** on first connect, and saved passwords are kept in the macOS Keychain.
+- **The Claude Code connection** listens only on this Mac, needs a private key, refuses web pages, and its database access is read-only.
 - **Imports are checked** for unsafe archives, and SQL dumps cannot run commands on your Mac.
 
 Please report security issues privately through GitHub security advisories.

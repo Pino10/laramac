@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 import type { ChatMessage, LocalLlm } from '../shared/types'
 import { dirs } from './paths'
 import { getSettings } from './settings'
@@ -29,12 +30,22 @@ export function openTerminal(cwd: string, command?: string): Promise<void> {
   return osascript(`tell application "Terminal"\nactivate\ndo script "${line}"\nend tell`)
 }
 
+/**
+ * Opens a site as a project folder in a new editor window, so the file tree
+ * is there on the side. Uses the editor's own command-line launcher, which
+ * opens folders reliably even when the editor is already running.
+ */
 export function openInEditor(editor: 'cursor' | 'vscode', path: string): Promise<void> {
   const app = editor === 'cursor' ? 'Cursor' : 'Visual Studio Code'
+  const cliName = editor === 'cursor' ? 'cursor' : 'code'
+  const bundles = [join('/Applications', `${app}.app`), join(homedir(), 'Applications', `${app}.app`)]
+  const cli = bundles.map((b) => join(b, 'Contents', 'Resources', 'app', 'bin', cliName)).find((p) => existsSync(p))
   return new Promise((resolve, reject) => {
-    execFile('open', ['-a', app, path], (err) =>
-      err ? reject(new Error(`${app} is not installed.`)) : resolve()
-    )
+    const fallback = (): void => {
+      execFile('open', ['-n', '-a', app, '--args', path], (err) => (err ? reject(new Error(`${app} is not installed.`)) : resolve()))
+    }
+    if (!cli) return fallback()
+    execFile(cli, ['--new-window', path], { timeout: 15000 }, (err) => (err ? fallback() : resolve()))
   })
 }
 

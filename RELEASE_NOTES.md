@@ -1,19 +1,16 @@
 Laramac is a free, open-source local development environment for macOS.
 
-## New in 0.8
-- **A cleaner design.** A calm, native layout: full-height sidebar, grouped lists, one accent colour, and the live stack map front and centre.
-- **New icon.** The Laramac mark, an L inside tag brackets, in the Dock and the menu bar.
-- **Database tools.** See every MySQL and MariaDB database with its tables, rows and size. Create, import into, back up and delete databases, or open one straight in phpMyAdmin.
-- **Built-in SSH terminal.** Open a terminal on any saved server, next to the SFTP file browser.
-- **Your AI apps, detected.** Claude, Codex, OpenCode, vMLX, LM Studio and Ollama are found as Mac apps or command-line tools.
-
-## Fixed
-- SQL dumps with a column named `source`, `system` or `tee` now import correctly.
-- A failed import no longer leaves an empty database behind.
-- The menu bar icon now shows.
+## New in 0.9
+- **Floating glass design.** Rounded Liquid Glass panels, pill buttons, a floating sidebar, and motion that responds to you: pages settle in, cards lift, dialogs come forward.
+- **Snapshots.** Save a site's files and database together in one click, restore any snapshot (your current state is saved first, so you can undo), or export it and import it on another Mac.
+- **Claude Code works with Laramac.** Connect it in one click from Tools. It can then list your sites, start and stop services, switch PHP, create and query databases, read logs and take snapshots.
+- **Packages.** See everything Laramac installed with its size, and remove what you no longer use.
+- **One-line install.** `curl -fsSL https://raw.githubusercontent.com/Pino10/laramac/main/install.sh | bash` installs or updates without the "Open Anyway" step.
+- **Editors open your project.** Cursor and VS Code open the site as a folder in a new window, with the file tree ready.
+- **Clearer site buttons.** Full-size round buttons with a label when you hover.
 
 ## Download
-- **Apple Silicon:** Laramac-0.8.0-arm64.dmg
-- **Intel:** Laramac-0.8.0-x64.dmg
+- **Apple Silicon:** Laramac-0.9.0-arm64.dmg
+- **Intel:** Laramac-0.9.0-x64.dmg
 
-On first launch, open Laramac, click **Done**, then go to **System Settings › Privacy & Security** and click **Open Anyway**. Updates after that install from inside the app.
+Or install from Terminal with the one-line command above.

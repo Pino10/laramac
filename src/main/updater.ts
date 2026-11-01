@@ -72,6 +72,8 @@ export async function installUpdate(update: (pct: number | null, label?: string)
     rmSync(incoming, { recursive: true, force: true })
     rmSync(previous, { recursive: true, force: true })
     await run('ditto', [fresh, incoming])
+    // Already verified above; clear the download flag so macOS does not ask again.
+    await run('xattr', ['-dr', 'com.apple.quarantine', incoming]).catch(() => '')
     renameSync(bundle, previous)
     try {
       renameSync(incoming, bundle)

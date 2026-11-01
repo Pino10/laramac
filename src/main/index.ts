@@ -2,6 +2,13 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell,
 import { existsSync } from 'fs'
 import { cancelImport, importSql, inspect, runImport } from './importer'
 import * as dbadmin from './dbadmin'
+import { listPackages, removePackage } from './packages'
+import * as snapshots from './snapshots'
+import { MCP_PORT, mcpToken, mcpUrl, startMcpServer, type McpTool } from './mcp'
+import { findCli } from './aitools'
+import { execFile } from 'child_process'
+import { readdirSync } from 'fs'
+import { dirs } from './paths'
 import { homedir } from 'os'
 import { checkForUpdate, installUpdate } from './updater'
 import { resetLaramac } from './reset'
@@ -10,7 +17,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni } from './php'
 import { safeStorage } from 'electron'
-import type { DatabaseInfo, ResetOptions, SshServerInput, UpdateInfo } from '../shared/types'
+import type { DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -576,6 +583,272 @@ function registerIpc(): void {
   })
   handle('shell:resize', (sid, cols, rows) => ssh.resizeShell(String(sid), Number(cols), Number(rows)))
   handle('shell:close', (sid) => ssh.closeShell(String(sid)))
+
+  // ---- MCP: Claude Code and other agents
+  const serviceIds = services.list().map((x) => x.id)
+  const str = (v: unknown, what: string): string => {
+    if (typeof v !== 'string' || !v.trim()) throw new Error(`${what} is required.`)
+    return v.trim()
+  }
+  const siteNamed = (name: unknown): SiteInfo => {
+    const n = str(name, 'site')
+    const site = scanSites().find((x) => x.name === n || x.domain === n)
+    if (!site) throw new Error(`No site called ${n}. Use list_sites to see them.`)
+    return site
+  }
+  const svcId = (v: unknown): ServiceId => {
+    const id = str(v, 'service') as ServiceId
+    if (!serviceIds.includes(id)) throw new Error(`Unknown service. Use one of: ${serviceIds.join(', ')}.`)
+    return id
+  }
+  const engineArg = (v: unknown): 'mysql' | 'mariadb' => (v === 'mariadb' ? 'mariadb' : 'mysql')
+  const mcpTools: McpTool[] = [
+    {
+      name: 'list_sites',
+      description: 'Lists the local sites: name, URL, folder, project type, PHP version and the database each one uses.',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () =>
+        scanSites().map((x) => ({
+          name: x.name,
+          url: x.secure ? x.httpsUrl : x.url,
+          path: x.path,
+          kind: x.kind,
+          php: x.php,
+          database: snapshots.detectSiteDatabase(x.path),
+          publicUrl: x.shareUrl ?? null
+        }))
+    },
+    {
+      name: 'list_services',
+      description: 'Lists Apache, Nginx, PHP, MySQL, MariaDB, PostgreSQL, Redis and the other services with their status, port and version.',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () => services.list().map(({ id, name, status, port, version, error, connection }) => ({ id, name, status, port, version, connection, error }))
+    },
+    {
+      name: 'start_service',
+      description: 'Starts a service, for example mysql or apache.',
+      inputSchema: { type: 'object', properties: { service: { type: 'string', description: 'Service id from list_services' } }, required: ['service'] },
+      writes: true,
+      run: async (a) => {
+        const id = svcId(a.service)
+        await services.start(id)
+        send('services:changed', services.list())
+        return services.list().find((x) => x.id === id)
+      }
+    },
+    {
+      name: 'stop_service',
+      description: 'Stops a service.',
+      inputSchema: { type: 'object', properties: { service: { type: 'string' } }, required: ['service'] },
+      writes: true,
+      run: async (a) => {
+        const id = svcId(a.service)
+        await services.stop(id)
+        send('services:changed', services.list())
+        return services.list().find((x) => x.id === id)
+      }
+    },
+    {
+      name: 'set_site_php',
+      description: 'Sets the PHP version a site runs on. Use list_php_versions to see what is installed.',
+      inputSchema: { type: 'object', properties: { site: { type: 'string' }, version: { type: 'string', description: 'Minor version such as 8.4' } }, required: ['site', 'version'] },
+      writes: true,
+      run: async (a) => {
+        const site = siteNamed(a.site)
+        const php = assertMinor(str(a.version, 'version'))
+        if (!installedMinors().includes(php)) throw new Error(`PHP ${php} is not installed. Installed: ${installedMinors().join(', ')}.`)
+        setSiteConfig(site.name, { php })
+        notifySitesChanged()
+        return `${site.name} now runs on PHP ${php}.`
+      }
+    },
+    {
+      name: 'list_php_versions',
+      description: 'Lists installed PHP versions and the default.',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () => ({ installed: installedMinors(), default: defaultMinor() })
+    },
+    {
+      name: 'list_databases',
+      description: 'Lists MySQL and MariaDB databases with their tables, rows and size.',
+      inputSchema: { type: 'object', properties: {} },
+      run: () => listAllDbs()
+    },
+    {
+      name: 'create_database',
+      description: 'Creates an empty database (utf8mb4).',
+      inputSchema: { type: 'object', properties: { name: { type: 'string' }, engine: { type: 'string', enum: ['mysql', 'mariadb'] } }, required: ['name'] },
+      writes: true,
+      run: async (a) => {
+        await dbadmin.createDatabase(dbTarget(engineArg(a.engine)), dbadmin.checkName(str(a.name, 'name')))
+        return `Created ${a.name}. Connect as root with no password on 127.0.0.1:${engineArg(a.engine) === 'mysql' ? 3306 : 3307}.`
+      }
+    },
+    {
+      name: 'query_database',
+      description: 'Runs one read-only SQL statement (SELECT, SHOW, DESCRIBE or EXPLAIN) and returns up to 200 rows.',
+      inputSchema: {
+        type: 'object',
+        properties: { database: { type: 'string' }, sql: { type: 'string' }, engine: { type: 'string', enum: ['mysql', 'mariadb'] } },
+        required: ['database', 'sql']
+      },
+      run: (a) => dbadmin.readOnlyQuery(dbTarget(engineArg(a.engine)), str(a.database, 'database'), str(a.sql, 'sql'))
+    },
+    {
+      name: 'snapshot_site',
+      description: "Saves a snapshot of a site's files and database, to come back to later.",
+      inputSchema: { type: 'object', properties: { site: { type: 'string' }, note: { type: 'string' } }, required: ['site'] },
+      writes: true,
+      run: async (a) => {
+        const site = siteNamed(a.site)
+        const snap = await snapshots.createSnapshot(site.path, typeof a.note === 'string' ? a.note : 'Saved by an AI tool', snapDeps)
+        activity.push('success', `Snapshot of ${site.name} saved`, snap.note)
+        return snap
+      }
+    },
+    {
+      name: 'list_snapshots',
+      description: 'Lists the snapshots of a site.',
+      inputSchema: { type: 'object', properties: { site: { type: 'string' } }, required: ['site'] },
+      run: async (a) => snapshots.listSnapshots(siteNamed(a.site).path)
+    },
+    {
+      name: 'read_log',
+      description: 'Returns the last lines of a log, such as apache-error.log, php-8.4-error.log or mysql-error.log. Call with no name to list the logs.',
+      inputSchema: { type: 'object', properties: { name: { type: 'string' }, lines: { type: 'number' } } },
+      run: async (a) => {
+        const logs = readdirSync(dirs.logs()).filter((n) => /^[A-Za-z0-9._-]+\.log$/.test(n))
+        if (!a.name) return { logs }
+        const name = str(a.name, 'name')
+        if (!logs.includes(name)) throw new Error(`No log called ${name}. Available: ${logs.join(', ')}.`)
+        const n = Math.min(500, Math.max(1, Number(a.lines) || 100))
+        return tailFile(join(dirs.logs(), name), n)
+      }
+    }
+  ]
+
+  let mcpServer: import('http').Server | null = null
+  let mcpError: string | null = null
+  const startMcp = async (): Promise<void> => {
+    if (mcpServer) return
+    try {
+      mcpServer = await startMcpServer({ tools: mcpTools, version: app.getVersion(), onCall: (name) => activity.push('info', `AI tool used ${name.replace(/_/g, ' ')}`) })
+      mcpError = null
+    } catch (err) {
+      mcpError = `Could not listen on port ${MCP_PORT}: ${(err as Error).message}`
+    }
+  }
+  const stopMcp = (): void => {
+    mcpServer?.close()
+    mcpServer = null
+  }
+  const claudeMcp = async (): Promise<McpStatus['claude']> => {
+    const claude = findCli(['claude'])
+    if (!claude) return 'not-installed'
+    return new Promise((resolve) =>
+      execFile(claude, ['mcp', 'get', 'laramac'], { timeout: 10000 }, (err, out) => resolve(!err && /127\.0\.0\.1:\d+\/mcp/.test(String(out)) ? 'connected' : 'not-connected'))
+    )
+  }
+  const mcpStatus = async (): Promise<McpStatus> => ({
+    enabled: getSettings().mcpEnabled,
+    running: !!mcpServer,
+    url: mcpUrl(),
+    command: `claude mcp add --transport http --scope user laramac ${mcpUrl()} --header "Authorization: Bearer ${mcpToken()}"`,
+    claude: await claudeMcp(),
+    error: mcpError
+  })
+  if (getSettings().mcpEnabled) void startMcp()
+  handle('mcp:status', () => mcpStatus())
+  handle('mcp:enable', async (on) => {
+    setSettings({ mcpEnabled: on === true })
+    if (on === true) await startMcp()
+    else stopMcp()
+    return mcpStatus()
+  })
+  handle('mcp:connect', async () => {
+    const claude = findCli(['claude'])
+    if (!claude) throw new Error('Install Claude Code first. It is under AI tools.')
+    setSettings({ mcpEnabled: true })
+    await startMcp()
+    const run = (args: string[]): Promise<void> =>
+      new Promise((resolve, reject) => execFile(claude, args, { timeout: 20000 }, (err, _o, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve())))
+    await run(['mcp', 'remove', 'laramac', '--scope', 'user']).catch(() => undefined)
+    await run(['mcp', 'add', '--transport', 'http', '--scope', 'user', 'laramac', mcpUrl(), '--header', `Authorization: Bearer ${mcpToken()}`])
+    activity.push('success', 'Claude Code is connected to Laramac', 'Ask it to start services, create databases or take snapshots.')
+    return mcpStatus()
+  })
+
+  // ---- Snapshots
+  const snapDeps: snapshots.SnapshotDeps = {
+    target: (engine) => {
+      try {
+        return dbTarget(engine)
+      } catch {
+        return null
+      }
+    }
+  }
+  const snapId = (id: unknown): string => {
+    if (typeof id !== 'string' || !/^\d{8}-\d{6}-[a-z0-9]{4}$/.test(id)) throw new ValidationError('Unknown snapshot.')
+    return id
+  }
+  handle('snapshots:list', (path) => snapshots.listSnapshots(sitePath(path)))
+  handle('snapshots:create', async (path, note) => {
+    const p = sitePath(path)
+    const name = p.split('/').pop()
+    const snap = await jobs.run(`Saving a snapshot of ${name}`, async (update) => {
+      update(null, `Saving ${name}`)
+      return snapshots.createSnapshot(p, typeof note === 'string' ? note : '', snapDeps)
+    })
+    activity.push('success', `Snapshot of ${name} saved`, snap.databaseSkipped ?? (snap.database ? `Files and the ${snap.database.name} database` : 'Files'))
+    return snapshots.listSnapshots(p)
+  })
+  handle('snapshots:restore', async (path, id) => {
+    const p = sitePath(path)
+    const name = p.split('/').pop()
+    await jobs.run(`Restoring ${name}`, async (update) => {
+      update(null, `Restoring ${name}`)
+      await snapshots.restoreSnapshot(p, snapId(id), snapDeps)
+    })
+    activity.push('success', `${name} restored`, 'A snapshot of how it was just before is in the list, in case you want it back.')
+    return snapshots.listSnapshots(p)
+  })
+  handle('snapshots:export', async (path, id) => {
+    const p = sitePath(path)
+    const sid = snapId(id)
+    const res = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Export snapshot',
+      defaultPath: join(homedir(), 'Downloads', snapshots.snapshotFileName(p, sid)),
+      filters: [{ name: 'Laramac snapshot', extensions: ['gz'] }]
+    })
+    if (res.canceled || !res.filePath) return null
+    snapshots.exportSnapshot(p, sid, res.filePath)
+    return res.filePath
+  })
+  handle('snapshots:delete', (path, id) => {
+    const p = sitePath(path)
+    snapshots.deleteSnapshot(p, snapId(id))
+    return snapshots.listSnapshots(p)
+  })
+
+  // ---- Packages
+  handle('packages:list', () => listPackages())
+  handle('packages:remove', async (id) => {
+    const pid = String(id)
+    if (!/^(php|mysql|postgres|dir|bin|brew|cache):[A-Za-z0-9._-]{1,40}$/.test(pid)) throw new ValidationError('Unknown package.')
+    await jobs.run('Removing a package', async (update) => {
+      update(null, 'Removing')
+      await removePackage(pid, {
+        stopService: async (sid) => {
+          await services.stop(sid)
+        },
+        removePhp: (minor) => removeMinor(assertMinor(minor))
+      })
+    })
+    activity.push('info', 'Removed a package', pid.replace(':', ' '))
+    send('services:changed', services.list())
+    return listPackages()
+  })
 
   // ---- Databases (MySQL and MariaDB)
   const dbEngine = (e: unknown): 'mysql' | 'mariadb' => {

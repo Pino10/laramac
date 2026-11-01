@@ -15,6 +15,7 @@ import Tools from './pages/Tools'
 import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 import Servers from './pages/Servers'
+import Packages from './pages/Packages'
 import UpdateBanner from './components/UpdateBanner'
 
 function Shell(): React.JSX.Element {
@@ -38,7 +39,7 @@ function Shell(): React.JSX.Element {
       } else if (key === 'i') {
         e.preventDefault()
         setImportOpen(true)
-      } else if (/^[1-8]$/.test(key)) {
+      } else if (/^[1-9]$/.test(key)) {
         e.preventDefault()
         setPage(PAGE_ORDER[Number(key) - 1])
       }
@@ -70,6 +71,7 @@ function Shell(): React.JSX.Element {
               {page === 'databases' && <Databases />}
               {page === 'servers' && <Servers />}
               {page === 'tools' && <Tools />}
+              {page === 'packages' && <Packages />}
               {page === 'assistant' && <Assistant />}
               {page === 'settings' && <Settings />}
             </div>

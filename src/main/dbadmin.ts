@@ -96,3 +96,28 @@ export async function exportDatabase(t: DbTarget, name: string, dest: string): P
     throw err
   }
 }
+
+/**
+ * Runs one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN) inside a
+ * read-only transaction, for AI tools that need to look at data. Writing,
+ * file access and multiple statements are refused.
+ */
+export async function readOnlyQuery(t: DbTarget, database: string, sql: string, maxRows = 200): Promise<{ columns: string[]; rows: string[][]; truncated: boolean }> {
+  checkName(database)
+  const s = sql.trim().replace(/;\s*$/, '')
+  if (!/^(select|show|describe|desc|explain)\b/i.test(s)) throw new Error('Only SELECT, SHOW, DESCRIBE and EXPLAIN are allowed.')
+  if (s.includes(';')) throw new Error('Send one statement at a time.')
+  if (/\binto\s+(outfile|dumpfile)\b|\bload_file\s*\(|\bsleep\s*\(|\bbenchmark\s*\(/i.test(s)) throw new Error('That statement is not allowed here.')
+  const out = await new Promise<string>((resolve, reject) => {
+    execFile(
+      t.client,
+      [...base(t), `--database=${database}`, '-B', '--max-allowed-packet=16M', '-e', `SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY; ${s}; ROLLBACK;`],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 30000 },
+      (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim().split('\n').pop())) : resolve(String(stdout)))
+    )
+  })
+  const lines = out.split('\n').filter((l) => l.length > 0)
+  const columns = (lines.shift() ?? '').split('\t')
+  const rows = lines.slice(0, maxRows).map((l) => l.split('\t'))
+  return { columns, rows, truncated: lines.length > maxRows }
+}

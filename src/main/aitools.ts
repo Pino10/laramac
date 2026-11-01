@@ -178,7 +178,7 @@ export function refreshLoginShellPaths(force = false): Promise<void> {
   })
 }
 
-function findCli(names: string[]): string | null {
+export function findCli(names: string[]): string | null {
   for (const name of names) for (const dir of binDirs()) if (existsSync(join(dir, name))) return join(dir, name)
   const shellFound = fromLoginShell()
   for (const name of names) if (shellFound.has(name)) return shellFound.get(name) ?? null

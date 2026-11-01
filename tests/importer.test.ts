@@ -16,6 +16,7 @@ import {
   scan
 } from '../src/main/importer'
 import * as dbadmin from '../src/main/dbadmin'
+import * as snapshots from '../src/main/snapshots'
 import { waitForPort } from '../src/main/process'
 import { freshEnv } from './helpers'
 
@@ -313,6 +314,45 @@ describe.skipIf(!MARIADBD || process.platform !== 'linux')('real import into Mar
 
     await expect(dbadmin.createDatabase(t, 'bad`name')).rejects.toThrow(/letters, numbers/)
     await expect(dbadmin.dropDatabase(t, 'mysql')).rejects.toThrow(/belongs to the database server/)
+  })
+
+  it('snapshots a site with its database and restores both', async () => {
+    const t = { engine: 'mariadb' as const, client: CLIENT, port: 3307 }
+    const deps = { target: () => t }
+    freshEnv()
+    const site = join(data, 'www', 'shop')
+    mkdirSync(join(site, 'node_modules'), { recursive: true })
+    writeFileSync(join(site, 'wp-config.php'), "<?php define( 'DB_NAME', 'snap_wp' ); define( 'DB_HOST', '127.0.0.1:3307' );")
+    writeFileSync(join(site, 'index.php'), 'version one')
+    writeFileSync(join(site, 'node_modules', 'big.js'), 'x')
+    q('CREATE DATABASE snap_wp; CREATE TABLE snap_wp.posts (id int, title text); INSERT INTO snap_wp.posts VALUES (1,"Hello");')
+
+    expect(snapshots.detectSiteDatabase(site)).toEqual({ engine: 'mariadb', name: 'snap_wp' })
+    const snap = await snapshots.createSnapshot(site, 'Working checkout', deps)
+    expect(snap.database).toEqual({ engine: 'mariadb', name: 'snap_wp' })
+    expect(snapshots.listSnapshots(site).map((x) => x.note)).toEqual(['Working checkout'])
+
+    writeFileSync(join(site, 'index.php'), 'broken')
+    writeFileSync(join(site, 'new.php'), 'added later')
+    q('DELETE FROM snap_wp.posts; INSERT INTO snap_wp.posts VALUES (2,"Oops");')
+
+    await snapshots.restoreSnapshot(site, snap.id, deps)
+    expect(readFileSync(join(site, 'index.php'), 'utf8')).toBe('version one')
+    expect(existsSync(join(site, 'new.php'))).toBe(false)
+    expect(existsSync(join(site, 'node_modules'))).toBe(false)
+    expect(q('SELECT title FROM snap_wp.posts')).toBe('Hello')
+    // The state just before the restore was kept, so the restore can be undone.
+    expect(snapshots.listSnapshots(site)).toHaveLength(2)
+    expect(snapshots.listSnapshots(site)[0].note).toMatch(/^Before restoring/)
+
+    const out = join(data, 'export.tar.gz')
+    snapshots.exportSnapshot(site, snap.id, out)
+    const plan = await inspect(out, ['mariadb'])
+    expect(plan.sqlFiles[0].path).toMatch(/shop\.sql\.gz$/)
+
+    snapshots.deleteSnapshot(site, snap.id)
+    expect(snapshots.listSnapshots(site)).toHaveLength(1)
+    expect(() => snapshots.deleteSnapshot(site, '../../x')).toThrow()
   })
 
   it('handles gzipped dumps', async () => {

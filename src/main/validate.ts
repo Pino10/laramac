@@ -65,6 +65,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'notifications':
       case 'allowLan':
       case 'autoUpdateCheck':
+      case 'mcpEnabled':
         out[key] = bool(value, key)
         break
       case 'defaultPhp':

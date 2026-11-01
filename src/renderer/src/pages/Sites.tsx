@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Code, ExternalLink, FolderOpen, Lock, Plus, Search, Share2, Terminal, Upload } from 'lucide-react'
-import type { SiteInfo } from '@shared/types'
+import { useEffect, useState } from 'react'
+import { Camera, Code, Download, ExternalLink, FolderOpen, History, Lock, Plus, RotateCcw, Search, Share2, Terminal, Trash2, Upload, X } from 'lucide-react'
+import type { SiteInfo, SnapshotInfo } from '@shared/types'
 import { useApp } from '../store'
-import { Monogram, PageHead, Switch } from '../ui'
+import { formatBytes, Monogram, PageHead, Switch } from '../ui'
+import { useAsk } from '../components/Ask'
 
 const AI_NAMES: Record<string, string> = { claude: 'Claude Code', opencode: 'OpenCode', openclaw: 'OpenClaw', codex: 'Codex', gemini: 'Gemini CLI', vmlx: 'vMLX', lmstudio: 'LM Studio', ollama: 'Ollama' }
 
@@ -22,6 +23,7 @@ export default function Sites(): React.JSX.Element {
   const installedPhp = php.filter((p) => p.installed)
   const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
   const aiName = AI_NAMES[settings?.aiTool ?? 'claude'] ?? 'AI tool'
+  const [snapFor, setSnapFor] = useState<SiteInfo | null>(null)
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -125,16 +127,19 @@ export default function Sites(): React.JSX.Element {
               </span>
               <div className="site-actions">
                 <IconBtn label={`Open ${site.name}`} title="Open in browser" onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}>
-                  <ExternalLink size={15} />
+                  <ExternalLink size={18} />
                 </IconBtn>
                 <IconBtn label={`Show ${site.name} in Finder`} title="Show in Finder" onClick={() => api.invoke('sites:open-folder', site.path)}>
-                  <FolderOpen size={15} />
+                  <FolderOpen size={18} />
                 </IconBtn>
                 <IconBtn label={`Open ${site.name} in ${editor}`} title={`Open in ${editor}`} onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}>
-                  <Code size={15} />
+                  <Code size={18} />
                 </IconBtn>
                 <IconBtn label={`${aiName} in ${site.name}`} title={`Open ${aiName} here`} onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}>
-                  <Terminal size={15} />
+                  <Terminal size={18} />
+                </IconBtn>
+                <IconBtn label={`Snapshots of ${site.name}`} title="Snapshots" onClick={() => setSnapFor(site)}>
+                  <History size={18} />
                 </IconBtn>
                 <IconBtn
                   label={site.shareUrl ? `Stop sharing ${site.name}` : `Share ${site.name}`}
@@ -153,13 +158,14 @@ export default function Sites(): React.JSX.Element {
                     }
                   }}
                 >
-                  <Share2 size={15} />
+                  <Share2 size={18} />
                 </IconBtn>
               </div>
             </div>
           ))}
         </div>
       )}
+      {snapFor && <SnapshotsDialog site={snapFor} onClose={() => setSnapFor(null)} />}
     </>
   )
 }
@@ -180,8 +186,115 @@ function IconBtn({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <button className="btn btn-quiet btn-icon" aria-label={label} title={title} aria-pressed={pressed} disabled={disabled} onClick={() => void onClick()}>
+    <button className="icon-btn" aria-label={label} data-tip={title} aria-pressed={pressed} disabled={disabled} onClick={() => void onClick()}>
       {children}
     </button>
+  )
+}
+
+function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+  const { act, busy, notify } = useApp()
+  const api = window.laramac
+  const [list, setList] = useState<SnapshotInfo[] | null>(null)
+  const [note, setNote] = useState('')
+  const [ask, askDialog] = useAsk()
+
+  useEffect(() => {
+    void api.invoke('snapshots:list', site.path).then(setList)
+  }, [api, site.path])
+
+  const save = async (): Promise<void> => {
+    const next = await act(`snap-${site.name}`, () => api.invoke('snapshots:create', site.path, note))
+    if (next) {
+      setList(next)
+      setNote('')
+      notify({ kind: next[0]?.databaseSkipped ? 'error' : 'info', text: next[0]?.databaseSkipped ?? 'Snapshot saved.' })
+    }
+  }
+
+  const restore = async (s: SnapshotInfo): Promise<void> => {
+    const ok = await ask({
+      title: `Restore ${site.name} to ${new Date(s.createdAt).toLocaleString()}?`,
+      label: `Files${s.database ? ` and the ${s.database.name} database` : ''} go back to how they were. The current state is saved as a snapshot first, so you can undo this.`,
+      yesNo: true,
+      confirm: 'Restore'
+    })
+    if (!ok) return
+    const next = await act(`snap-restore-${s.id}`, () => api.invoke('snapshots:restore', site.path, s.id))
+    if (next) {
+      setList(next)
+      notify({ kind: 'info', text: `${site.name} is restored.` })
+    }
+  }
+
+  return (
+    <div className="scrim" onMouseDown={onClose}>
+      <div className="dialog glass snap-dialog" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="snap-head">
+          <div>
+            <h2 className="page-title" style={{ fontSize: 20 }}>
+              Snapshots of {site.name}
+            </h2>
+            <p className="page-desc" style={{ marginTop: 4 }}>
+              Save the site&apos;s files and database together, and go back to any snapshot later.
+            </p>
+          </div>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}>
+            <X />
+          </button>
+        </div>
+        <div className="snap-new">
+          <input className="input" placeholder="What is this version? (optional)" value={note} maxLength={120} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
+          <button className="btn btn-primary" disabled={busy.has(`snap-${site.name}`)} onClick={save}>
+            <Camera size={15} /> {busy.has(`snap-${site.name}`) ? 'Saving…' : 'Save snapshot'}
+          </button>
+        </div>
+        <div className="snap-list">
+          {list === null && <div className="empty dim">Loading…</div>}
+          {list?.length === 0 && <div className="empty dim">No snapshots yet. Save one before a big change.</div>}
+          {list?.map((s) => (
+            <div key={s.id} className="snap-row">
+              <span className="snap-dot" data-db={!!s.database} />
+              <span style={{ minWidth: 0 }}>
+                <strong>{s.note || 'Snapshot'}</strong>
+                <small>
+                  {new Date(s.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}, {formatBytes(s.bytes)},{' '}
+                  {s.database ? `files and ${s.database.name}` : s.databaseSkipped ? 'files only (database was off)' : 'files'}
+                </small>
+              </span>
+              <span className="end">
+                <button className="btn btn-tonal btn-sm" disabled={busy.has(`snap-restore-${s.id}`)} onClick={() => restore(s)}>
+                  <RotateCcw size={14} /> Restore
+                </button>
+                <button
+                  className="icon-btn"
+                  data-tip="Export"
+                  aria-label="Export snapshot"
+                  onClick={async () => {
+                    const path = await act(`snap-export-${s.id}`, () => api.invoke('snapshots:export', site.path, s.id))
+                    if (path) notify({ kind: 'info', text: 'Exported. Open it with Import on any Mac running Laramac.' })
+                  }}
+                >
+                  <Download />
+                </button>
+                <button
+                  className="icon-btn danger-text"
+                  data-tip="Delete"
+                  aria-label="Delete snapshot"
+                  onClick={async () => {
+                    if (!(await ask({ title: 'Delete this snapshot?', yesNo: true, confirm: 'Delete', danger: true }))) return
+                    const next = await act(`snap-del-${s.id}`, () => api.invoke('snapshots:delete', site.path, s.id))
+                    if (next) setList(next)
+                  }}
+                >
+                  <Trash2 />
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {askDialog}
+    </div>
   )
 }

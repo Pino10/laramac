@@ -34,10 +34,15 @@ export function useAsk(): [(o: AskOptions) => Promise<string | null>, React.JSX.
 
   const dialog = state ? (
     <div className="scrim" style={{ zIndex: 70 }} onMouseDown={() => finish(null)}>
-      <div className="dialog glass" style={{ width: 420 }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="dialog glass" style={{ width: 440, padding: 24 }} onMouseDown={(e) => e.stopPropagation()}>
         <h2 className="page-title" style={{ fontSize: 17, marginBottom: 12 }}>
           {state.title}
         </h2>
+        {state.yesNo && state.label && (
+          <p className="page-desc" style={{ margin: '-4px 0 18px' }}>
+            {state.label}
+          </p>
+        )}
         {!state.yesNo && (
           <div className="field">
             {state.label && <label htmlFor="ask-input">{state.label}</label>}

@@ -103,7 +103,7 @@ export default function Databases(): React.JSX.Element {
             <section key={engine}>
               <div className="section-head">
                 <h2 className="section-title">{ENGINE_NAME[engine]} databases</h2>
-                <button className="btn btn-quiet" onClick={() => create(engine)} disabled={busy.has('db-create')}>
+                <button className="btn btn-tonal btn-sm" onClick={() => create(engine)} disabled={busy.has('db-create')}>
                   <Plus size={14} /> New database
                 </button>
               </div>
@@ -128,17 +128,17 @@ export default function Databases(): React.JSX.Element {
                         <span className="num">{d.rows.toLocaleString()}</span>
                         <span className="num">{formatBytes(d.bytes)}</span>
                         <span className="end">
-                          <button className="btn btn-quiet btn-sm" title="Open in phpMyAdmin" onClick={() => api.invoke('db:open', d.engine, d.name)} disabled={!tools?.phpmyadmin}>
-                            <ArrowUpRight size={14} /> Open
+                          <button className="icon-btn" data-tip="Open in phpMyAdmin" aria-label={`Open ${d.name} in phpMyAdmin`} onClick={() => api.invoke('db:open', d.engine, d.name)} disabled={!tools?.phpmyadmin}>
+                            <ArrowUpRight />
                           </button>
-                          <button className="btn btn-quiet btn-sm" title="Load a .sql or .sql.gz file into this database" onClick={() => restore(d)} disabled={busy.has(`db-import-${d.name}`)}>
-                            <Upload size={14} /> Import
+                          <button className="icon-btn" data-tip="Import a .sql file" aria-label={`Import into ${d.name}`} onClick={() => restore(d)} disabled={busy.has(`db-import-${d.name}`)}>
+                            <Upload />
                           </button>
-                          <button className="btn btn-quiet btn-sm" title="Save a backup as .sql.gz" onClick={() => backup(d)} disabled={busy.has(`db-export-${d.name}`)}>
-                            <Download size={14} /> Back up
+                          <button className="icon-btn" data-tip="Back up" aria-label={`Back up ${d.name}`} onClick={() => backup(d)} disabled={busy.has(`db-export-${d.name}`)}>
+                            <Download />
                           </button>
-                          <button className="btn btn-quiet btn-sm btn-icon danger-text" title={`Delete ${d.name}`} aria-label={`Delete ${d.name}`} onClick={() => remove(d)}>
-                            <Trash2 size={14} />
+                          <button className="icon-btn danger-text" data-tip="Delete" aria-label={`Delete ${d.name}`} onClick={() => remove(d)}>
+                            <Trash2 />
                           </button>
                         </span>
                       </div>

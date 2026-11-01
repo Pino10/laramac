@@ -1,4 +1,4 @@
-import { Database, Globe, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
+import { Database, Globe, Package, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
 
@@ -13,7 +13,8 @@ export const NAV: Item[][] = [
     { id: 'php', label: 'PHP', icon: <Terminal size={16} /> },
     { id: 'databases', label: 'Databases', icon: <Database size={16} /> },
     { id: 'servers', label: 'Servers', icon: <Server size={16} /> },
-    { id: 'tools', label: 'Tools', icon: <Wrench size={16} /> }
+    { id: 'tools', label: 'Tools', icon: <Wrench size={16} /> },
+    { id: 'packages', label: 'Packages', icon: <Package size={16} /> }
   ],
   [
     { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={16} /> },
