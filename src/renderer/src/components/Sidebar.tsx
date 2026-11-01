@@ -1,5 +1,6 @@
 import { Database, Globe, LayoutDashboard, MessageSquare, Server, Settings as SettingsIcon, Terminal, Wrench } from 'lucide-react'
 import { useApp, type Page } from '../store'
+import icon from '../assets/icon-128.png'
 
 type Item = { id: Page; label: string; icon: React.ReactNode }
 
@@ -32,12 +33,11 @@ export default function Sidebar(): React.JSX.Element {
     <aside className="sidebar glass">
       <div className="sidebar-top drag" />
       <div className="brand">
-        <span className="brand-mark" aria-hidden>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2.5 1.5v8.5h7.5" stroke="currentColor" strokeWidth="2.2" />
-          </svg>
+        <img className="brand-icon" src={icon} alt="" draggable={false} />
+        <span>
+          Laramac
+          <small>Local web, made easy</small>
         </span>
-        Laramac
       </div>
       <nav className="nav" aria-label="Main">
         {NAV.map((items, i) => (

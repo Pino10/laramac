@@ -2,7 +2,7 @@
 
 A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
 
-**Status: v0.6.1, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+**Status: v0.7.0, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
 
 ## What it does
 
@@ -16,9 +16,9 @@ A free, open-source local development environment for macOS, inspired by [Larago
 - **Import:** bring in a site from Laragon, a server backup or a teammate. Choose a .zip, .tar.gz, folder or .sql dump: Laramac finds the project and its database, asks a few questions, puts the files in your projects folder, loads the dump into MySQL or MariaDB, and points `wp-config.php` or `.env` at it. ⌘I opens it.
 - **New projects:** blank PHP, WordPress (database created and configured), or Laravel (via Composer, `.env` wired to MySQL and Mailpit).
 - **Editors:** open any site in Cursor or VS Code.
-- **AI:** connect any local model (Ollama, LM Studio, or any OpenAI-compatible server). The assistant proposes actions and you press the button. Install and launch AI coding tools from **Tools**: Claude Code, OpenCode, OpenClaw, Codex, Gemini CLI, vMLX, MLX LM, Ollama and LM Studio. Pick one to open from every site.
+- **AI:** connect any local model (Ollama, LM Studio, or any OpenAI-compatible server). The assistant proposes actions and you press the button. Install and launch AI tools from **Tools**, as Mac apps or on the command line: Claude Code, Codex, OpenCode, vMLX, LM Studio, Ollama, OpenClaw and Gemini CLI. Pick one to open from every site.
 - **Interface:** designed for macOS 27 Golden Gate (sidebar to the window edge, native Liquid Glass that follows the system transparency slider, Reduce Transparency respected). A live map of your stack on the Overview, where connections carry a moving current when both ends are running. Native Liquid Glass on macOS 26 (vibrancy on earlier versions), Poppins, light and dark themes.
-- **SSH and SFTP:** save servers, open an SSH session in Terminal, and browse files WinSCP-style: upload, download, rename, new folder and delete. Host keys are pinned on first connect and passwords are kept in the macOS Keychain.
+- **SSH and SFTP:** save servers, work in a full SSH terminal inside Laramac, and browse files WinSCP-style: upload, download, rename, new folder and delete. Host keys are pinned on first connect and passwords are kept in the macOS Keychain.
 - **Updates:** Laramac checks for new versions, shows what changed, and updates itself in place after verifying the download. Your settings, PHP versions, databases and sites stay as they are, because they live outside the app.
 - **Reset:** Settings > Reset clears software, data, settings or system changes without uninstalling. Your projects are never touched.
 - **Keyboard:** ⌘K opens a command bar for every site, service and action. ⌘1 to ⌘8 switch pages, ⌘N starts a new project.

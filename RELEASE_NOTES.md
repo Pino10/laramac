@@ -1,6 +1,15 @@
 Laramac is a free, open-source local development environment for macOS, inspired by Laragon.
 
-## New in 0.6
+## New in 0.7
+- **A new look.** A Golden Hour theme with a slow aurora behind real Liquid Glass, coloured service icons, live stats on the Overview and smoother motion, in light and dark.
+- **A new icon.** A bridge at sunset, for macOS Golden Gate. The menu bar now shows a bridge too (it was blank before).
+- **Terminal inside Laramac.** Servers now open a full SSH terminal in the app, beside the SFTP file browser. Switch between Terminal and Files without reconnecting.
+- **Finds your AI apps.** Laramac now sees the Mac apps as well as the command-line tools: Claude, Codex, OpenCode, vMLX, LM Studio and Ollama. Open either one from Tools.
+
+## Fixed
+- **Imports no longer fail on a column called `source`.** The safety check now reads SQL the way the MySQL client does, so `source`, `system` or `tee` inside a table is fine, while real client commands are still refused.
+
+## In 0.6
 - **Your data survives updates.** Settings, PHP versions, databases and downloads live in `~/.laramac`, and updating only replaces the app.
 - **Updates inside the app.** Laramac checks for new versions, shows what changed, verifies the download and restarts into the new version.
 - **Apache first.** Apache is now the main web server on ports 80 and 443, with Nginx beside it on 8080 and 8443. Swap them in Settings.
@@ -19,8 +28,8 @@ Laramac is a free, open-source local development environment for macOS, inspired
 - MySQL now installs the newest 8.4 build from Oracle's CDN and recovers from an interrupted first start.
 
 ## Download
-- **Apple Silicon (M1 and later):** Laramac-0.6.1-arm64.dmg
-- **Intel:** Laramac-0.6.1-x64.dmg
+- **Apple Silicon (M1 and later):** Laramac-0.7.0-arm64.dmg
+- **Intel:** Laramac-0.7.0-x64.dmg
 
 The app is not notarized by Apple yet, so confirm the first launch: open Laramac, click **Done**, then go to **System Settings > Privacy & Security** and click **Open Anyway**. From 0.6 on, updates install from inside the app.
 

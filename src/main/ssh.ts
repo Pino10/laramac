@@ -2,8 +2,9 @@ import { createHash, randomBytes } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join, posix } from 'path'
-import { Client, type ConnectConfig, type SFTPWrapper } from 'ssh2'
-import type { SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput } from '../shared/types'
+import { Client, type ClientChannel, type ConnectConfig, type SFTPWrapper } from 'ssh2'
+import { StringDecoder } from 'string_decoder'
+import type { SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
 import { dirs } from './paths'
 import { openTerminal, shellQuote } from './integrations'
 
@@ -129,7 +130,10 @@ function session(id: string): Session {
   return s
 }
 
-export async function connectSftp(id: string, passphrase: string | null, crypto: Crypto): Promise<SftpConnectResult> {
+type Opened = { client: Client } | { status: 'unknown-host'; fingerprint: string }
+
+/** Signs in to a saved server, refusing unknown or changed host keys. */
+async function openClient(id: string, passphrase: string | null, crypto: Crypto): Promise<Opened> {
   const s = server(id)
   let seen = ''
   const config: ConnectConfig = {
@@ -137,6 +141,7 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
     port: s.port,
     username: s.user,
     readyTimeout: 20000,
+    keepaliveInterval: 30000,
     hostVerifier: (key: Buffer) => {
       seen = fingerprintOf(key)
       return !!s.hostKey && s.hostKey === seen
@@ -154,15 +159,8 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
   }
 
   const client = new Client()
-  const outcome = await new Promise<SftpConnectResult | Error>((resolve) => {
-    client.once('ready', () => {
-      client.sftp((err, sftp) => {
-        if (err) return resolve(err)
-        const sid = randomBytes(8).toString('hex')
-        sessions.set(sid, { client, sftp })
-        sftp.realpath('.', (e, home) => resolve({ status: 'connected', session: sid, home: e ? '/' : home }))
-      })
-    })
+  const outcome = await new Promise<Opened | Error>((resolve) => {
+    client.once('ready', () => resolve({ client }))
     client.once('error', (err) => {
       if (seen && s.hostKey && s.hostKey !== seen) {
         resolve(new Error(`The server's identity changed (now ${seen}). This can mean someone is intercepting the connection. Laramac refused to connect.`))
@@ -178,8 +176,92 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
     client.end()
     throw new Error(outcome.message.replace(/^All configured authentication methods failed$/, 'The server refused the sign-in.'))
   }
-  if (outcome.status === 'unknown-host') client.end()
+  if (!('client' in outcome)) client.end()
   return outcome
+}
+
+export async function connectSftp(id: string, passphrase: string | null, crypto: Crypto): Promise<SftpConnectResult> {
+  const opened = await openClient(id, passphrase, crypto)
+  if (!('client' in opened)) return opened
+  const { client } = opened
+  return new Promise((resolve, reject) => {
+    client.sftp((err, sftp) => {
+      if (err) {
+        client.end()
+        return reject(err)
+      }
+      const sid = randomBytes(8).toString('hex')
+      sessions.set(sid, { client, sftp })
+      sftp.realpath('.', (e, home) => resolve({ status: 'connected', session: sid, home: e ? '/' : home }))
+    })
+  })
+}
+
+// ------------------------------------------------------------ terminal
+
+interface Shell {
+  client: Client
+  stream: ClientChannel
+}
+const shells = new Map<string, Shell>()
+
+/** Opens an interactive shell; output and the end of the session come back through the callbacks. */
+export async function openShell(
+  id: string,
+  passphrase: string | null,
+  crypto: Crypto,
+  size: { cols: number; rows: number },
+  onData: (sid: string, data: string) => void,
+  onExit: (sid: string) => void
+): Promise<SshShellResult> {
+  const opened = await openClient(id, passphrase, crypto)
+  if (!('client' in opened)) return opened
+  const { client } = opened
+  const cols = clampSize(size.cols, 20, 500, 80)
+  const rows = clampSize(size.rows, 5, 200, 24)
+  return new Promise((resolve, reject) => {
+    client.shell({ term: 'xterm-256color', cols, rows }, (err, stream) => {
+      if (err) {
+        client.end()
+        return reject(new Error(`The server would not open a shell: ${err.message}`))
+      }
+      const sid = randomBytes(8).toString('hex')
+      shells.set(sid, { client, stream })
+      const decoder = new StringDecoder('utf8')
+      const errDecoder = new StringDecoder('utf8')
+      stream.on('data', (d: Buffer) => onData(sid, decoder.write(d)))
+      stream.stderr.on('data', (d: Buffer) => onData(sid, errDecoder.write(d)))
+      const finish = (): void => {
+        if (!shells.has(sid)) return
+        shells.delete(sid)
+        client.end()
+        onExit(sid)
+      }
+      stream.on('close', finish)
+      client.on('close', finish)
+      resolve({ status: 'connected', session: sid })
+    })
+  })
+}
+
+function clampSize(n: unknown, min: number, max: number, fallback: number): number {
+  return typeof n === 'number' && Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : fallback
+}
+
+export function writeShell(sid: string, data: string): void {
+  shells.get(sid)?.stream.write(data)
+}
+
+export function resizeShell(sid: string, cols: number, rows: number): void {
+  shells.get(sid)?.stream.setWindow(clampSize(rows, 5, 200, 24), clampSize(cols, 20, 500, 80), 0, 0)
+}
+
+export function closeShell(sid: string): void {
+  const sh = shells.get(sid)
+  if (!sh) return
+  shells.delete(sid)
+  sh.stream.end()
+  sh.client.end()
 }
 
 const typeOf = (mode: number): SftpEntry['type'] => {
@@ -195,8 +277,13 @@ export function listDir(sid: string, path: string): Promise<SftpListing> {
       sftp.readdir(real, (err, list) => {
         if (err) return reject(new Error(`Cannot read ${real}: ${err.message}`))
         const entries = list
-          .map((f) => ({ name: f.filename, type: typeOf(f.attrs.mode), size: f.attrs.size, modified: f.attrs.mtime * 1000 }))
-          .sort((a, b) => (a.type === 'dir') !== (b.type === 'dir') ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name))
+          .map((f) => ({
+            name: f.filename,
+            type: typeOf(f.attrs.mode),
+            size: f.attrs.size,
+            modified: f.attrs.mtime * 1000
+          }))
+          .sort((a, b) => ((a.type === 'dir') !== (b.type === 'dir') ? (a.type === 'dir' ? -1 : 1) : a.name.localeCompare(b.name)))
         resolve({ path: real, entries })
       })
     })
@@ -224,16 +311,14 @@ export async function upload(sid: string, localFiles: string[], remoteDir: strin
   return localFiles.length
 }
 
-const op = (fn: (cb: (err?: Error | null) => void) => void): Promise<void> =>
-  new Promise((res, rej) => fn((err) => (err ? rej(err) : res())))
+const op = (fn: (cb: (err?: Error | null) => void) => void): Promise<void> => new Promise((res, rej) => fn((err) => (err ? rej(err) : res())))
 
 const safeName = (name: string): string => {
   if (!name || name.includes('/') || name === '.' || name === '..') throw new Error('Use a plain name without slashes.')
   return name
 }
 
-export const mkdir = (sid: string, dir: string, name: string): Promise<void> =>
-  op((cb) => session(sid).sftp.mkdir(posix.join(dir, safeName(name)), cb))
+export const mkdir = (sid: string, dir: string, name: string): Promise<void> => op((cb) => session(sid).sftp.mkdir(posix.join(dir, safeName(name)), cb))
 
 export const rename = (sid: string, from: string, toName: string): Promise<void> =>
   op((cb) => session(sid).sftp.rename(from, posix.join(posix.dirname(from), safeName(toName)), cb))
@@ -248,4 +333,5 @@ export function disconnect(sid: string): void {
 
 export function disconnectAll(): void {
   for (const sid of [...sessions.keys()]) disconnect(sid)
+  for (const sid of [...shells.keys()]) closeShell(sid)
 }

@@ -158,6 +158,38 @@ describe('dump filter', () => {
     }
   )
 
+  it('accepts columns and values named like client commands', async () => {
+    const sql = [
+      'CREATE TABLE `plays` (',
+      '  id int NOT NULL,',
+      '  source VARCHAR(10) NOT NULL,',
+      '  system varchar(20) DEFAULT NULL,',
+      '  tee int,',
+      '  pager int',
+      ') ENGINE=InnoDB;',
+      "INSERT INTO plays VALUES (1,'source','C:\\\\laragon\\\\www','it\\'s \\\\! fine');",
+      '/*!40101 SET NAMES utf8mb4 */;',
+      '-- source /etc/passwd in a comment',
+      '/* \\! inside a comment */',
+      ''
+    ].join('\r\n')
+    expect((await filter(sql)).out).toBe(sql)
+  })
+
+  it('refuses a backslash command in the middle of a line', async () => {
+    await expect(filter("INSERT INTO a VALUES (1); \\! touch /tmp/pwned\n")).rejects.toThrow(/client command/)
+  })
+
+  it('refuses a client command that starts a new statement after a multi-line one', async () => {
+    await expect(filter('CREATE TABLE a (\n  id int\n);\nsource /etc/passwd\n')).rejects.toThrow(/client command/)
+  })
+
+  it('drops a USE that follows another statement on the same line', async () => {
+    const r = await filter('CREATE TABLE a (id int); USE other;\nINSERT INTO a VALUES (1);\n')
+    expect(r.out).not.toMatch(/USE/)
+    expect(r.out).toContain('INSERT INTO a')
+  })
+
   it('drops statements that switch databases or change users', async () => {
     const r = await filter("CREATE DATABASE `other`;\nUSE `other`;\nDROP DATABASE prod;\nGRANT ALL ON *.* TO 'x'@'%';\nCREATE USER 'x';\nCREATE TABLE ok (id int);\n")
     expect(r.out).toContain('CREATE TABLE ok')

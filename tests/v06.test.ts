@@ -249,6 +249,22 @@ describe.skipIf(!SSHD)('SFTP against a real OpenSSH server', () => {
     await expect(ssh.mkdir(res.session, work, '../escape')).rejects.toThrow()
   })
 
+  it('runs an interactive shell in the app, with resizing and a clean exit', async () => {
+    let out = ''
+    let ended = ''
+    const res = await ssh.openShell(id, null, crypto, { cols: 100, rows: 30 }, (_s, d) => (out += d), (s) => (ended = s))
+    expect(res.status).toBe('connected')
+    if (res.status !== 'connected') return
+    ssh.resizeShell(res.session, 132, 40)
+    ssh.writeShell(res.session, 'stty size; echo laramac-$((40+2))\n')
+    for (let i = 0; i < 50 && !out.includes('laramac-42'); i++) await new Promise((r) => setTimeout(r, 100))
+    expect(out).toContain('laramac-42')
+    expect(out).toContain('40 132')
+    ssh.writeShell(res.session, 'exit\n')
+    for (let i = 0; i < 50 && !ended; i++) await new Promise((r) => setTimeout(r, 100))
+    expect(ended).toBe(res.session)
+  })
+
   it('refuses to connect if the server identity changes', async () => {
     ssh.trustHostKey(id, 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     await expect(ssh.connectSftp(id, null, crypto)).rejects.toThrow(/identity changed/)

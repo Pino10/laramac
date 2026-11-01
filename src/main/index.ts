@@ -4,7 +4,7 @@ import { cancelImport, inspect, runImport } from './importer'
 import { checkForUpdate, installUpdate } from './updater'
 import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
-import { installAiTool, launchAiTool, listAiTools } from './aitools'
+import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni } from './php'
 import { safeStorage } from 'electron'
@@ -176,9 +176,8 @@ function hardenWebContents(): void {
 }
 
 function createTray(): void {
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"><path d="M5 3v12h9" stroke="black" stroke-width="2.4" fill="none"/></svg>'
-  const icon = nativeImage.createFromDataURL('data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64'))
+  // A bridge drawn for the menu bar: 36 px for Retina, black on clear so macOS can tint it.
+  const icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAADG0lEQVR4AeyWSahOYRjHD64prpCScSEyZFoaMywszCRJKSxIhq2l2V5kzUbsJJkyJKEspCQrCywkIa55yu93Oufz3tM53zm37nW/xXf7/9/ned/3eZ/3/73TuT2jBvtrCirbkOYKddYKLSbRt4T6uJVgbIfGVd2yCUzfN+F4bFV0eFxVQf0CBf0Dv8wdEAT0CfxCt6qgSUGG+YFf5s4LAsIcQXN7t6qg6cGwRfhVxrUQZywmxoy4LCmqJO5BjjDZUOprYRnWETAYppiJYy5MMaoIcovCs2C2AxS9YBHsO5LpHEh9NqyLKoJW52SYQtt2WIRddIyDWazKNmTrZYK8UZsygx4l9cPYITALt+lQ0vggsanZimNOTD7KBO1k2DD4GaY4jfMOKuYi1q3AxBhEeRm2wjfwDEzxFcdc27CFqCfIX7I3GXklsZovFFugmENxD/oiL8Heh7Og2EzhK42JcTUuo8ichW9SPUE7SOAveo29BUPcpHIH/oDT4A3ohJ6t7/i3oTGYGox5S20ELDx/RYJ8xA4yUHhbfukEHIXv7duIPQdfwZdQ37YF+GNhCMUfTRo8f5MTv53JEzSciOvQq+4vPYlfhMd0bICujmdH/wn1Ihyn4y70rF3DugOYf8gKWkjXQ+gKPMOuhL9hGfzwhoe7KP4nHSvgczgaOtdcbA2pIA/wCVrd95FYl/cp9iPsbLwnoauouDH4nsVj2PgDriB/nQFecZ/2C3S6/F0hhtQxPlBegs7jnHvw1dCiIA/sJxpcxmVYX1OvNm6XwrdtKTOsgS+gGv4oyDPirZhIo6ox/xXnmc25Pb+xIOqR++r7od8d9AFVQ+QKKcCl24+T0sdOpvXl9KXwlvjxtL6bwhhjpX7Ylx1nvzRW6qdUQyzI785ZEu8LOBXfAWlbmFg/nVRrTBhvG8MjrbH6Ut9YGcZbl2podYXaiNZiuhVqaLNQxXoK/+nKo22n6PfweyP1batCY6uOU0O8ZcwVebvSvcyzft39H7k3wfp5MXltxlYdp4aaIOZpDKRb1hhqUNEUxCLURXOF6i5PFEV/AQAA//9jWAhTAAAABklEQVQDAHpknEkvynRIAAAAAElFTkSuQmCC', 'base64'), { scaleFactor: 2 })
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Laramac')
@@ -515,9 +514,16 @@ function registerIpc(): void {
   })
 
   // ---- AI tools
-  handle('ai:tools', () => listAiTools())
-  handle('ai:install-tool', (id) => installAiTool(String(id)))
-  handle('ai:launch-tool', (id, path) => launchAiTool(String(id), path === null ? null : sitePath(path)))
+  const toolKind = (k: unknown): 'cli' | 'app' => {
+    if (k === 'app' || k === 'cli') return k
+    throw new Error('Unknown kind.')
+  }
+  handle('ai:tools', async () => {
+    await refreshLoginShellPaths()
+    return listAiTools()
+  })
+  handle('ai:install-tool', (id, kind) => installAiTool(String(id), toolKind(kind)))
+  handle('ai:launch-tool', (id, path, kind) => launchAiTool(String(id), path === null ? null : sitePath(path), kind === null ? undefined : toolKind(kind)))
 
   // ---- SSH and SFTP. Secrets are encrypted with the macOS Keychain and never sent to the page.
   const keychain: ssh.Crypto = {
@@ -552,6 +558,22 @@ function registerIpc(): void {
   handle('sftp:rename', (sid, from, to) => ssh.rename(String(sid), String(from), String(to)))
   handle('sftp:delete', (sid, path, isDir) => ssh.remove(String(sid), String(path), isDir === true))
   handle('sftp:disconnect', (sid) => ssh.disconnect(String(sid)))
+  handle('shell:open', (id, passphrase, cols, rows) =>
+    ssh.openShell(
+      String(id),
+      typeof passphrase === 'string' ? passphrase : null,
+      keychain,
+      { cols: Number(cols), rows: Number(rows) },
+      (session, data) => send('shell:data', { session, data }),
+      (session) => send('shell:exit', { session })
+    )
+  )
+  handle('shell:write', (sid, data) => {
+    if (typeof data !== 'string' || data.length > 1_000_000) throw new Error('Invalid input.')
+    ssh.writeShell(String(sid), data)
+  })
+  handle('shell:resize', (sid, cols, rows) => ssh.resizeShell(String(sid), Number(cols), Number(rows)))
+  handle('shell:close', (sid) => ssh.closeShell(String(sid)))
 
   handle('activity:list', () => activity.list())
   handle('activity:clear', () => activity.clear())
@@ -591,6 +613,7 @@ app.whenReady().then(() => {
   )
 
   app.on('activate', showWindow)
+  void refreshLoginShellPaths()
   setTimeout(() => void backgroundChecks(), 8000)
   setInterval(() => void backgroundChecks(), 6 * 60 * 60 * 1000)
 })

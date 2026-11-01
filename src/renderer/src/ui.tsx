@@ -38,6 +38,31 @@ export function Lamp({ status }: { status: ServiceStatus }): React.JSX.Element {
   return <span className="lamp" data-s={status} aria-hidden />
 }
 
+/** Each service's own colour and letters, so rows read at a glance. */
+export const SERVICE_LOOK: Record<string, [string, string]> = {
+  apache: ['Ap', '#c9283e'],
+  nginx: ['Nx', '#109a52'],
+  php: ['Php', '#6f74b8'],
+  mysql: ['My', '#0f7891'],
+  mariadb: ['Ma', '#b36b4d'],
+  postgres: ['Pg', '#3b6ea8'],
+  redis: ['Re', '#d8382d'],
+  memcached: ['Mc', '#1f9c90'],
+  mongodb: ['Mo', '#3f9a44'],
+  meilisearch: ['Me', '#e0457b'],
+  mailpit: ['@', '#3d7cf0']
+}
+
+export function ServiceIcon({ id, status }: { id: string; status: ServiceStatus }): React.JSX.Element {
+  const [letters, hue] = SERVICE_LOOK[id] ?? [id.slice(0, 2), '#8a8f9c']
+  return (
+    <span className="svc-icon" style={{ ['--hue' as string]: hue }} data-off={status === 'not-installed'} aria-hidden>
+      {letters}
+      {status !== 'not-installed' && <Lamp status={status} />}
+    </span>
+  )
+}
+
 export function PageHead({
   title,
   desc,
@@ -71,7 +96,10 @@ const HUES: Record<string, [string, string]> = {
   postgres: ['Pg', '#4a7bb5'],
   redis: ['Rd', '#d83b2f'],
   mongodb: ['Mg', '#1ea55a'],
-  mailpit: ['Mp', '#8b6fd6']
+  mailpit: ['Mp', '#8b6fd6'],
+  memcached: ['Mc', '#1f9c90'],
+  meilisearch: ['Me', '#e0457b'],
+  adminer: ['Ad', '#34567a']
 }
 
 export function Monogram({ id, large }: { id: string; large?: boolean }): React.JSX.Element {

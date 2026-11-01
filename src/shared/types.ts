@@ -116,8 +116,11 @@ export interface SetupReport {
 export interface AiTool {
   id: string
   name: string
-  kind: 'cli' | 'app'
   description: string
+  /** null when the tool has no command-line version. */
+  cli: { installed: boolean } | null
+  /** null when the tool has no Mac app. */
+  app: { installed: boolean } | null
   installed: boolean
   /** Apple Silicon only, needs Node.js, and so on. */
   note?: string
@@ -160,6 +163,8 @@ export interface SftpListing {
   path: string
   entries: SftpEntry[]
 }
+
+export type SshShellResult = { status: 'connected'; session: string } | { status: 'unknown-host'; fingerprint: string }
 
 export type SftpConnectResult =
   | { status: 'connected'; session: string; home: string }
@@ -305,8 +310,8 @@ export interface Channels {
   'php:edit-ini': { args: [string]; result: void }
   'setup:recommended': { args: []; result: SetupReport }
   'ai:tools': { args: []; result: AiTool[] }
-  'ai:install-tool': { args: [string]; result: void }
-  'ai:launch-tool': { args: [string, string | null]; result: void }
+  'ai:install-tool': { args: [string, 'cli' | 'app']; result: void }
+  'ai:launch-tool': { args: [string, string | null, 'cli' | 'app' | null]; result: void }
   'ssh:list': { args: []; result: SshServer[] }
   'ssh:save': { args: [SshServerInput]; result: SshServer[] }
   'ssh:delete': { args: [string]; result: SshServer[] }
@@ -320,6 +325,10 @@ export interface Channels {
   'sftp:rename': { args: [string, string, string]; result: void }
   'sftp:delete': { args: [string, string, boolean]; result: void }
   'sftp:disconnect': { args: [string]; result: void }
+  'shell:open': { args: [string, string | null, number, number]; result: SshShellResult }
+  'shell:write': { args: [string, string]; result: void }
+  'shell:resize': { args: [string, number, number]; result: void }
+  'shell:close': { args: [string]; result: void }
 }
 
 export type ChannelName = keyof Channels
@@ -330,6 +339,8 @@ export interface Events {
   'sites:changed': SiteInfo[]
   'activity:changed': ActivityItem[]
   'update:available': UpdateInfo
+  'shell:data': { session: string; data: string }
+  'shell:exit': { session: string }
 }
 
 export interface LaramacApi {

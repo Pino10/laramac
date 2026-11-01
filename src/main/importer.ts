@@ -62,37 +62,39 @@ export async function extractTar(file: string, dest: string): Promise<ExtractSta
   // Throwing inside node-tar's filter escapes as an unhandled error, so problems are recorded
   // here, every later entry is skipped, and the error is raised once the archive is closed.
   let problem: ImportError | null = null
-  await tar.x({
-    file,
-    cwd: dest,
-    strict: true,
-    preserveOwner: false,
-    noChmod: true,
-    onwarn: (_code, message) => {
-      problem ??= new ImportError(`The archive has an unsafe entry: ${message}`)
-    },
-    filter: (path, entry) => {
-      if (problem) return false
-      const type = 'type' in entry ? entry.type : 'File'
-      if (type === 'SymbolicLink' || type === 'Link') {
-        stats.skippedLinks++
-        return false
+  await tar
+    .x({
+      file,
+      cwd: dest,
+      strict: true,
+      preserveOwner: false,
+      noChmod: true,
+      onwarn: (_code, message) => {
+        problem ??= new ImportError(`The archive has an unsafe entry: ${message}`)
+      },
+      filter: (path, entry) => {
+        if (problem) return false
+        const type = 'type' in entry ? entry.type : 'File'
+        if (type === 'SymbolicLink' || type === 'Link') {
+          stats.skippedLinks++
+          return false
+        }
+        if (type !== 'File' && type !== 'Directory' && type !== 'OldFile' && type !== 'ContiguousFile') return false
+        if (!isInside(dest, join(dest, path))) {
+          problem = new ImportError(`The archive tried to write outside its folder: ${path}`)
+          return false
+        }
+        bytes += 'size' in entry ? (entry.size ?? 0) : 0
+        if (++stats.files > LIMITS.entries || bytes > LIMITS.bytes) {
+          problem = new ImportError('The archive is too large to import.')
+          return false
+        }
+        return true
       }
-      if (type !== 'File' && type !== 'Directory' && type !== 'OldFile' && type !== 'ContiguousFile') return false
-      if (!isInside(dest, join(dest, path))) {
-        problem = new ImportError(`The archive tried to write outside its folder: ${path}`)
-        return false
-      }
-      bytes += 'size' in entry ? (entry.size ?? 0) : 0
-      if (++stats.files > LIMITS.entries || bytes > LIMITS.bytes) {
-        problem = new ImportError('The archive is too large to import.')
-        return false
-      }
-      return true
-    }
-  }).catch((err: Error) => {
-    problem ??= new ImportError(`The archive could not be read: ${err.message}`)
-  })
+    })
+    .catch((err: Error) => {
+      problem ??= new ImportError(`The archive could not be read: ${err.message}`)
+    })
   if (problem) throw problem
   return stats
 }
@@ -242,7 +244,11 @@ const cleanDbName = (s: string): string => s.replace(/[^A-Za-z0-9_]/g, '_').slic
 
 function uniqueName(base: string): string {
   const www = ensureWww()
-  let name = base.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 50) || 'imported-site'
+  let name =
+    base
+      .replace(/[^A-Za-z0-9._-]/g, '-')
+      .replace(/^[^A-Za-z0-9]+/, '')
+      .slice(0, 50) || 'imported-site'
   if (!existsSync(join(www, name))) return name
   for (let i = 2; i < 100; i++) if (!existsSync(join(www, `${name}-${i}`))) return `${name}-${i}`
   name = `${name}-${randomBytes(2).toString('hex')}`
@@ -296,7 +302,9 @@ export async function inspect(source: string, installedEngines: ('mysql' | 'mari
       else if (/\.sql(\.gz)?$/.test(lower)) cpSync(source, join(content, name))
       else throw new ImportError('Choose a .zip, .tar.gz, .tgz or .sql file, or a project folder.')
       if (stats?.skippedLinks) {
-        warnings.push(`${stats.skippedLinks} shortcut ${stats.skippedLinks === 1 ? 'link was' : 'links were'} left out for safety. For Laravel, run "php artisan storage:link" afterwards.`)
+        warnings.push(
+          `${stats.skippedLinks} shortcut ${stats.skippedLinks === 1 ? 'link was' : 'links were'} left out for safety. For Laravel, run "php artisan storage:link" afterwards.`
+        )
       }
     }
     const removed = removeLinks(content)
@@ -380,9 +388,18 @@ export class DumpFilter extends Transform {
   private rest = ''
   skipped = 0
 
-  static readonly BLOCK = /^\s*(\\|(system|source|tee|pager|edit|connect)(\s|;|$))/i
+  // The same rules the mysql client uses: a named command only counts as the
+  // first word of a new statement, and a backslash command anywhere outside
+  // quotes and comments. A column called `source` inside CREATE TABLE is fine.
+  static readonly NAMED = /^\s*(system|source|tee|pager|edit|connect)(\s|;|$)/i
   static readonly SKIP =
-    /^\s*(CREATE\s+(DATABASE|SCHEMA)|DROP\s+(DATABASE|SCHEMA)|USE\s|(CREATE|ALTER|DROP|RENAME)\s+USER|GRANT\s|REVOKE\s|SET\s+PASSWORD|FLUSH\s+PRIVILEGES)/i
+    /^(CREATE\s+(DATABASE|SCHEMA)|DROP\s+(DATABASE|SCHEMA)|USE(\s|;|`|$)|(CREATE|ALTER|DROP|RENAME)\s+USER|GRANT\s|REVOKE\s|SET\s+PASSWORD|FLUSH\s+PRIVILEGES)/i
+
+  private delimiter = ';'
+  private quote: string | null = null
+  private inComment = false
+  private stmtEmpty = true
+  private skipping = false
 
   _transform(chunk: Buffer, _enc: BufferEncoding, done: TransformCallback): void {
     const text = this.rest + chunk.toString('utf8')
@@ -403,15 +420,78 @@ export class DumpFilter extends Transform {
     }
   }
 
-  private line(l: string): string {
-    if (DumpFilter.BLOCK.test(l)) {
-      throw new ImportError(`This dump contains a client command ("${l.trim().slice(0, 40)}"), which could run programs on your Mac. It was not imported.`)
+  private refuse(text: string): never {
+    throw new ImportError(`This dump contains a client command ("${text.trim().slice(0, 40)}"), which could run programs on your Mac. It was not imported.`)
+  }
+
+  private line(raw: string): string {
+    const l = raw.endsWith('\r') ? raw.slice(0, -1) : raw
+    const cr = l.length !== raw.length ? '\r' : ''
+
+    if (this.stmtEmpty && !this.quote && !this.inComment) {
+      const d = /^\s*delimiter\s+(\S+)/i.exec(l)
+      if (d) {
+        this.delimiter = d[1]
+        return raw + '\n'
+      }
+      if (DumpFilter.NAMED.test(l)) this.refuse(l)
     }
-    if (DumpFilter.SKIP.test(l)) {
-      this.skipped++
-      return '\n'
+
+    let out = ''
+    let i = 0
+    while (i < l.length) {
+      const c = l[i]
+      if (this.inComment) {
+        if (l.startsWith('*/', i)) {
+          this.inComment = false
+          if (!this.skipping) out += '*/'
+          i += 2
+        } else {
+          if (!this.skipping) out += c
+          i++
+        }
+        continue
+      }
+      if (this.quote) {
+        if (c === '\\' && this.quote !== '`') {
+          if (!this.skipping) out += l.slice(i, i + 2)
+          i += 2
+          continue
+        }
+        if (c === this.quote) this.quote = null
+        if (!this.skipping) out += c
+        i++
+        continue
+      }
+      // Line comments: "-- " (or "--" at the end) and "#".
+      if (c === '#' || (l.startsWith('--', i) && (i + 2 >= l.length || /\s/.test(l[i + 2])))) {
+        if (!this.skipping) out += l.slice(i)
+        break
+      }
+      if (l.startsWith('/*', i) && l[i + 2] !== '!' && l[i + 2] !== '+') {
+        this.inComment = true
+        if (!this.skipping) out += '/*'
+        i += 2
+        continue
+      }
+      if (c === '\\') this.refuse(l.slice(i))
+      if (l.startsWith(this.delimiter, i)) {
+        if (!this.skipping) out += this.delimiter
+        if (this.skipping) this.skipped++
+        this.skipping = false
+        this.stmtEmpty = true
+        i += this.delimiter.length
+        continue
+      }
+      if (this.stmtEmpty && !/\s/.test(c)) {
+        this.stmtEmpty = false
+        if (DumpFilter.SKIP.test(l.slice(i))) this.skipping = true
+      }
+      if (c === "'" || c === '"' || c === '`') this.quote = c
+      if (!this.skipping) out += c
+      i++
     }
-    return l + '\n'
+    return out + cr + '\n'
   }
 }
 
@@ -438,7 +518,9 @@ function clientArgs(t: SqlTarget, extra: string[]): string[] {
 
 function runClient(t: SqlTarget, args: string[], input?: NodeJS.ReadableStream, onBytes?: (n: number) => void): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(t.client, clientArgs(t, args), { stdio: ['pipe', 'ignore', 'pipe'] })
+    const child = spawn(t.client, clientArgs(t, args), {
+      stdio: ['pipe', 'ignore', 'pipe']
+    })
     let stderr = ''
     child.stderr.on('data', (d: Buffer) => {
       stderr = (stderr + d.toString()).slice(-4000)
@@ -542,8 +624,15 @@ export async function runImport(id: string, a: ImportAnswers, deps: RunDeps): Pr
       const client = deps.clientFor(a.engine)
       if (!client) throw new ImportError('The database client was not found.')
       deps.update(0, `Importing ${basename(a.sqlFile)}`)
-      skipped = await importSql(join(content, a.sqlFile), { client, engine: a.engine, port: a.engine === 'mysql' ? 3306 : 3307, database: a.database }, (p) =>
-        deps.update(p, `Importing ${basename(a.sqlFile!)}`)
+      skipped = await importSql(
+        join(content, a.sqlFile),
+        {
+          client,
+          engine: a.engine,
+          port: a.engine === 'mysql' ? 3306 : 3307,
+          database: a.database
+        },
+        (p) => deps.update(p, `Importing ${basename(a.sqlFile!)}`)
       )
     }
 
@@ -578,7 +667,11 @@ export async function runImport(id: string, a: ImportAnswers, deps: RunDeps): Pr
         await deps.composerInstall(target, (l) => deps.update(null, `Composer: ${l.slice(0, 60)}`))
       }
     }
-    return { site: plan.hasProject ? a.name : null, database: a.sqlFile ? a.database : null, skipped }
+    return {
+      site: plan.hasProject ? a.name : null,
+      database: a.sqlFile ? a.database : null,
+      skipped
+    }
   } finally {
     cancelImport(id)
   }

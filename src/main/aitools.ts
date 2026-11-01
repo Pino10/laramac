@@ -1,5 +1,5 @@
 import { execFile } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { shell } from 'electron'
@@ -7,71 +7,218 @@ import type { AiTool } from '../shared/types'
 import { openTerminal, shellQuote } from './integrations'
 
 /**
- * AI coding tools and local model apps Laramac can install and launch.
- * Install commands are each project's official one; they run visibly in Terminal so you can see
- * exactly what happens. Laramac never runs them silently.
+ * AI coding tools and local model apps. Many come both as a Mac app and as a
+ * command-line tool, and Laramac finds either. Install commands are each
+ * project's official one and run visibly in Terminal, never silently.
  */
 interface ToolDef {
   id: string
   name: string
-  kind: 'cli' | 'app'
   description: string
-  /** Executable names to look for (CLI tools) or app bundle names (apps). */
-  find: string[]
-  install: { command?: string; url?: string }
-  /** Command typed in a site folder to start the tool. */
-  launch?: string
+  /** Executable names (command-line version). */
+  cli?: {
+    find: string[]
+    install: string
+    launch?: string
+    needsNode?: boolean
+  }
+  /** App bundle names, matched case-insensitively, and where to get the app. */
+  app?: { names: string[]; url: string }
   appleSiliconOnly?: boolean
-  needsNode?: boolean
 }
 
 export const AI_TOOLS: ToolDef[] = [
-  { id: 'claude', name: 'Claude Code', kind: 'cli', description: "Anthropic's coding agent in your terminal", find: ['claude'], install: { command: 'curl -fsSL https://claude.ai/install.sh | bash' }, launch: 'claude' },
-  { id: 'opencode', name: 'OpenCode', kind: 'cli', description: 'Open-source coding agent that works with many models', find: ['opencode'], install: { command: 'curl -fsSL https://opencode.ai/install | bash' }, launch: 'opencode' },
-  { id: 'openclaw', name: 'OpenClaw', kind: 'cli', description: 'Open-source personal AI agent', find: ['openclaw'], install: { command: 'curl -fsSL https://openclaw.ai/install.sh | bash' }, launch: 'openclaw' },
-  { id: 'codex', name: 'Codex CLI', kind: 'cli', description: "OpenAI's coding agent", find: ['codex'], install: { command: 'npm install -g @openai/codex' }, launch: 'codex', needsNode: true },
-  { id: 'gemini', name: 'Gemini CLI', kind: 'cli', description: "Google's coding agent", find: ['gemini'], install: { command: 'npm install -g @google/gemini-cli' }, launch: 'gemini', needsNode: true },
-  { id: 'vmlx', name: 'vMLX', kind: 'cli', description: 'Fast MLX model server with an OpenAI-compatible API', find: ['vmlx'], install: { command: 'brew install uv && uv tool install vmlx' }, launch: 'vmlx --help', appleSiliconOnly: true },
-  { id: 'mlx-lm', name: 'MLX LM', kind: 'cli', description: "Apple's MLX tools for running and fine-tuning models", find: ['mlx_lm.generate', 'mlx_lm.server'], install: { command: 'brew install uv && uv tool install mlx-lm' }, launch: 'mlx_lm.generate --help', appleSiliconOnly: true },
-  { id: 'ollama', name: 'Ollama', kind: 'app', description: 'Run open models locally with one command', find: ['Ollama.app'], install: { url: 'https://ollama.com/download' } },
-  { id: 'lmstudio', name: 'LM Studio', kind: 'app', description: 'Download and chat with local models', find: ['LM Studio.app'], install: { url: 'https://lmstudio.ai/download' } }
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    description: "Anthropic's coding agent, in Terminal and in the Claude app",
+    cli: {
+      find: ['claude'],
+      install: 'curl -fsSL https://claude.ai/install.sh | bash'
+    },
+    app: { names: ['Claude.app'], url: 'https://claude.ai/download' }
+  },
+  {
+    id: 'codex',
+    name: 'Codex',
+    description: "OpenAI's coding agent, in Terminal and as a Mac app",
+    cli: {
+      find: ['codex'],
+      install: 'npm install -g @openai/codex',
+      needsNode: true
+    },
+    app: { names: ['Codex.app'], url: 'https://openai.com/codex/' }
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    description: 'Open-source coding agent for any model, in Terminal or on the desktop',
+    cli: {
+      find: ['opencode'],
+      install: 'curl -fsSL https://opencode.ai/install | bash'
+    },
+    app: {
+      names: ['OpenCode.app', 'OpenCode Desktop.app', 'opencode-desktop.app'],
+      url: 'https://opencode.ai/download'
+    }
+  },
+  {
+    id: 'vmlx',
+    name: 'vMLX',
+    description: 'Run MLX models on Apple Silicon with an OpenAI and Anthropic compatible server',
+    cli: {
+      find: ['vmlx'],
+      install: 'brew install uv && uv tool install vmlx',
+      launch: 'vmlx --help'
+    },
+    app: {
+      names: ['vMLX.app', 'MLX Studio.app'],
+      url: 'https://github.com/jjang-ai/mlxstudio/releases/latest'
+    },
+    appleSiliconOnly: true
+  },
+  {
+    id: 'lmstudio',
+    name: 'LM Studio',
+    description: 'Download, chat with and serve local models',
+    cli: {
+      find: ['lms'],
+      install: '~/.lmstudio/bin/lms bootstrap',
+      launch: 'lms status'
+    },
+    app: { names: ['LM Studio.app'], url: 'https://lmstudio.ai/download' }
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    description: 'Run open models locally with one command',
+    cli: {
+      find: ['ollama'],
+      install: 'brew install ollama',
+      launch: 'ollama list'
+    },
+    app: { names: ['Ollama.app'], url: 'https://ollama.com/download' }
+  },
+  {
+    id: 'openclaw',
+    name: 'OpenClaw',
+    description: 'Open-source personal AI agent',
+    cli: {
+      find: ['openclaw'],
+      install: 'curl -fsSL https://openclaw.ai/install.sh | bash'
+    }
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini CLI',
+    description: "Google's coding agent in your terminal",
+    cli: {
+      find: ['gemini'],
+      install: 'npm install -g @google/gemini-cli',
+      needsNode: true
+    }
+  }
 ]
 
-/** Where installers put CLI tools; apps launched from Finder do not get your shell's PATH. */
+/** Where installers put command-line tools; apps launched from Finder do not get your shell's PATH. */
 function binDirs(): string[] {
   const h = homedir()
-  return [
+  const dirs = [
     join(h, '.local', 'bin'),
     join(h, '.claude', 'local'),
     join(h, '.opencode', 'bin'),
+    join(h, '.lmstudio', 'bin'),
     join(h, '.npm-global', 'bin'),
     join(h, '.bun', 'bin'),
     join(h, '.volta', 'bin'),
+    join(h, '.cargo', 'bin'),
+    join(h, 'Library', 'pnpm'),
     '/opt/homebrew/bin',
     '/usr/local/bin'
   ]
+  // nvm and fnm keep a bin folder per Node version.
+  for (const base of [join(h, '.nvm', 'versions', 'node'), join(h, '.local', 'state', 'fnm_multishells')]) {
+    try {
+      for (const v of readdirSync(base)) dirs.push(join(base, v, 'bin'))
+    } catch {
+      /* not installed */
+    }
+  }
+  return dirs
 }
 
-export function findTool(t: ToolDef): string | null {
-  if (t.kind === 'app') {
-    for (const name of t.find) {
-      for (const dir of ['/Applications', join(homedir(), 'Applications')]) {
-        if (existsSync(join(dir, name))) return join(dir, name)
+const appDirs = (): string[] => ['/Applications', join(homedir(), 'Applications'), '/Applications/Setapp']
+
+// Your login shell knows PATH entries no fixed list can, so ask it once a minute.
+let shellPaths: { at: number; found: Map<string, string> } | null = null
+function fromLoginShell(): Map<string, string> {
+  if (shellPaths && Date.now() - shellPaths.at < 60_000) return shellPaths.found
+  return shellPaths?.found ?? new Map()
+}
+
+export function refreshLoginShellPaths(force = false): Promise<void> {
+  if (!force && shellPaths && Date.now() - shellPaths.at < 60_000) return Promise.resolve()
+  const names = AI_TOOLS.flatMap((t) => t.cli?.find ?? []).concat('node')
+  const sh = process.env.SHELL && /^\/[\w/.-]+$/.test(process.env.SHELL) ? process.env.SHELL : '/bin/zsh'
+  return new Promise((resolve) => {
+    execFile(
+      sh,
+      ['-ilc', `for c in ${names.join(' ')}; do p=$(command -v "$c" 2>/dev/null) && printf '%s\\t%s\\n' "$c" "$p"; done`],
+      { timeout: 5000 },
+      (_e, out) => {
+        const found = new Map<string, string>()
+        for (const line of String(out ?? '').split('\n')) {
+          const [name, path] = line.split('\t')
+          if (name && path?.startsWith('/') && existsSync(path)) found.set(name, path)
+        }
+        shellPaths = { at: Date.now(), found }
+        resolve()
       }
-    }
-    return null
-  }
-  for (const name of t.find) for (const dir of binDirs()) if (existsSync(join(dir, name))) return join(dir, name)
+    )
+  })
+}
+
+function findCli(names: string[]): string | null {
+  for (const name of names) for (const dir of binDirs()) if (existsSync(join(dir, name))) return join(dir, name)
+  const shellFound = fromLoginShell()
+  for (const name of names) if (shellFound.has(name)) return shellFound.get(name) ?? null
   return null
 }
 
-const hasNode = (): boolean => binDirs().some((d) => existsSync(join(d, 'node')))
+function findApp(names: string[]): string | null {
+  const wanted = new Set(names.map((n) => n.toLowerCase()))
+  for (const dir of appDirs()) {
+    try {
+      for (const entry of readdirSync(dir)) if (wanted.has(entry.toLowerCase())) return join(dir, entry)
+    } catch {
+      /* folder missing */
+    }
+  }
+  return null
+}
+
+const hasNode = (): boolean => findCli(['node']) !== null
 
 export function listAiTools(): AiTool[] {
   return AI_TOOLS.map((t) => {
-    const unsupported = t.appleSiliconOnly && process.arch !== 'arm64'
-    const note = unsupported ? 'Needs an Apple Silicon Mac' : t.needsNode && !hasNode() ? 'Needs Node.js (brew install node)' : undefined
-    return { id: t.id, name: t.name, kind: t.kind, description: t.description, installed: findTool(t) !== null, note, available: !unsupported }
+    const unsupported = !!t.appleSiliconOnly && process.arch !== 'arm64'
+    const cliPath = t.cli ? findCli(t.cli.find) : null
+    const appPath = t.app ? findApp(t.app.names) : null
+    const note = unsupported
+      ? 'Needs an Apple Silicon Mac'
+      : t.cli?.needsNode && !cliPath && !appPath && !hasNode()
+        ? 'Needs Node.js (brew install node)'
+        : undefined
+    return {
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      cli: t.cli ? { installed: cliPath !== null } : null,
+      app: t.app ? { installed: appPath !== null } : null,
+      installed: cliPath !== null || appPath !== null,
+      note,
+      available: !unsupported
+    }
   })
 }
 
@@ -81,25 +228,33 @@ function tool(id: string): ToolDef {
   return t
 }
 
-export async function installAiTool(id: string): Promise<void> {
+export async function installAiTool(id: string, kind: 'cli' | 'app'): Promise<void> {
   const t = tool(id)
-  if (t.install.url) {
-    await shell.openExternal(t.install.url)
-    return
-  }
-  await openTerminal(homedir(), t.install.command)
+  if (kind === 'app' && t.app) return shell.openExternal(t.app.url)
+  // LM Studio's lms command ships inside the app.
+  if (kind === 'cli' && t.id === 'lmstudio' && t.app && !findApp(t.app.names)) return shell.openExternal(t.app.url)
+  if (kind === 'cli' && t.cli) return openTerminal(homedir(), t.cli.install)
+  throw new Error(`${t.name} has no ${kind === 'app' ? 'Mac app' : 'command-line version'}.`)
 }
 
-/** Opens a CLI tool in a site folder (or your home folder), or opens an app. */
-export async function launchAiTool(id: string, cwd: string | null): Promise<void> {
+const openApp = (path: string, folder?: string): Promise<void> =>
+  new Promise((res, rej) => execFile('open', folder ? ['-a', path, folder] : [path], (err) => (err ? rej(err) : res())))
+
+/**
+ * Opens a tool. In a site folder the command-line version starts there in Terminal;
+ * with only the app installed, the app opens with the folder.
+ */
+export async function launchAiTool(id: string, cwd: string | null, kind?: 'cli' | 'app'): Promise<void> {
   const t = tool(id)
-  const where = findTool(t)
-  if (!where) throw new Error(`${t.name} is not installed yet.`)
-  if (t.kind === 'app') {
-    await new Promise<void>((res, rej) => execFile('open', [where], (err) => (err ? rej(err) : res())))
-    return
+  const cliPath = t.cli ? findCli(t.cli.find) : null
+  const appPath = t.app ? findApp(t.app.names) : null
+  const useApp = kind === 'app' || (!kind && !cliPath) || (!kind && !cwd && !!appPath)
+  if (useApp) {
+    if (!appPath) throw new Error(`The ${t.name} app is not installed yet.`)
+    return openApp(appPath, cwd ?? undefined)
   }
-  const [cmd, ...rest] = (t.launch ?? t.find[0]).split(' ')
-  const resolved = join(where, '..', cmd)
+  if (!cliPath || !t.cli) throw new Error(`${t.name} is not installed yet.`)
+  const [cmd, ...rest] = (t.cli.launch ?? t.cli.find[0]).split(' ')
+  const resolved = join(cliPath, '..', cmd)
   await openTerminal(cwd ?? homedir(), [shellQuote(existsSync(resolved) ? resolved : cmd), ...rest].join(' '))
 }

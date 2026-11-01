@@ -1,6 +1,6 @@
 import type { ServiceInfo } from '@shared/types'
 import { useApp } from '../store'
-import { CopyField, Lamp, Switch, statusText } from '../ui'
+import { CopyField, ServiceIcon, Switch, statusText } from '../ui'
 
 /** One service: status lamp, name, port, state, and a switch or install button. */
 export default function ServiceRow({
@@ -40,7 +40,7 @@ export default function ServiceRow({
   if (withConnection) {
     return (
       <div className="row row-db">
-        <Lamp status={s.status} />
+        <ServiceIcon id={s.id} status={s.status} />
         <div className="row-main">
           <div className="row-title">
             {s.name}
@@ -57,7 +57,7 @@ export default function ServiceRow({
 
   return (
     <div className="row row-svc">
-      <Lamp status={s.status} />
+      <ServiceIcon id={s.id} status={s.status} />
       <div className="row-main">
         <div className="row-title">
           {s.name}

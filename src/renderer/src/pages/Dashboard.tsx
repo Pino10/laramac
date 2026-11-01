@@ -1,4 +1,4 @@
-import { Check, Database, Mail, Plus, Sparkles, Upload } from 'lucide-react'
+import { Activity as Pulse, Check, Database, Globe, Mail, Plus, Sparkles, Terminal, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
@@ -11,17 +11,66 @@ const groups: { id: ServiceGroup; title: string }[] = [
   { id: 'mail', title: 'Mail' }
 ]
 
-function headline(running: number, installed: number, failing: boolean, ready: boolean): { title: string; sub: string } {
-  if (!ready) return { title: 'Set up your stack.', sub: 'One click below installs everything you need, or pick pieces from the lists.' }
-  if (installed === 0) return { title: 'Set up your stack.', sub: 'Install PHP, a web server and a database. Each takes one click.' }
-  if (failing) return { title: 'Something needs a look.', sub: 'A service could not start. The details are below.' }
-  if (running === 0) return { title: 'Everything is off.', sub: 'Start all to bring your sites up.' }
-  if (running === installed) return { title: 'Everything is running.', sub: 'Your sites are live on this Mac.' }
-  return { title: `${running} of ${installed} services running.`, sub: 'Start the rest when you need them.' }
+function headline(running: number, installed: number, failing: boolean, ready: boolean): { title: React.ReactNode; sub: string } {
+  if (!ready || installed === 0)
+    return {
+      title: (
+        <>
+          Set up your <em>stack</em>.
+        </>
+      ),
+      sub: 'One click below installs everything you need, or pick pieces from the lists.'
+    }
+  if (failing)
+    return {
+      title: (
+        <>
+          Something needs <em>a look</em>.
+        </>
+      ),
+      sub: 'A service could not start. The details are below.'
+    }
+  if (running === 0)
+    return {
+      title: (
+        <>
+          Everything is <em>resting</em>.
+        </>
+      ),
+      sub: 'Start all to bring your sites up.'
+    }
+  if (running === installed)
+    return {
+      title: (
+        <>
+          Everything is <em>running</em>.
+        </>
+      ),
+      sub: 'Your sites are live on this Mac.'
+    }
+  return {
+    title: (
+      <>
+        {running} of {installed} services <em>running</em>.
+      </>
+    ),
+    sub: 'Start the rest when you need them.'
+  }
+}
+
+function greeting(): string {
+  const h = new Date().getHours()
+  const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+  const day = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  })
+  return `${part} · ${day}`
 }
 
 export default function Dashboard(): React.JSX.Element {
-  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites, php } = useApp()
+  const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, sites, php, setPage } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
@@ -62,7 +111,10 @@ export default function Dashboard(): React.JSX.Element {
     const next = await act('tool-phpmyadmin', () => api.invoke('tools:install', 'phpmyadmin'))
     if (next) {
       setTools(next)
-      notify({ kind: 'info', text: 'phpMyAdmin is installed. Start MySQL, PHP and Nginx, then open it.' })
+      notify({
+        kind: 'info',
+        text: 'phpMyAdmin is installed. Start MySQL, PHP and Nginx, then open it.'
+      })
     }
   }
 
@@ -70,6 +122,7 @@ export default function Dashboard(): React.JSX.Element {
     <>
       <div className="hero">
         <div>
+          <div className="eyebrow">{greeting()}</div>
           <h1 className="hero-title">{title}</h1>
           <p className="hero-sub">{sub}</p>
         </div>
@@ -98,8 +151,8 @@ export default function Dashboard(): React.JSX.Element {
               <Sparkles size={16} style={{ color: 'var(--accent)' }} /> Set up everything in one click
             </div>
             <p className="dim" style={{ margin: '6px 0 0', maxWidth: '62ch' }}>
-              Laramac installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on .{tld} addresses with trusted HTTPS.
-              macOS asks for your password twice along the way.
+              Laramac installs the newest PHP, Apache, MySQL, phpMyAdmin and Mailpit, starts them, and turns on .{tld} addresses with trusted HTTPS. macOS asks
+              for your password twice along the way.
             </p>
             <div className="welcome-steps">
               {['PHP ' + (php[0]?.latest ?? ''), 'Apache', 'MySQL', 'phpMyAdmin', 'Mailpit', `.${tld} + HTTPS`].map((s) => (
@@ -128,7 +181,10 @@ export default function Dashboard(): React.JSX.Element {
               if (report) {
                 notify(
                   report.failed.length
-                    ? { kind: 'error', text: `Set up ${report.done.length} of ${report.done.length + report.failed.length}. ${report.failed.map((f) => `${f.step}: ${f.error}`).join(' ')}` }
+                    ? {
+                        kind: 'error',
+                        text: `Set up ${report.done.length} of ${report.done.length + report.failed.length}. ${report.failed.map((f) => `${f.step}: ${f.error}`).join(' ')}`
+                      }
                     : { kind: 'info', text: 'Your stack is ready.' }
                 )
               }
@@ -139,19 +195,75 @@ export default function Dashboard(): React.JSX.Element {
         </div>
       )}
 
-      {ready && setup.map((step) => (
-        <div key={step.key} className="notice glass">
-          <div className="notice-body">
-            <div className="notice-title">{step.title}</div>
-            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-              {step.hint}
+      {ready &&
+        setup.map((step) => (
+          <div key={step.key} className="notice glass">
+            <div className="notice-body">
+              <div className="notice-title">{step.title}</div>
+              <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+                {step.hint}
+              </div>
+            </div>
+            <button className="btn" disabled={busy.has(step.key)} onClick={() => act(step.key, step.run)}>
+              {busy.has(step.key) ? 'Waiting for macOS' : step.action}
+            </button>
+          </div>
+        ))}
+
+      {ready && (
+        <div className="stats">
+          <button className="stat glass" style={{ ['--hue' as string]: '#e8532b' }} onClick={() => setPage('sites')}>
+            <div className="stat-label">
+              <Globe size={14} /> Sites
+            </div>
+            <div className="stat-value">{sites.length}</div>
+            <div className="stat-sub">
+              {sites[0] ? `${sites[0].domain}${sites.length > 1 ? ` and ${sites.length - 1} more` : ''}` : 'Add a folder to start'}
+            </div>
+          </button>
+          <div className="stat glass" style={{ ['--hue' as string]: '#10a36b' }}>
+            <div className="stat-label">
+              <Pulse size={14} /> Services
+            </div>
+            <div className="stat-value">
+              {running}
+              <small>of {installed.length}</small>
+            </div>
+            <div className="meter">
+              <span
+                style={{
+                  width: `${installed.length ? (running / installed.length) * 100 : 0}%`
+                }}
+              />
             </div>
           </div>
-          <button className="btn" disabled={busy.has(step.key)} onClick={() => act(step.key, step.run)}>
-            {busy.has(step.key) ? 'Waiting for macOS' : step.action}
+          <button className="stat glass" style={{ ['--hue' as string]: '#6f74b8' }} onClick={() => setPage('php')}>
+            <div className="stat-label">
+              <Terminal size={14} /> PHP
+            </div>
+            <div className="stat-value">{php.find((p) => p.isDefault)?.minor ?? '–'}</div>
+            <div className="stat-sub">
+              {php.filter((p) => p.installed).length} installed
+              {php.some((p) => p.updateAvailable) ? ' · update ready' : ''}
+            </div>
+          </button>
+          <button className="stat glass" style={{ ['--hue' as string]: '#5b45d6' }} onClick={() => setPage('databases')}>
+            <div className="stat-label">
+              <Database size={14} /> Databases
+            </div>
+            <div className="stat-value">
+              {services.filter((s) => s.group === 'database' && s.status === 'running').length}
+              <small>running</small>
+            </div>
+            <div className="stat-sub">
+              {services
+                .filter((s) => s.group === 'database' && s.status !== 'not-installed')
+                .map((s) => s.name)
+                .join(', ') || 'None installed yet'}
+            </div>
           </button>
         </div>
-      ))}
+      )}
 
       <StackMap />
 
@@ -164,17 +276,19 @@ export default function Dashboard(): React.JSX.Element {
             <span className="tile-name" style={{ display: 'block' }}>
               phpMyAdmin
             </span>
-            <span className="tile-sub">
-              {busy.has('tool-phpmyadmin') ? 'Installing' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}
-            </span>
+            <span className="tile-sub">{busy.has('tool-phpmyadmin') ? 'Installing' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</span>
           </span>
         </button>
         <button
           className="tile glass"
+          style={{ ['--hue' as string]: '#3d7cf0' }}
           onClick={() =>
             mailpit?.status === 'running'
               ? api.invoke('sites:open-url', 'http://127.0.0.1:8025')
-              : notify({ kind: 'info', text: 'Start Mailpit first. It is under Mail below.' })
+              : notify({
+                  kind: 'info',
+                  text: 'Start Mailpit first. It is under Mail below.'
+                })
           }
         >
           <span className="tile-icon">
@@ -187,7 +301,7 @@ export default function Dashboard(): React.JSX.Element {
             <span className="tile-sub">{mailpit?.status === 'running' ? 'Catching mail' : 'Mailpit is off'}</span>
           </span>
         </button>
-        <button className="tile glass" onClick={() => setNewProject(true)}>
+        <button className="tile glass" style={{ ['--hue' as string]: '#e8532b' }} onClick={() => setNewProject(true)}>
           <span className="tile-icon">
             <Plus size={16} />
           </span>
@@ -198,7 +312,7 @@ export default function Dashboard(): React.JSX.Element {
             <span className="tile-sub">WordPress, Laravel or PHP</span>
           </span>
         </button>
-        <button className="tile glass" onClick={() => setImportOpen(true)}>
+        <button className="tile glass" style={{ ['--hue' as string]: '#0f7891' }} onClick={() => setImportOpen(true)}>
           <span className="tile-icon">
             <Upload size={16} />
           </span>

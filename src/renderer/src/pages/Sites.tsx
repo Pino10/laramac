@@ -4,7 +4,7 @@ import type { SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram, PageHead, Switch } from '../ui'
 
-const AI_NAMES: Record<string, string> = { claude: 'Claude Code', opencode: 'OpenCode', openclaw: 'OpenClaw', codex: 'Codex', gemini: 'Gemini CLI', vmlx: 'vMLX', 'mlx-lm': 'MLX LM' }
+const AI_NAMES: Record<string, string> = { claude: 'Claude Code', opencode: 'OpenCode', openclaw: 'OpenClaw', codex: 'Codex', gemini: 'Gemini CLI', vmlx: 'vMLX', lmstudio: 'LM Studio', ollama: 'Ollama' }
 
 const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
