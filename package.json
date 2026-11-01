@@ -11,8 +11,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --mac",
-    "dist:dir": "electron-vite build && electron-builder --mac --dir",
+    "dist": "electron-vite build && electron-builder --mac --publish never",
+    "dist:dir": "electron-vite build && electron-builder --mac --dir --publish never",
     "test": "vitest run"
   },
   "optionalDependencies": {
