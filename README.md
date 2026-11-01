@@ -2,14 +2,14 @@
 
 A free, open-source local development environment for macOS, inspired by [Laragon](https://laragon.org). Not affiliated with Laragon or Laravel.
 
-**Status: v0.5.1, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
+**Status: v0.5.2, early. Not yet tested on a real Mac by its author.** The server layer is tested against real Nginx, Apache and PHP-FPM on Linux, but the macOS app itself (windowing, menu bar, Liquid Glass, downloads of macOS binaries) needs people to try it and report problems. Please open issues.
 
 ## What it does
 
 - **Sites:** every folder in `~/www` becomes `https://<folder>.test`, with wildcard subdomains.
 - **PHP:** install any version (8.0 to 8.5 and newer as they appear), keep several side by side, pick one per site. Static builds from [static-php-cli](https://github.com/crazywhalecc/static-php-cli), with a full or lightweight extension set.
 - **Web servers:** Nginx on 80/443 and Apache on 8080/8443.
-- **Databases:** MySQL 8.4, MariaDB, PostgreSQL (any major version), Redis and MongoDB, side by side on their own ports, none needing a password. Admin tools: phpMyAdmin (auto sign-in) and Adminer.
+- **Databases:** MySQL 8.4 (newest build for your Mac), MariaDB, PostgreSQL (any major version), Redis and MongoDB, side by side on their own ports, none needing a password. Admin tools: phpMyAdmin (auto sign-in) and Adminer.
 - **Mail:** Mailpit catches everything your apps send. PHP's `mail()` is wired to it.
 - **HTTPS:** a local certificate authority issues certificates per site. One click to trust it in your keychain.
 - **Public links:** share a site with Cloudflare Tunnel (no account) or ngrok.

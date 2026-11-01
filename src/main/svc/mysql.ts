@@ -6,7 +6,7 @@ import { dirs } from '../paths'
 import { getSettings } from '../settings'
 import { downloadFile, extract, removeQuarantine } from '../download'
 import { jobs } from '../jobs'
-import { KNOWN_MYSQL, compareVersions, minorOf, resolveMysqlUrl } from '../versions'
+import { chooseMysqlBuild, compareVersions, findMysqlBuilds, minorOf } from '../versions'
 import { generateMyCnf } from '../configgen'
 import { ManagedProcess, tailFile } from '../process'
 
@@ -29,7 +29,7 @@ export function installedMysqlVersions(): string[] {
 export function activeMysql(): string | null {
   const installed = installedMysqlVersions()
   const wanted = getSettings().mysqlVersion
-  return installed.includes(wanted) ? wanted : (installed[0] ?? null)
+  return wanted !== 'latest' && installed.includes(wanted) ? wanted : (installed[0] ?? null)
 }
 
 function runOnce(command: string, args: string[]): Promise<void> {
@@ -70,21 +70,13 @@ export const mysql: ServiceImpl = {
 
   async install() {
     const wanted = getSettings().mysqlVersion
-    const candidates = [wanted, ...KNOWN_MYSQL.filter((v) => v !== wanted)]
-
-    await jobs.run(`Installing MySQL ${wanted}`, async (update) => {
-      let version = ''
-      let url = ''
-      for (const candidate of candidates) {
-        try {
-          url = await resolveMysqlUrl(candidate)
-          version = candidate
-          break
-        } catch {
-          // Try the next known version.
-        }
+    await jobs.run('Installing MySQL', async (update) => {
+      update(null, 'Finding the newest MySQL for this Mac')
+      const build = chooseMysqlBuild(await findMysqlBuilds(), wanted)
+      if (!build) {
+        throw new Error(`Oracle has no MySQL 8.4 build for this Mac (${process.arch}). Try MariaDB instead.`)
       }
-      if (!url) throw new Error('No MySQL build was found for this Mac.')
+      const { version, url } = build
 
       const archive = join(dirs.downloads(), `mysql-${version}.tar.gz`)
       const staging = join(dirs.downloads(), `mysql-${version}-staging`)

@@ -5,6 +5,9 @@ import { execFile } from 'child_process'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 
+/** Some download servers block anonymous clients; identify the app honestly. */
+export const USER_AGENT = 'Laramac (+https://github.com/Pino10/laramac)'
+
 export type ProgressFn = (percent: number | null, note?: string) => void
 
 /**
@@ -17,7 +20,7 @@ export async function downloadFile(
   onProgress?: ProgressFn
 ): Promise<void> {
   mkdirSync(dirname(dest), { recursive: true })
-  const res = await fetch(url, { redirect: 'follow' })
+  const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': USER_AGENT } })
   if (!res.ok || !res.body) throw new Error(`Download failed (${res.status}) for ${url}`)
 
   const total = Number(res.headers.get('content-length')) || 0
@@ -59,7 +62,7 @@ export async function extract(archive: string, destDir: string): Promise<void> {
 /** Cheap check that a URL exists, used to probe for versions we cannot list. */
 export async function urlExists(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers: { Range: 'bytes=0-0' }, redirect: 'follow' })
+    const res = await fetch(url, { headers: { Range: 'bytes=0-0', 'User-Agent': USER_AGENT }, redirect: 'follow' })
     const ok = res.status === 200 || res.status === 206
     await res.body?.cancel()
     return ok && !(res.headers.get('content-type') ?? '').includes('text/html')

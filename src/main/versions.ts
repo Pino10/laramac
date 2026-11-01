@@ -69,35 +69,50 @@ export async function fetchPhpReleases(flavor: PhpFlavor): Promise<Record<string
   return data
 }
 
-/** Known-good MySQL LTS releases. Newer patches are discovered by probing. */
-export const KNOWN_MYSQL = ['8.4.9', '8.4.6']
+/**
+ * MySQL 8.4 LTS builds come from Oracle's CDN. dev.mysql.com/get refuses requests that do not
+ * come from a browser (it answers 403), so Laramac asks the CDN directly: current releases
+ * live under /Downloads, older ones move to /archives.
+ */
+const MYSQL_CDN = 'https://cdn.mysql.com'
+const MYSQL_PATCH_RANGE = { from: 6, to: 40 }
 
-export function mysqlUrls(version: string): string[] {
+export function mysqlUrls(version: string, arch: string = mysqlArch()): string[] {
   const series = minorOf(version)
-  const arch = mysqlArch()
-  return ['macos15', 'macos14'].map(
-    (tag) => `https://dev.mysql.com/get/Downloads/MySQL-${series}/mysql-${version}-${tag}-${arch}.tar.gz`
+  const urls: string[] = []
+  for (const tag of ['macos15', 'macos14']) {
+    const file = `mysql-${version}-${tag}-${arch}.tar.gz`
+    urls.push(`${MYSQL_CDN}/Downloads/MySQL-${series}/${file}`, `${MYSQL_CDN}/archives/mysql-${series}/${file}`)
+  }
+  return urls
+}
+
+export interface MysqlBuild {
+  version: string
+  url: string
+}
+
+/** Finds every MySQL 8.4 build available for this Mac, newest first. */
+export async function findMysqlBuilds(arch: string = mysqlArch()): Promise<MysqlBuild[]> {
+  const versions: string[] = []
+  for (let p = MYSQL_PATCH_RANGE.from; p <= MYSQL_PATCH_RANGE.to; p++) versions.push(`8.4.${p}`)
+  const found = await Promise.all(
+    versions.map(async (version) => {
+      for (const url of mysqlUrls(version, arch)) if (await urlExists(url)) return { version, url }
+      return null
+    })
   )
+  return found.filter((b): b is MysqlBuild => b !== null).sort((a, b) => compareVersions(b.version, a.version))
 }
 
-export async function resolveMysqlUrl(version: string): Promise<string> {
-  for (const url of mysqlUrls(version)) {
-    if (await urlExists(url)) return url
+/** The build to install: the version asked for if it exists, otherwise the newest. */
+export function chooseMysqlBuild(builds: MysqlBuild[], wanted: string): MysqlBuild | null {
+  if (builds.length === 0) return null
+  if (wanted !== 'latest') {
+    const exact = builds.find((b) => b.version === wanted)
+    if (exact) return exact
   }
-  throw new Error(`MySQL ${version} is not available for this Mac.`)
-}
-
-/** Probes for a newer MySQL patch release than the ones we know about. */
-export async function latestMysql(): Promise<string> {
-  const base = KNOWN_MYSQL[0]
-  const [major, minor, patch] = base.split('.').map((n) => parseInt(n, 10))
-  let best = base
-  for (let p = patch + 1; p <= patch + 4; p++) {
-    const candidate = `${major}.${minor}.${p}`
-    const found = (await Promise.all(mysqlUrls(candidate).map(urlExists))).some(Boolean)
-    if (found) best = candidate
-  }
-  return best
+  return builds[0]
 }
 
 export function mailpitUrl(arch: 'arm64' | 'amd64'): string {

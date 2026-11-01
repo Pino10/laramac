@@ -73,7 +73,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.phpFlavor = oneOf(value, ['full', 'light'] as const, 'PHP build')
         break
       case 'mysqlVersion':
-        out.mysqlVersion = typeof value === 'string' && /^\d{1,2}\.\d{1,2}\.\d{1,3}$/.test(value) ? value : fail('Use a MySQL version like 8.4.9.')
+        out.mysqlVersion = typeof value === 'string' && (value === 'latest' || /^\d{1,2}\.\d{1,2}\.\d{1,3}$/.test(value)) ? value : fail('Use latest, or a MySQL version like 8.4.11.')
         break
       case 'postgresMajor':
         out.postgresMajor = typeof value === 'string' && /^\d{1,2}$/.test(value) ? value : fail('Use a PostgreSQL major version like 17.')

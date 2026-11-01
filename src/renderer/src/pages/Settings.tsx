@@ -65,7 +65,7 @@ export default function Settings(): React.JSX.Element {
             <option value="light">Lightweight</option>
           </select>
         </div>
-        <TextRow label="MySQL version" hint="Affects new installs, for example 8.4.9." value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
+        <TextRow label="MySQL version" hint="latest picks the newest build for your Mac, or pin one such as 8.4.11." value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
         <TextRow label="PostgreSQL major version" hint="Affects new installs, for example 17." value={settings.postgresMajor} onSave={(v) => updateSettings({ postgresMajor: v.replace(/\D/g, '') || '17' })} />
       </div>
 

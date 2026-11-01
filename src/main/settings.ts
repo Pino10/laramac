@@ -10,7 +10,7 @@ const defaults = (): AppSettings => ({
   glass: true,
   defaultPhp: null,
   phpFlavor: 'full',
-  mysqlVersion: '8.4.9',
+  mysqlVersion: 'latest',
   postgresMajor: '17',
   httpPort: 80,
   httpsPort: 443,

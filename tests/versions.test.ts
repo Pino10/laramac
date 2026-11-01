@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   compareVersions,
   minorOf,
+  chooseMysqlBuild,
+  findMysqlBuilds,
   mysqlUrls,
   parsePhpListing,
   phpDownloadUrl
@@ -41,11 +43,33 @@ describe('versions', () => {
     expect(phpDownloadUrl('cli', '8.3.9', 'light', 'x86_64')).toContain('/common/php-8.3.9-cli-macos-x86_64')
   })
 
-  it('builds MySQL URLs for both macOS tags', () => {
-    const urls = mysqlUrls('8.4.9')
-    expect(urls[0]).toContain('MySQL-8.4/mysql-8.4.9-macos15-')
-    expect(urls[1]).toContain('macos14')
+  it('asks Oracle\'s CDN directly, never dev.mysql.com (which blocks apps)', () => {
+    const urls = mysqlUrls('8.4.11', 'arm64')
+    expect(urls[0]).toBe('https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.11-macos15-arm64.tar.gz')
+    expect(urls).toContain('https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.11-macos15-arm64.tar.gz')
+    expect(urls.some((u) => u.includes('macos14'))).toBe(true)
+    expect(urls.every((u) => !u.includes('dev.mysql.com'))).toBe(true)
   })
+
+  it('installs the version asked for, or the newest', () => {
+    const builds = [
+      { version: '8.4.13', url: 'a' },
+      { version: '8.4.11', url: 'b' }
+    ]
+    expect(chooseMysqlBuild(builds, 'latest')?.version).toBe('8.4.13')
+    expect(chooseMysqlBuild(builds, '8.4.11')?.version).toBe('8.4.11')
+    expect(chooseMysqlBuild(builds, '8.4.2')?.version).toBe('8.4.13')
+    expect(chooseMysqlBuild([], 'latest')).toBeNull()
+  })
+
+  // Live check against Oracle, the way the app downloads (Node fetch). Catches the CDN moving again.
+  it.skipIf(process.env.OFFLINE === '1')('finds real MySQL builds for Apple Silicon and Intel', async () => {
+    const arm = await findMysqlBuilds('arm64')
+    const intel = await findMysqlBuilds('x86_64')
+    expect(arm.length).toBeGreaterThan(0)
+    expect(intel.length).toBeGreaterThan(0)
+    expect(arm[0].url).toMatch(/^https:\/\/cdn\.mysql\.com\//)
+  }, 60000)
 })
 
 import { mongodbUrl, parseMavenVersions, postgresArtifact, postgresJarUrl } from '../src/main/versions'
