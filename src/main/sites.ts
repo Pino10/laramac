@@ -4,6 +4,8 @@ import type { SiteConfig, SiteInfo, SiteKind } from '../shared/types'
 import { ensureWww, getSettings, setSettings } from './settings'
 import { defaultMinor, installedMinors } from './php'
 import { isDevRunning, suggestDevScript } from './devservers'
+import { createHash } from 'crypto'
+import { readFileSync } from 'fs'
 
 export function detectKind(dir: string): SiteKind {
   if (existsSync(join(dir, 'artisan'))) return 'laravel'
@@ -50,6 +52,18 @@ export function setSiteConfig(name: string, patch: SiteConfig): void {
   setSettings({ siteConfig: { ...current, [name]: { ...current[name], ...patch } } })
 }
 
+/** Whether a project's laramac.yml is new or changed since it was applied. */
+function projectState(dir: string, applied?: string): { projectFile?: 'new' | 'applied' } {
+  const f = join(dir, 'laramac.yml')
+  if (!existsSync(f)) return {}
+  try {
+    const hash = createHash('sha256').update(readFileSync(f, 'utf8').slice(0, 20000)).digest('hex').slice(0, 16)
+    return { projectFile: hash === applied ? 'applied' : 'new' }
+  } catch {
+    return {}
+  }
+}
+
 /** Every folder directly inside the www directory becomes `<folder>.<tld>`. */
 export function scanSites(): SiteInfo[] {
   const root = ensureWww()
@@ -87,6 +101,7 @@ export function scanSites(): SiteInfo[] {
       secure: !!cfg.secure,
       php,
       aliases,
+      ...projectState(full, cfg.projectHash),
       ...(cfg.dev
         ? { dev: { port: cfg.dev.port, proxy: cfg.dev.proxy, running: isDevRunning(entry), command: cfg.dev.command.join(' ') } }
         : kind === 'node' && suggestDevScript(full)

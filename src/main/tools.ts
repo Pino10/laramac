@@ -14,6 +14,7 @@ import {
   ngrokUrl
 } from './versions'
 import { generatePmaConfig } from './configgen'
+import { dbPassword } from './secrets'
 import { getSettings } from './settings'
 import { isResolverInstalled } from './dns'
 import { isCaTrusted } from './ssl'
@@ -35,6 +36,12 @@ async function fetchAndUnpack(url: string, name: string, label: string, update: 
   return staging
 }
 
+/** phpMyAdmin signs in with Laramac's root passwords, so it keeps working after you set one. */
+export function writePmaConfig(): void {
+  if (!existsSync(dirs.phpmyadmin())) return
+  writeFileSync(join(dirs.phpmyadmin(), 'config.inc.php'), generatePmaConfig(randomBytes(24).toString('hex'), { mysql: dbPassword('mysql'), mariadb: dbPassword('mariadb') }), { mode: 0o600 })
+}
+
 export async function installPhpMyAdmin(): Promise<void> {
   await jobs.run('Installing phpMyAdmin', async (update) => {
     const staging = await fetchAndUnpack(PHPMYADMIN_URL, 'phpmyadmin.zip', 'phpMyAdmin', update)
@@ -42,10 +49,7 @@ export async function installPhpMyAdmin(): Promise<void> {
     if (!inner) throw new Error('Unexpected phpMyAdmin archive layout.')
     rmSync(dirs.phpmyadmin(), { recursive: true, force: true })
     renameSync(join(staging, inner), dirs.phpmyadmin())
-    writeFileSync(
-      join(dirs.phpmyadmin(), 'config.inc.php'),
-      generatePmaConfig(randomBytes(24).toString('hex'))
-    )
+    writePmaConfig()
     mkdirSync(join(dirs.phpmyadmin(), 'tmp'), { recursive: true })
     rmSync(staging, { recursive: true, force: true })
   })

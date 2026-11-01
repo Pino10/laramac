@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
-import { existsSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, runImport } from './importer'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
@@ -27,6 +27,13 @@ import * as models from './models'
 import * as mailrelay from './mailrelay'
 import * as review from './review'
 import * as scan from './scan'
+import * as dumps from './dumps'
+import * as project from './project'
+import * as cli from './cli'
+import { dbPassword, setSecret, setSecretsCrypto } from './secrets'
+import { createPgDatabase } from './svc/postgres'
+import { runQuiet } from './starterrun'
+import { runtimeEnv } from './runtimes'
 import { normalize } from 'path'
 import { buildTrayMenu, type TrayAction, type TrayItem } from './traymenu'
 import { resetLaramac } from './reset'
@@ -61,7 +68,8 @@ import {
   installNgrok,
   installPhpMyAdmin,
   refreshShims,
-  toolsStatus
+  toolsStatus,
+  writePmaConfig
 } from './tools'
 import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
@@ -234,7 +242,7 @@ function hardenWebContents(): void {
 
 function createTray(): void {
   // The Laramac mark for the menu bar: 36 px for Retina, black on clear so macOS can tint it.
-  const icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAACL0lEQVR4AeyWu0odURSGJwkkXSDkBZImL5EipEsTkiqQkECKFGly8Q30CbwWFlqJIKIo2thp40vY2NkqFqJ4/b593IetZ+bM4IygMvL/s9a+/WvNmllnfJzdsb82obIH0laorVBZBcrWH8Q7NMhdnifcwW8M96pCj7jtT/A71MfUghrfUPgIC9GvQsOcWoYz8Cesi18IzMIVOAJzUZSQh/8lJ3YT/6buXnJQbWMkUx03L6G3LE3CiHUc7wpTC4ucVgsTYAxjhUG8XE/oNQur8AkUW1w+wzNYF2qopaZaxjCWMR0Hpgk9Z2YNvoDCx/QBZx82BbXUVFtNYxnT2I6zmJDWF/hNmM2yU6zdsI1tGmqqbQy1jWlsc+gm9JWV9zDiN84mvC2obYyob+wvDkJWOP7yYgKOuB7D28YJAYyFCfAd61ZojqnYAc/wp2FPBzDXFNSeQsxYmMzYCzqxQmZX2gEeaIB2ld1llyln1xnbHLoVcqG0A9xUk3aTXWV3KWW32XXGdnwlISf6doAbcviSuY0Cpp8cn4bdZFexPb+T3eRiyrwO8KOY7kn9pwzeFfAV8xE/cOwmTIBdZqwwiJe8hFzzhRvTueTBpa1jDpPDo/jGwFxFUULu+s9F/sEuwbqYR+Av9MM6gM1Fv4T8bfJOJjipjwnwfRnCq0L3sjVAjXE8K6+P24t+CfXu7swYxH9jq9C9nVMVr1USqijVzLY2obI6thVqK1RWgbL1O/cOXQAAAP//w9eH2QAAAAZJREFUAwAE2mpJKQw2xgAAAABJRU5ErkJggg==', 'base64'), { scaleFactor: 2 })
+  const icon = nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAACu0lEQVR4AeyXy6tNURzHj0deA0QpeZQBQkYm/AOiDAxIIgyUzEgxkDBgQAaMDCRiIJGBEHOPgYHyKBkoKUoeibwSn889Z2k5e+3H2fs6XXVvv89v/fY+6/fb37P3Or+97sjWEPsbFlT2QP6bO7SBb3IXPsCvhljjDjXWQaml7tBWss7DUpgETc0ayyhyATZBoaUE7etk3GBcDCMaYo1b1ND26oroFjSWybNBO4J7BHXML7GKRHnMeBS0ebhRkGvdgqZGM59Gca/hNhKudtjM+ASCTQtBauwWlJpT59zkKCmOo9PpsFvQ22ja/CjuNTxJwvYOpxkXQLB3IUiN3YK+Mek5aHtwC6GO+VNXlMyhwG7QnuG8BkPaugU567AOVoALsmkfekCd5aAd0hWREnSKhPVwDz5CU/tKgZdwBl5B6pqcblvehzYxO6sF2jPr+3GkzoQtcBMewgxIWp4gJ5/AubB95peJDzbEGt+p4bo8xpi0IkGuIZN24NbAgYZYYxc1tJW6FHmCbF52bXNC2zfulbkk3O9g7CPjsDURFzdhDtuWJ2h0++MB/2XA13PekSWkivFn4mBjQhCPeYJ+RJPGR3Gv4TkSXncwnkAczPUU4j9jnqA3zHAxM7RCDzHuldskTO9gHNblJ87FbwUO25YnyE+v6eA4XISmi/oKNcKv6zpx0ooE7STDN77Pei3x/oasJt9avvldTxxmrUjQC6YvAm+zO0i7bXiMnK5tNkXvuI03U6RIkJN/4mbBRrDbhlbAYW0r3NKWCfKqfd3SlgnyjvR1S1smKO6mLnDvWB0qb2nLBHnxwSDexsZxpnaZoLh5+ebPFKh4wp1jpS1tmSB/5n3d0pYJ8gb0dUtbRdBgb2nf8y3dHtv9zxL/ZVUEmeCW1v/PbWr+V9qEKRS01iXGjFUVlEn8VyeGnKDfAAAA//+jG3dEAAAABklEQVQDALBHwkkoCfJJAAAAAElFTkSuQmCC', 'base64'), { scaleFactor: 2 })
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('Laramac')
@@ -744,6 +752,62 @@ function registerIpc(): void {
   }
   models.setModelCrypto(keychain)
   mailrelay.setMailCrypto(keychain)
+  setSecretsCrypto(keychain)
+  handle('cli:status', () => ({ installed: existsSync(cli.cliBin()), inPath: cli.cliInPath(), path: cli.cliBin() }))
+  handle('cli:install', () => {
+    cli.installCli(process.execPath)
+    cli.addToPath()
+    return { installed: true, inPath: cli.cliInPath(), path: cli.cliBin() }
+  })
+  // Previews for the gallery: each site rendered in a hidden, sandboxed window, cached for a while.
+  const thumbQueue: (() => Promise<void>)[] = []
+  let thumbBusy = false
+  const runThumbs = async (): Promise<void> => {
+    if (thumbBusy) return
+    thumbBusy = true
+    while (thumbQueue.length) await thumbQueue.shift()!().catch(() => undefined)
+    thumbBusy = false
+  }
+  handle('sites:thumbnail', (name, refresh) => {
+    const site = siteByName(name)
+    const dir = join(dirs.root(), 'thumbs')
+    const file = join(dir, `${site.name.replace(/[^\w.-]/g, '_')}.jpg`)
+    if (!refresh && existsSync(file) && Date.now() - statSync(file).mtimeMs < 30 * 60 * 1000) return `data:image/jpeg;base64,${readFileSync(file).toString('base64')}`
+    return new Promise<string | null>((resolve) => {
+      thumbQueue.push(async () => {
+        const win = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { offscreen: true, sandbox: true, partition: 'laramac-thumbs', nodeIntegration: false, contextIsolation: true } })
+        win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        win.webContents.setAudioMuted(true)
+        try {
+          await Promise.race([win.loadURL(site.secure ? site.httpsUrl : site.url), new Promise((r) => setTimeout(r, 12000))]).catch(() => undefined)
+          await new Promise((r) => setTimeout(r, 1200))
+          const img = (await win.webContents.capturePage()).resize({ width: 640 })
+          const jpg = img.toJPEG(72)
+          mkdirSync(dir, { recursive: true })
+          writeFileSync(file, jpg)
+          resolve(`data:image/jpeg;base64,${jpg.toString('base64')}`)
+        } catch {
+          resolve(null)
+        } finally {
+          win.destroy()
+        }
+      })
+      void runThumbs()
+    })
+  })
+  // Local certificates are trusted for previews, as they are in your browser once trusted.
+  session.fromPartition('laramac-thumbs').setCertificateVerifyProc((req, cb) => cb(req.hostname.endsWith(`.${getSettings().tld}`) ? 0 : -3))
+  handle('sites:logs', (name) => collectSiteLogs(siteByName(name), { lines: 400, redact: false }))
+  handle('db:root-password', (engine) => ({ set: !!dbPassword(engine === 'mariadb' ? 'mariadb' : 'mysql') }))
+  handle('db:set-root-password', async (engine, password) => {
+    const e = engine === 'mariadb' ? 'mariadb' : 'mysql'
+    if (typeof password !== 'string' || password.length > 128 || /[\0\n\r]/.test(password)) throw new ValidationError('Use a password up to 128 characters on one line.')
+    await dbadmin.setRootPassword(dbTarget(e), password)
+    setSecret(`${e}-root`, password)
+    writePmaConfig()
+    activity.push('success', `${e === 'mysql' ? 'MySQL' : 'MariaDB'} root password ${password ? 'changed' : 'removed'}`, 'phpMyAdmin, Laramac and new projects use it. Update DB_PASSWORD in projects you already made.')
+    return { set: !!password }
+  })
   handle('mail:relay', () => mailrelay.getRelay())
   handle('mail:save-relay', async (input) => {
     let r
@@ -799,6 +863,100 @@ function registerIpc(): void {
     })
     activity.push('success', `Reviewed ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings, ${result.secrets.length} keys in files.`)
     return result
+  })
+  dumps.dumpEvents.on('dump', (d) => send('dumps:new', d))
+  const restartPhp = async (): Promise<void> => {
+    // PHP-FPM reads its environment when it starts.
+    await stopAllFpm()
+    if (services.list().find((x) => x.id === 'php')?.status !== 'not-installed') await services.start('php').catch(() => undefined)
+  }
+  handle('project:plan', (name) => {
+    const site = siteByName(name)
+    const read = project.readProjectFile(site)
+    if (!read) throw new ValidationError('This site has no laramac.yml.')
+    const svc = services.list().map((x) => ({ id: x.id, installed: x.status !== 'not-installed' }))
+    return { file: read.file, plan: project.planProject(site, read.file, installedMinors(), svc) }
+  })
+  handle('project:export', (name) => {
+    const site = siteByName(name)
+    const existing = project.readProjectFile(site)
+    const text = project.writeProjectFile(site, existing ? existing.file : project.inferProject(site))
+    setSiteConfig(site.name, { projectHash: project.projectFileHash(text) })
+    notifySitesChanged()
+    return join(site.path, project.PROJECT_FILE)
+  })
+  handle('project:apply', async (name, runSetup) => {
+    const site = siteByName(name)
+    const read = project.readProjectFile(site)
+    if (!read) throw new ValidationError('This site has no laramac.yml.')
+    const f = read.file
+    await jobs.run(`Setting up ${site.name} from laramac.yml`, async (update) => {
+      if (f.php) {
+        if (!installedMinors().includes(f.php)) {
+          update(null, `Installing PHP ${f.php}`)
+          await installMinor(f.php)
+        }
+        setSiteConfig(site.name, { php: f.php })
+      }
+      if (f.https !== undefined) {
+        if (f.https) await ensureSiteCert(site.domain)
+        setSiteConfig(site.name, { secure: f.https })
+      }
+      if (f.aliases?.length) {
+        const others = scanSites().filter((x) => x.name !== site.name)
+        const free = f.aliases.filter((a) => !others.some((o) => o.domain === a || o.aliases.includes(a)))
+        const cur = getSettings().siteConfig[site.name]?.aliases ?? []
+        setSiteConfig(site.name, { aliases: [...new Set([...cur, ...free])] })
+        const { tld, siteConfig } = getSettings()
+        await syncHostsFile(Object.values(siteConfig).flatMap((c) => c.aliases ?? []).filter((n) => needsHostsEntry(n, tld)))
+      }
+      for (const id of f.services ?? []) {
+        update(null, `Starting ${id}`)
+        if (services.list().find((x) => x.id === id)?.status === 'not-installed') await services.install(id)
+        await services.start(id)
+      }
+      if (f.database) {
+        update(null, `Creating the database ${f.database.name}`)
+        if (f.database.engine === 'postgres') await createPgDatabase(f.database.name)
+        else await dbadmin.createDatabase(dbTarget(f.database.engine), f.database.name).catch(() => undefined)
+      }
+      if (f.dev) {
+        const port = getSettings().siteConfig[site.name]?.dev?.port ?? (await pickDevPort())
+        const npmScript = /^npm run ([\w:.-]+)$/.exec(f.dev.command)?.[1]
+        const dev = npmScript ? devFromScript(site.path, npmScript, port) : { command: f.dev.command.split(/\s+/), port, proxy: f.dev.proxy, env: { PORT: '{port}' } }
+        setSiteConfig(site.name, { dev: { ...dev, proxy: f.dev.proxy } })
+      }
+      if (runSetup) {
+        for (const [i, cmd] of (f.setup ?? []).entries()) {
+          update(Math.round((i / (f.setup!.length || 1)) * 100), cmd)
+          await runQuiet(['/bin/sh', '-c', cmd], site.path, runtimeEnv(), (l) => update(null, `${cmd}: ${l.slice(0, 60)}`))
+        }
+      }
+      setSiteConfig(site.name, { projectHash: read.hash })
+    })
+    activity.push('success', `${site.name} is set up`, 'Applied its laramac.yml.')
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('dumps:list', () => dumps.listDumps())
+  handle('dumps:clear', () => dumps.clearDumps())
+  handle('dumps:status', () => ({ enabled: getSettings().dumps, running: dumps.dumpServerRunning() }))
+  handle('dumps:enable', async (on) => {
+    if (on) {
+      await jobs.run('Setting up the Dumps window', async (update) => {
+        if (!dumps.dumperInstalled()) await dumps.installDumper((l) => update(null, `Dumps: ${l.slice(0, 60)}`))
+        await dumps.startDumpServer()
+      })
+    } else dumps.stopDumpServer()
+    setSettings({ dumps: !!on })
+    await restartPhp()
+    return { enabled: !!on, running: dumps.dumpServerRunning() }
+  })
+  handle('dumps:open-file', async (file, line) => {
+    // Only files inside a site may be opened from a dump.
+    const site = scanSites().find((s) => typeof file === 'string' && normalize(file).startsWith(s.path + '/'))
+    if (!site) throw new ValidationError('That file is not inside one of your sites.')
+    await openInEditor(getSettings().editor, file, typeof line === 'number' ? line : undefined).catch(() => shell.openPath(file))
   })
   handle('review:list', () => review.listReviews())
   handle('review:read', (id) => review.readReview(String(id)))
@@ -1250,6 +1408,30 @@ function registerIpc(): void {
       run: async (a) => snapshots.listSnapshots(siteNamed(a.site).path)
     },
     {
+      name: 'start_dev_server',
+      description: "Starts a site's own dev server (Vite, Next.js, Django, dotnet watch...) so it answers at its .test address.",
+      inputSchema: { type: 'object', properties: { site: { type: 'string' } }, required: ['site'] },
+      run: async (a) => {
+        const site = siteByName(str(a.site, 'site'))
+        const cfg = getSettings().siteConfig[site.name]?.dev
+        if (!cfg) throw new Error(`${site.name} has no dev server set up.`)
+        await startDev(site, cfg)
+        notifySitesChanged()
+        return `${site.name} dev server is running at ${site.url} (port ${cfg.port}).`
+      }
+    },
+    {
+      name: 'stop_dev_server',
+      description: "Stops a site's dev server.",
+      inputSchema: { type: 'object', properties: { site: { type: 'string' } }, required: ['site'] },
+      run: async (a) => {
+        const site = siteByName(str(a.site, 'site'))
+        await stopDev(site.name)
+        notifySitesChanged()
+        return `${site.name} dev server stopped.`
+      }
+    },
+    {
       name: 'read_log',
       description: 'Returns the last lines of a log, such as apache-error.log, php-8.4-error.log or mysql-error.log. Call with no name to list the logs.',
       inputSchema: { type: 'object', properties: { name: { type: 'string' }, lines: { type: 'number' } } },
@@ -1490,6 +1672,7 @@ app.whenReady().then(() => {
   ensureWww()
   refreshShims()
   refreshRuntimeShims()
+  if (existsSync(cli.cliBin())) cli.installCli(process.execPath)
   hardenWebContents()
   registerIpc()
   watchWww()
@@ -1504,6 +1687,7 @@ app.whenReady().then(() => {
     activity.push('error', 'Domain lookups could not start', `Port ${DNS_PORT} is busy: ${err instanceof Error ? err.message : err}`)
   )
 
+  if (getSettings().dumps) dumps.startDumpServer().catch((err) => activity.push('error', 'The Dumps window could not start', (err as Error).message))
   app.on('activate', showWindow)
   void refreshLoginShellPaths()
   setTimeout(() => void backgroundChecks(), 8000)
@@ -1546,6 +1730,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   quitting = true
   ssh.disconnectAll()
+  dumps.stopDumpServer()
   void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev()]).then(() => {
     stopDnsServer()
     app.exit(0)

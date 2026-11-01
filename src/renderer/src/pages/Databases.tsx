@@ -15,6 +15,10 @@ export default function Databases(): React.JSX.Element {
   const tld = settings?.tld ?? 'test'
   const [dbs, setDbs] = useState<DatabaseInfo[] | null>(null)
   const [ask, askDialog] = useAsk()
+  const [pw, setPw] = useState<Record<Engine, boolean>>({ mysql: false, mariadb: false })
+  useEffect(() => {
+    void Promise.all([api.invoke('db:root-password', 'mysql'), api.invoke('db:root-password', 'mariadb')]).then(([a, b]) => setPw({ mysql: a.set, mariadb: b.set }))
+  }, [api])
 
   const engines = services.filter((s) => s.group === 'database')
   const sqlRunning = (['mysql', 'mariadb'] as Engine[]).filter((e) => services.find((s) => s.id === e)?.status === 'running')
@@ -158,6 +162,40 @@ export default function Databases(): React.JSX.Element {
         ))}
       </div>
 
+      <h2 className="section-title">Root password</h2>
+      <div className="group">
+        {(['mysql', 'mariadb'] as Engine[]).map((engine) => {
+          const running = sqlRunning.includes(engine)
+          return (
+            <div key={engine} className="tool-row">
+              <span className="tool-main">
+                <strong>{ENGINE_NAME[engine]}</strong>
+                <small>
+                  {pw[engine] ? 'Has a password, kept in your Keychain.' : 'No password: fine on your own Mac, like Laragon.'} phpMyAdmin, Laramac and new projects follow it.
+                </small>
+              </span>
+              <span />
+              <button
+                className="btn"
+                disabled={!running || busy.has(`pw-${engine}`)}
+                title={running ? undefined : `Start ${ENGINE_NAME[engine]} first`}
+                onClick={async () => {
+                  const value = await ask({ title: `${ENGINE_NAME[engine]} root password`, label: 'New password (leave empty to remove it). Projects you already made keep the old one in their .env.', confirm: 'Change password', secret: true })
+                  if (value === null) return
+                  const r = await act(`pw-${engine}`, () => api.invoke('db:set-root-password', engine, value))
+                  if (r) {
+                    setPw((x) => ({ ...x, [engine]: r.set }))
+                    notify({ kind: 'info', text: r.set ? 'Password changed.' : 'Password removed.' })
+                  }
+                }}
+              >
+                {pw[engine] ? 'Change' : 'Set password'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
       <h2 className="section-title">Tools</h2>
       <div className="group">
         <div className="tool-row">
@@ -173,7 +211,7 @@ export default function Databases(): React.JSX.Element {
         <div className="tool-row">
           <span className="tool-main">
             <strong>Adminer</strong>
-            <small>One page for MySQL, MariaDB and PostgreSQL. Leave the password empty.</small>
+            <small>One page for MySQL, MariaDB and PostgreSQL. Sign in as root with your root password, or none.</small>
           </span>
           {tools?.adminer && <CopyField value={`http://adminer.${tld}`} />}
           <button className="btn" disabled={busy.has('tool-adminer')} onClick={() => openOrInstall('adminer')}>

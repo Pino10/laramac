@@ -29,6 +29,8 @@ export interface StarterContext {
   tld: string
   /** A safe identifier made from the name, for code (Swift types, Go modules). */
   ident: string
+  /** MySQL's root password, when you set one. */
+  dbPassword?: string
 }
 
 export type StarterStep =
@@ -98,7 +100,7 @@ const DB_OPTION: StarterOption = {
 }
 
 /** Points a Laravel .env at the chosen local database. */
-export function laravelEnv(env: string, db: string, dbName: string, domain: string): string {
+export function laravelEnv(env: string, db: string, dbName: string, domain: string, password = ''): string {
   const set = (s: string, key: string, value: string | null): string => {
     const re = new RegExp(`^#?\\s*${key}=.*$`, 'm')
     if (value === null) return s.replace(re, `# ${key}=`)
@@ -113,7 +115,7 @@ export function laravelEnv(env: string, db: string, dbName: string, domain: stri
     out = set(out, 'DB_PORT', db === 'pgsql' ? '5432' : '3306')
     out = set(out, 'DB_DATABASE', dbName)
     out = set(out, 'DB_USERNAME', db === 'pgsql' ? 'postgres' : 'root')
-    out = set(out, 'DB_PASSWORD', '')
+    out = set(out, 'DB_PASSWORD', db === 'pgsql' ? '' : password)
   }
   out = set(out, 'MAIL_MAILER', 'smtp')
   out = set(out, 'MAIL_HOST', '127.0.0.1')
@@ -628,7 +630,7 @@ export const STARTERS: Starter[] = [
     steps: (c, o) => [
       composerCreate('symfony/skeleton', c.name),
       ...(o.type === 'api' ? [] : [{ label: 'Adding the web app pack', run: ['composer', 'require', 'webapp', '--no-interaction'], cwd: 'project' as const }]),
-      { label: 'Pointing .env at MySQL', patch: '.env', append: `\nDATABASE_URL="mysql://root:@127.0.0.1:3306/${c.db}?serverVersion=8.4&charset=utf8mb4"\n` },
+      { label: 'Pointing .env at MySQL', patch: '.env', append: `\nDATABASE_URL="mysql://root:${encodeURIComponent(c.dbPassword ?? '')}@127.0.0.1:3306/${c.db}?serverVersion=8.4&charset=utf8mb4"\n` },
       { label: 'Creating the database', database: 'mysql' }
     ]
   },

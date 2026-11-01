@@ -25,6 +25,8 @@ import {
   Square,
   ScrollText,
   Stethoscope,
+  List,
+  LayoutGrid,
   Sparkles,
   Wrench
 } from 'lucide-react'
@@ -34,6 +36,7 @@ import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import { useAsk } from '../components/Ask'
 import { ServerDialog } from './Servers'
 import { Answer } from '../components/Answer'
+import { ProjectDialog, SiteGallery, SiteLogs, SiteMenu } from '../components/SiteExtras'
 
 const AI_NAMES: Record<string, string> = {
   claude: 'Claude Code',
@@ -290,6 +293,24 @@ export default function Sites(): React.JSX.Element {
   const [pushFor, setPushFor] = useState<SiteInfo | null>(null)
   const [logsFor, setLogsFor] = useState<SiteInfo | null>(null)
   const [doctorFor, setDoctorFor] = useState<SiteInfo | null>(null)
+  const [siteLogsFor, setSiteLogsFor] = useState<SiteInfo | null>(null)
+  const [projectFor, setProjectFor] = useState<SiteInfo | null>(null)
+  const [view, setViewState] = useState<'list' | 'gallery'>(() => {
+    try {
+      return localStorage.getItem('sites-view') === 'gallery' ? 'gallery' : 'list'
+    } catch {
+      return 'list'
+    }
+  })
+  const setView = (v: 'list' | 'gallery'): void => {
+    setViewState(v)
+    try {
+      localStorage.setItem('sites-view', v)
+    } catch {
+      // Storage can be unavailable; the choice just is not remembered.
+    }
+  }
+  const menuFor = (s: SiteInfo): React.ReactNode => <SiteMenu site={s} onLogs={() => setSiteLogsFor(s)} onProject={() => setProjectFor(s)} onDoctor={() => setDoctorFor(s)} />
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
 
   return (
@@ -320,6 +341,14 @@ export default function Sites(): React.JSX.Element {
           <button className="btn btn-quiet" onClick={() => api.invoke('www:reveal')}>
             <FolderOpen size={14} /> Show folder
           </button>
+          <div className="seg" role="radiogroup" aria-label="View" style={{ marginLeft: 'auto' }}>
+            <button role="radio" aria-checked={view === 'list'} onClick={() => setView('list')}>
+              <List size={14} /> List
+            </button>
+            <button role="radio" aria-checked={view === 'gallery'} onClick={() => setView('gallery')}>
+              <LayoutGrid size={14} /> Gallery
+            </button>
+          </div>
         </div>
       )}
 
@@ -341,6 +370,17 @@ export default function Sites(): React.JSX.Element {
             </button>
           </div>
         </div>
+      ) : view === 'gallery' ? (
+        <>
+          {shown.length === 0 && <div className="empty dim">No site matches “{query}”.</div>}
+          <SiteGallery
+            sites={shown}
+            kindLabel={kindLabel}
+            aiName={aiName}
+            renderDev={(s) => (s.dev || s.devSuggestion ? <DevControl site={s} onLogs={() => setLogsFor(s)} /> : null)}
+            renderMenu={menuFor}
+          />
+        </>
       ) : (
         <div className="panel">
           {shown.length === 0 && <div className="empty dim">No site matches “{query}”.</div>}
@@ -369,6 +409,11 @@ export default function Sites(): React.JSX.Element {
               </div>
               <div className="chips">
                 {PHP_KINDS.includes(site.kind) && (site.dev || site.devSuggestion) && <DevControl site={site} compact onLogs={() => setLogsFor(site)} />}
+                {site.projectFile === 'new' && (
+                  <button className="tag tag-accent" style={{ border: 0, cursor: 'pointer' }} title="This project has a laramac.yml" onClick={() => setProjectFor(site)}>
+                    laramac.yml · Set up
+                  </button>
+                )}
                 <span className="tag">{kindLabel[site.kind]}</span>
               </div>
               {PHP_KINDS.includes(site.kind) ? (
@@ -459,6 +504,7 @@ export default function Sites(): React.JSX.Element {
                 >
                   <Share2 size={18} />
                 </IconBtn>
+                {menuFor(site)}
               </div>
             </div>
           ))}
@@ -469,6 +515,8 @@ export default function Sites(): React.JSX.Element {
       {doctorFor && <SiteDoctor site={doctorFor} aiName={aiName} onClose={() => setDoctorFor(null)} />}
       {logsFor && <DevLogs site={sites.find((x) => x.name === logsFor.name) ?? logsFor} onClose={() => setLogsFor(null)} />}
       {pushFor && <PushDialog site={pushFor} onClose={() => setPushFor(null)} />}
+      {siteLogsFor && <SiteLogs site={siteLogsFor} onClose={() => setSiteLogsFor(null)} />}
+      {projectFor && <ProjectDialog site={projectFor} onClose={() => setProjectFor(null)} />}
     </>
   )
 }

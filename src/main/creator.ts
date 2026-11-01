@@ -13,6 +13,7 @@ import { defaultMinor, phpBinary, phpIniPath, writePhpConfig } from './php'
 import { createDatabase } from './svc/mysql'
 import { composerPhar, installComposer, refreshShims } from './tools'
 import { slug } from './sites'
+import { dbPassword } from './secrets'
 
 export function validateProjectName(name: string): string | null {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,60}$/.test(name)) {
@@ -22,11 +23,11 @@ export function validateProjectName(name: string): string | null {
 }
 
 /** Fills wp-config-sample.php with local database settings and fresh salts. */
-export function buildWpConfig(sample: string, dbName: string, salt: () => string = () => randomBytes(32).toString('hex')): string {
+export function buildWpConfig(sample: string, dbName: string, salt: () => string = () => randomBytes(32).toString('hex'), password = ''): string {
   let out = sample
     .replace(/'database_name_here'/, `'${dbName}'`)
     .replace(/'username_here'/, `'root'`)
-    .replace(/'password_here'/, `''`)
+    .replace(/'password_here'/, `'${password.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
     .replace(/'localhost'/, `'127.0.0.1'`)
   for (const key of [
     'AUTH_KEY',
@@ -76,7 +77,7 @@ async function createWordPress(target: string, dbName: string): Promise<void> {
 
     const sample = join(target, 'wp-config-sample.php')
     if (existsSync(sample)) {
-      writeFileSync(join(target, 'wp-config.php'), buildWpConfig(readFileSync(sample, 'utf8'), dbName))
+      writeFileSync(join(target, 'wp-config.php'), buildWpConfig(readFileSync(sample, 'utf8'), dbName, undefined, dbPassword('mysql')))
     }
     update(null, 'Creating database')
     await createDatabase(dbName)
@@ -100,7 +101,7 @@ async function createLaravel(target: string, name: string, dbName: string, domai
     )
     const envFile = join(target, '.env')
     if (existsSync(envFile)) {
-      writeFileSync(envFile, patchLaravelEnv(readFileSync(envFile, 'utf8'), dbName, domain))
+      writeFileSync(envFile, patchLaravelEnv(readFileSync(envFile, 'utf8'), dbName, domain, dbPassword('mysql')))
     }
     update(null, 'Creating database')
     await createDatabase(dbName)

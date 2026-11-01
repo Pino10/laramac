@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { AppProvider, useApp } from './store'
 import Sidebar, { PAGE_ORDER } from './components/Sidebar'
 import Tour from './components/Tour'
+import Dumps from './components/Dumps'
 import JobsBar from './components/JobsBar'
 import CommandPalette from './components/CommandPalette'
 import Activity from './components/Activity'
@@ -72,6 +73,7 @@ function Shell(): React.JSX.Element {
               Search or run a command
               <span className="kbd">⌘K</span>
             </button>
+            <Dumps />
             <Activity />
           </header>
           <div className="scroll">

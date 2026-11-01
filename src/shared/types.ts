@@ -10,6 +10,8 @@ export type ServiceId =
   | 'meilisearch'
   | 'memcached'
   | 'mailpit'
+  | 's3'
+  | 'rabbitmq'
 
 export type ServiceGroup = 'web' | 'runtime' | 'database' | 'mail'
 
@@ -73,6 +75,8 @@ export interface SiteConfig {
   /** Where Deploy sends this site. */
   deploy?: DeployTarget
   dev?: DevConfig
+  /** Fingerprint of the laramac.yml last applied. */
+  projectHash?: string
 }
 
 export interface SiteInfo {
@@ -92,6 +96,8 @@ export interface SiteInfo {
   dev?: { port: number; proxy: boolean; running: boolean; command: string }
   /** A dev command found in package.json that can be set up with one click. */
   devSuggestion?: string
+  /** The project has a laramac.yml that has not been applied, or has changed since. */
+  projectFile?: 'new' | 'applied'
 }
 
 export interface PhpVersionInfo {
@@ -457,6 +463,8 @@ export interface AppSettings {
   glassStyle: 'smoke' | 'frost' | 'aurora' | 'midnight'
   /** The first-run tour has been seen. */
   tourDone: boolean
+  /** Send dump() and dd() to the Dumps window instead of the page. */
+  dumps: boolean
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
@@ -519,6 +527,37 @@ export interface MailRelay {
 export interface MailRelayInput extends Omit<MailRelay, 'hasPassword'> {
   /** A new password, null to remove it, or left out to keep it. */
   password?: string | null
+}
+
+/** The settings in a project's laramac.yml. */
+export interface ProjectFile {
+  php?: string
+  https?: boolean
+  aliases?: string[]
+  services?: ServiceId[]
+  database?: { engine: 'mysql' | 'mariadb' | 'postgres'; name: string }
+  dev?: { command: string; proxy: boolean }
+  setup?: string[]
+}
+
+export interface ProjectPlan {
+  steps: string[]
+  /** Commands from the file, shown word for word before they run. */
+  commands: string[]
+}
+
+export interface DumpItem {
+  id: string
+  /** Symfony's HTML rendering, shown in a sandboxed frame. */
+  html: string
+  text: string
+  file: string | null
+  line: number | null
+  name: string | null
+  uri: string | null
+  method: string | null
+  command: string | null
+  at: number
 }
 
 export type ReviewFocus = 'security' | 'bugs' | 'all'
@@ -718,6 +757,20 @@ export interface Channels {
   'llm:servers': { args: []; result: ModelServer[] }
   'mail:relay': { args: []; result: MailRelay }
   'review:run': { args: [ReviewRequest]; result: ReviewResult }
+  'dumps:list': { args: []; result: DumpItem[] }
+  'db:root-password': { args: ['mysql' | 'mariadb']; result: { set: boolean } }
+  'db:set-root-password': { args: ['mysql' | 'mariadb', string]; result: { set: boolean } }
+  'sites:logs': { args: [string]; result: SiteLogSource[] }
+  'sites:thumbnail': { args: [string, boolean]; result: string | null }
+  'cli:status': { args: []; result: { installed: boolean; inPath: boolean; path: string } }
+  'cli:install': { args: []; result: { installed: boolean; inPath: boolean; path: string } }
+  'project:plan': { args: [string]; result: { file: ProjectFile; plan: ProjectPlan } }
+  'project:apply': { args: [string, boolean]; result: SiteInfo[] }
+  'project:export': { args: [string]; result: string }
+  'dumps:clear': { args: []; result: void }
+  'dumps:enable': { args: [boolean]; result: { enabled: boolean; running: boolean } }
+  'dumps:status': { args: []; result: { enabled: boolean; running: boolean } }
+  'dumps:open-file': { args: [string, number | null]; result: void }
   'review:list': { args: []; result: ReviewInfo[] }
   'review:read': { args: [string]; result: string }
   'review:delete': { args: [string]; result: ReviewInfo[] }
@@ -819,6 +872,7 @@ export interface Events {
   'shell:exit': { session: string }
   /** The menu bar asks the window to show a page. */
   'app:navigate': string
+  'dumps:new': DumpItem
 }
 
 export interface LaramacApi {

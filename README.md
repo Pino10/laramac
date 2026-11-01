@@ -37,9 +37,11 @@ It was built for people moving from **Laragon** on Windows who want the same "it
 - **Dev servers at real addresses.** Vite, Next.js, Django, `dotnet watch` and the rest run from the Sites page and open at `https://name.test`, live reload included.
 - **Every PHP version.** PHP 8.0 to 8.5, side by side, always the newest release, chosen per site.
 - **Apache and Nginx.** Apache with full `.htaccess` support as the main server, Nginx alongside.
-- **Databases.** MySQL, MariaDB, PostgreSQL, Redis, Memcached, MongoDB and Meilisearch, plus phpMyAdmin and Adminer, with backups and snapshots.
+- **Databases and services.** MySQL, MariaDB, PostgreSQL, Redis, Memcached, MongoDB, Meilisearch, S3 storage (RustFS) and RabbitMQ, plus phpMyAdmin and Adminer, with backups and snapshots.
 - **Your servers.** SSH terminal, SFTP and FTP file browser, and one-click deployment.
 - **GitHub.** Create, browse, clone, download and delete repositories, and push to main, a branch, a tag or a release.
+- **Dumps and logs.** `dump()` and `dd()` land in a Dumps window instead of the page, and every site has a live log viewer.
+- **Project files.** A `laramac.yml` in a project sets up PHP, services, the database and the dev server for everyone who clones it.
 - **Security.** AI code review of a site, a GitHub repository or an Azure DevOps repository, by Claude Code or your own model, plus Nuclei web scans and a check for leaked keys.
 - **An API client.** Works like Postman: import collections and environments, write tests, run whole collections, and copy any request as code.
 - **AI.** Claude Code, Codex, OpenCode, vMLX, LM Studio and more, and a direct connection so Claude Code can drive Laramac.
@@ -170,6 +172,28 @@ The stethoscope button on each site opens the **site doctor**. It reads that sit
 
 <img src="docs/screenshots/site-doctor.png" alt="The site doctor explaining a database error" width="820">
 
+#### Gallery, logs and the ⋯ menu
+
+**Gallery** (top right of Sites) shows every site as a card with a live preview of its home page. The **⋯** button on each site opens its **logs** (the framework's log, the dev server output, and the PHP, Apache and Nginx lines about that site, updated every two seconds, with search and an errors-only filter), the **site doctor**, and its **laramac.yml**.
+
+#### Project files
+
+Choose **Save laramac.yml for the team** in a site's ⋯ menu. Laramac writes what the project uses into a small file you commit with the code:
+
+```yaml
+php: "8.4"
+https: true
+services: [mysql, redis, mailpit]
+database: { engine: mysql, name: shop }
+dev: npm run dev
+setup:
+  - composer install
+  - npm install
+  - php artisan migrate --no-interaction
+```
+
+When someone clones the project into their www folder, the site shows **laramac.yml · Set up**. Laramac lists exactly what it will do, including each setup command word for word, and only runs the commands if they leave the box ticked.
+
 #### Dev servers
 
 Projects with their own server (Vite, Next.js, Django, `dotnet watch`, `go run` and so on) show a **dev server** control on the Sites page instead of a PHP version:
@@ -181,6 +205,12 @@ Projects with their own server (Vite, Next.js, Django, `dotnet watch`, `go run` 
 - Laravel starter kits keep being served by PHP; their dev server is Vite, running beside it for instant updates.
 
 <img src="docs/screenshots/dev-server.png" alt="A dev server's live output" width="820">
+
+### Dumps
+
+The bug button next to the bell opens **Dumps**. Turn it on and `dump()` and `dd()` from Laravel, Symfony and any project using Symfony's VarDumper are sent to this window instead of the page, each with the file and line it came from (click to open it in your editor) and the request that made it. It uses Symfony's own dump-server format, the same one `php artisan dump-server` uses, and only this Mac can send to it.
+
+<img src="docs/screenshots/dumps.png" alt="The Dumps window" width="820">
 
 ### PHP
 
@@ -212,6 +242,10 @@ See every MySQL and MariaDB database with its tables, rows and size, and for eac
 | Meilisearch | 7700 | `http://127.0.0.1:7700` |
 
 phpMyAdmin (at `phpmyadmin.test`, signed in for you) and Adminer (`adminer.test`) install in one click.
+
+**Root password.** MySQL and MariaDB have no root password by default, like Laragon. **Root password** on the Databases page sets one; Laramac keeps it in your Keychain and phpMyAdmin, backups, imports and new projects use it.
+
+**S3 storage and RabbitMQ.** S3 storage (RustFS, on Apple Silicon) gives your apps an `s3` disk at `http://127.0.0.1:9000` (key `laramac`, secret `laramac-secret`) with a web console on port 9001. RabbitMQ (installed with Homebrew) runs on 5672 with its dashboard on 15672.
 
 ### Servers: SSH, SFTP and FTP
 
@@ -309,6 +343,8 @@ Laramac checks for new versions once a day and shows a banner when one is ready.
 
 ### Everywhere
 
+- **The `laramac` command.** **Add to Terminal** on the Tools page installs `laramac` and puts Laramac's PHP, Composer and Node.js in Terminal: `laramac status`, `laramac start mysql`, `laramac open shop`, `laramac dev shop`, `laramac php shop 8.3`, `laramac db create shop`, `laramac logs`.
+- **Sidebar.** Groups fold away; ⌘\\ makes it a slim icon rail.
 - **⌘K** opens a command bar for every site, service, starter, dev server and action: type “react”, “start mysql” or a site's name.
 - **⌘1 to ⌘9** switch pages, **⌘N** starts a new project and **⌘I** imports one.
 - The **menu bar** icon shows how many services and dev servers are running, switches each one on or off, opens any site in the browser, your editor, your AI tool or Finder, and starts a new project, without opening the window.

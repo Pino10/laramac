@@ -53,11 +53,12 @@ export function linesAbout(text: string, needles: string[], lines: number): stri
 }
 
 /** Every log that can say what is wrong with this site, newest lines only. */
-export function collectSiteLogs(site: SiteInfo): SiteLogSource[] {
+export function collectSiteLogs(site: SiteInfo, o: { lines?: number; redact?: boolean } = {}): SiteLogSource[] {
   const out: SiteLogSource[] = []
+  const n = o.lines ?? 120
   const add = (name: string, path: string, text: string): void => {
-    const clean = redact(text).trim()
-    if (clean) out.push({ name, path, text: clean.slice(-9000) })
+    const clean = (o.redact === false ? text : redact(text)).trim()
+    if (clean) out.push({ name, path, text: o.lines ? clean : clean.slice(-9000) })
   }
   const own: [string, string][] = [
     ['Laravel log', join(site.path, 'storage', 'logs', 'laravel.log')],
@@ -65,8 +66,8 @@ export function collectSiteLogs(site: SiteInfo): SiteLogSource[] {
     ['WordPress debug log', join(site.path, 'wp-content', 'debug.log')],
     ['Django log', join(site.path, 'debug.log')]
   ]
-  for (const [name, path] of own) if (existsSync(path)) add(name, path, lastLines(tailText(path), 120))
-  if (site.dev) add('Dev server output', devLogFile(site.name), lastLines(tailText(devLogFile(site.name)), 150))
+  for (const [name, path] of own) if (existsSync(path)) add(name, path, lastLines(tailText(path, o.lines ? 256 * 1024 : 64 * 1024), n))
+  if (site.dev) add('Dev server output', devLogFile(site.name), lastLines(tailText(devLogFile(site.name), o.lines ? 256 * 1024 : 64 * 1024), o.lines ?? 150))
 
   const needles = [site.path, site.domain, ...site.aliases]
   const shared: [string, string][] = [
@@ -74,7 +75,7 @@ export function collectSiteLogs(site: SiteInfo): SiteLogSource[] {
     ['Apache errors', join(dirs.logs(), 'apache-error.log')],
     ['Nginx errors', join(dirs.logs(), 'nginx-error.log')]
   ]
-  for (const [name, path] of shared) if (existsSync(path)) add(name, path, linesAbout(tailText(path, 256 * 1024), needles, 40))
+  for (const [name, path] of shared) if (existsSync(path)) add(name, path, linesAbout(tailText(path, 256 * 1024), needles, o.lines ? 200 : 40))
   return out
 }
 

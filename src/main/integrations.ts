@@ -34,7 +34,7 @@ export function openTerminal(cwd: string, command?: string): Promise<void> {
  * is there on the side. Uses the editor's own command-line launcher, which
  * opens folders reliably even when the editor is already running.
  */
-export function openInEditor(editor: 'cursor' | 'vscode', path: string): Promise<void> {
+export function openInEditor(editor: 'cursor' | 'vscode', path: string, line?: number): Promise<void> {
   const app = editor === 'cursor' ? 'Cursor' : 'Visual Studio Code'
   const cliName = editor === 'cursor' ? 'cursor' : 'code'
   const bundles = [join('/Applications', `${app}.app`), join(homedir(), 'Applications', `${app}.app`)]
@@ -44,7 +44,7 @@ export function openInEditor(editor: 'cursor' | 'vscode', path: string): Promise
       execFile('open', ['-n', '-a', app, '--args', path], (err) => (err ? reject(new Error(`${app} is not installed.`)) : resolve()))
     }
     if (!cli) return fallback()
-    execFile(cli, ['--new-window', path], { timeout: 15000 }, (err) => (err ? fallback() : resolve()))
+    execFile(cli, line ? ['--goto', `${path}:${line}`] : ['--new-window', path], { timeout: 15000 }, (err) => (err ? fallback() : resolve()))
   })
 }
 

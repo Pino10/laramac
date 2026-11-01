@@ -1,3 +1,4 @@
+import { dbEnv } from './secrets'
 import {
   closeSync,
   cpSync,
@@ -519,7 +520,8 @@ function clientArgs(t: SqlTarget, extra: string[]): string[] {
 function runClient(t: SqlTarget, args: string[], input?: NodeJS.ReadableStream, onBytes?: (n: number) => void): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(t.client, clientArgs(t, args), {
-      stdio: ['pipe', 'ignore', 'pipe']
+      stdio: ['pipe', 'ignore', 'pipe'],
+      env: dbEnv(t.engine)
     })
     let stderr = ''
     child.stderr.on('data', (d: Buffer) => {

@@ -10,11 +10,13 @@ import { postgres } from './svc/postgres'
 import { redis } from './svc/redis'
 import { mongodb } from './svc/mongodb'
 import { meilisearch } from './svc/meilisearch'
+import { rustfs } from './svc/rustfs'
+import { rabbitmq } from './svc/rabbitmq'
 import { memcached } from './svc/memcached'
 
 /** Start order matters: mail and database first, then PHP, then the web servers. */
 // Start order: mail and data first, then PHP, then the web servers (Apache is the main one).
-const IMPLS: ServiceImpl[] = [mailpit, mysql, mariadb, postgres, redis, memcached, mongodb, meilisearch, php, apache, nginx]
+const IMPLS: ServiceImpl[] = [mailpit, mysql, mariadb, postgres, redis, memcached, mongodb, meilisearch, rustfs, rabbitmq, php, apache, nginx]
 
 const GROUPS: Record<ServiceId, ServiceGroup> = {
   nginx: 'web',
@@ -27,6 +29,8 @@ const GROUPS: Record<ServiceId, ServiceGroup> = {
   mongodb: 'database',
   meilisearch: 'database',
   memcached: 'database',
+  s3: 'database',
+  rabbitmq: 'database',
   mailpit: 'mail'
 }
 
@@ -39,7 +43,9 @@ const CONNECTIONS: Partial<Record<ServiceId, string>> = {
   mongodb: 'mongodb://127.0.0.1:27017',
   meilisearch: 'http://127.0.0.1:7700',
   memcached: '127.0.0.1:11211',
-  mailpit: 'smtp://127.0.0.1:1025'
+  mailpit: 'smtp://127.0.0.1:1025',
+  s3: 'http://127.0.0.1:9000, key laramac, secret laramac-secret',
+  rabbitmq: 'amqp://guest:guest@127.0.0.1:5672'
 }
 
 class ServiceManager extends EventEmitter {

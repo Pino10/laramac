@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'child_process'
+import { dbEnv } from './secrets'
 import { createWriteStream, existsSync, renameSync, rmSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import { createGzip } from 'zlib'
@@ -29,7 +30,7 @@ const base = (t: DbTarget): string[] => ['--host=127.0.0.1', `--port=${t.port}`,
 
 function query(t: DbTarget, sql: string): Promise<string[][]> {
   return new Promise((resolve, reject) => {
-    execFile(t.client, [...base(t), '-N', '-B', '-e', sql], { maxBuffer: 16 * 1024 * 1024 }, (err, out, stderr) => {
+    execFile(t.client, [...base(t), '-N', '-B', '-e', sql], { maxBuffer: 16 * 1024 * 1024, env: dbEnv(t.engine) }, (err, out, stderr) => {
       if (err) return reject(new Error(String(stderr || err.message).trim().split('\n').pop()))
       resolve(
         String(out)
@@ -51,6 +52,15 @@ export async function listDatabases(t: DbTarget): Promise<DatabaseInfo[]> {
   return rows
     .filter(([name]) => !SYSTEM.has(name.toLowerCase()))
     .map(([name, tables, bytes, rows]) => ({ engine: t.engine, name, tables: Number(tables), bytes: Number(bytes), rows: Number(rows) }))
+}
+
+/** Sets the root password on every root account, using the current one to sign in. */
+export async function setRootPassword(t: DbTarget, password: string): Promise<void> {
+  const q = (s: string): string => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const hosts = (await query(t, "SELECT host FROM mysql.user WHERE user = 'root'")).map((r) => r[0]).filter(Boolean)
+  if (hosts.length === 0) throw new Error('No root account was found.')
+  const statements = hosts.map((h) => `ALTER USER 'root'@${q(h)} IDENTIFIED BY ${q(password)}`).join('; ')
+  await query(t, `${statements}; FLUSH PRIVILEGES`)
 }
 
 export async function createDatabase(t: DbTarget, name: string): Promise<void> {
@@ -77,7 +87,7 @@ export async function exportDatabase(t: DbTarget, name: string, dest: string): P
   const child = spawn(
     dumpTool(t),
     [...base(t), '--single-transaction', '--routines', '--triggers', '--events', '--hex-blob', '--no-tablespaces', '--databases', name],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
+    { stdio: ['ignore', 'pipe', 'pipe'], env: dbEnv(t.engine) }
   )
   let stderr = ''
   child.stderr.on('data', (d: Buffer) => (stderr = (stderr + d.toString()).slice(-4000)))
@@ -112,7 +122,7 @@ export async function readOnlyQuery(t: DbTarget, database: string, sql: string, 
     execFile(
       t.client,
       [...base(t), `--database=${database}`, '-B', '--max-allowed-packet=16M', '-e', `SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY; ${s}; ROLLBACK;`],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 30000 },
+      { maxBuffer: 16 * 1024 * 1024, timeout: 30000, env: dbEnv(t.engine) },
       (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim().split('\n').pop())) : resolve(String(stdout)))
     )
   })

@@ -31,6 +31,10 @@ export default function Tools(): React.JSX.Element {
   const [tests, setTests] = useState<Record<string, LlmTest>>({})
   const [relay, setRelay] = useState<MailRelay | null>(null)
   const [mailOpen, setMailOpen] = useState(false)
+  const [cliState, setCliState] = useState<{ installed: boolean; inPath: boolean } | null>(null)
+  useEffect(() => {
+    void window.laramac.invoke('cli:status').then(setCliState)
+  }, [])
   useEffect(() => {
     void window.laramac.invoke('mail:relay').then(setRelay)
   }, [])
@@ -304,6 +308,38 @@ export default function Tools(): React.JSX.Element {
       </div>
 
       <div className="panel">
+        <div className="row row-icon">
+          <span className="icon-chip">
+            <TerminalSquare size={15} />
+          </span>
+          <div className="row-main">
+            <div className="row-title">
+              The <span className="mono">laramac</span> command
+            </div>
+            <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+              {cliState?.inPath
+                ? 'Ready: open a new Terminal window and type laramac help. Laramac’s PHP, Composer and Node.js are in your Terminal too.'
+                : 'Control Laramac from Terminal (laramac status, start mysql, open shop, dev shop), and put its PHP, Composer and Node.js on your PATH.'}
+            </div>
+          </div>
+          {cliState?.inPath && cliState.installed ? (
+            <span className="tag tag-ok">Installed</span>
+          ) : (
+            <button
+              className="btn"
+              disabled={busy.has('cli')}
+              onClick={async () => {
+                const r = await act('cli', () => api.invoke('cli:install'))
+                if (r) {
+                  setCliState(r)
+                  notify({ kind: 'info', text: 'Added. Open a new Terminal window and type laramac help.' })
+                }
+              }}
+            >
+              Add to Terminal
+            </button>
+          )}
+        </div>
         <div className="row row-icon">
           <span className="icon-chip">
             <Package size={15} />

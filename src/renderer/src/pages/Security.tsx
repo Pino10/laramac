@@ -300,7 +300,7 @@ function WebScan(): React.JSX.Element {
             <Laptop size={13} /> A site in www
           </button>
           <button role="radio" aria-checked={mode === 'url'} onClick={() => setMode('url')}>
-            <Globe2 size={13} /> An address
+            <Globe2 size={13} /> Any website
           </button>
         </div>
         {mode === 'site' ? (
@@ -315,7 +315,7 @@ function WebScan(): React.JSX.Element {
           <input className="input mono" placeholder="https://staging.yoursite.com" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Address" />
         )}
         {mode === 'site' && !web && <div className="hint" style={{ color: 'var(--warn)' }}>Start Apache or Nginx first, so the site answers.</div>}
-        {mode === 'url' && <div className="hint">Only scan sites you own or have written permission to test. Laramac asks you to confirm.</div>}
+        {mode === 'url' && <div className="hint">Live sites, staging servers, anything on the internet you own or have written permission to test. Laramac asks you to confirm before it starts.</div>}
         <div className="end">
           <button
             className="btn btn-primary"

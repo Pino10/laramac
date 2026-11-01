@@ -453,7 +453,7 @@ ${anySecure ? 'SSLSessionCache "shmcb:' + o.serverRoot + '/ssl_scache(512000)"\n
 `
 }
 
-export function generateFpmConf(opts: { port: number; pidFile: string; errorLog: string }): string {
+export function generateFpmConf(opts: { port: number; pidFile: string; errorLog: string; env?: Record<string, string> }): string {
   return `[global]
 pid = ${opts.pidFile}
 error_log = ${opts.errorLog}
@@ -469,6 +469,9 @@ pm.max_spare_servers = 3
 clear_env = no
 catch_workers_output = yes
 decorate_workers_output = no
+${Object.entries(opts.env ?? {})
+  .map(([k, v]) => `env[${k}] = ${v}`)
+  .join('\n')}
 `
 }
 
@@ -602,7 +605,8 @@ socket = "${opts.socket}"
 `
 }
 
-export function generatePmaConfig(secret: string): string {
+export function generatePmaConfig(secret: string, passwords: { mysql?: string; mariadb?: string } = {}): string {
+  const q = (s = ''): string => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
   return `<?php
 $cfg['blowfish_secret'] = '${secret}';
 $i = 0;
@@ -611,7 +615,7 @@ $cfg['Servers'][$i]['auth_type'] = 'config';
 $cfg['Servers'][$i]['host'] = '127.0.0.1';
 $cfg['Servers'][$i]['port'] = 3306;
 $cfg['Servers'][$i]['user'] = 'root';
-$cfg['Servers'][$i]['password'] = '';
+$cfg['Servers'][$i]['password'] = '${q(passwords.mysql)}';
 $cfg['Servers'][$i]['AllowNoPassword'] = true;
 $cfg['Servers'][$i]['verbose'] = 'MySQL';
 $i++;
@@ -619,7 +623,7 @@ $cfg['Servers'][$i]['auth_type'] = 'config';
 $cfg['Servers'][$i]['host'] = '127.0.0.1';
 $cfg['Servers'][$i]['port'] = 3307;
 $cfg['Servers'][$i]['user'] = 'root';
-$cfg['Servers'][$i]['password'] = '';
+$cfg['Servers'][$i]['password'] = '${q(passwords.mariadb)}';
 $cfg['Servers'][$i]['AllowNoPassword'] = true;
 $cfg['Servers'][$i]['verbose'] = 'MariaDB';
 $cfg['ServerDefault'] = 1;
@@ -632,7 +636,7 @@ $cfg['SaveDir'] = '';
 }
 
 /** Points a Laravel .env at the local MySQL and Mailpit. */
-export function patchLaravelEnv(env: string, dbName: string, domain: string): string {
+export function patchLaravelEnv(env: string, dbName: string, domain: string, password = ''): string {
   const set = (text: string, key: string, value: string): string => {
     const re = new RegExp(`^#?\\s*${key}=.*$`, 'm')
     return re.test(text) ? text.replace(re, `${key}=${value}`) : `${text.trimEnd()}\n${key}=${value}\n`
@@ -644,7 +648,7 @@ export function patchLaravelEnv(env: string, dbName: string, domain: string): st
   out = set(out, 'DB_PORT', '3306')
   out = set(out, 'DB_DATABASE', dbName)
   out = set(out, 'DB_USERNAME', 'root')
-  out = set(out, 'DB_PASSWORD', '')
+  out = set(out, 'DB_PASSWORD', password)
   out = set(out, 'MAIL_MAILER', 'smtp')
   out = set(out, 'MAIL_HOST', '127.0.0.1')
   out = set(out, 'MAIL_PORT', '1025')

@@ -189,7 +189,9 @@ export function writePhpConfig(minor: string, sendmail?: string): void {
     generateFpmConf({
       port: phpPortFor(minor),
       pidFile: join(dirs.run(), `php-fpm-${minor}.pid`),
-      errorLog: join(dirs.logs(), `php-fpm-${minor}.log`)
+      errorLog: join(dirs.logs(), `php-fpm-${minor}.log`),
+      // Sends dump() and dd() to Laramac's Dumps window (Symfony's dump server format).
+      env: getSettings().dumps ? { VAR_DUMPER_FORMAT: 'server', VAR_DUMPER_SERVER: '127.0.0.1:9912' } : {}
     })
   )
 }

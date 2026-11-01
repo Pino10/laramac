@@ -20,6 +20,7 @@ import { brew } from './brew'
 import { findOnPath } from './platform'
 import { setSiteConfig } from './sites'
 import { pickDevPort } from './devservers'
+import { dbPassword } from './secrets'
 import type { ServiceId } from '../shared/types'
 
 type Update = (p: number | null, label?: string) => void
@@ -92,7 +93,7 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
   if (existsSync(target)) throw new Error(`A folder named "${req.name}" already exists in your www folder.`)
 
   const opts = resolveOptions(starter, req.options ?? {})
-  const ctx = starterContext(req.name, getSettings().tld)
+  const ctx = { ...starterContext(req.name, getSettings().tld), dbPassword: dbPassword('mysql') }
   const steps = starter.steps(ctx, opts)
 
   // Everything it needs, before touching the www folder.
@@ -142,7 +143,7 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
           if (!ok) throw new Error(`The ${step.database === 'postgres' ? 'PostgreSQL' : 'MySQL'} database could not be created. Is the server running?`)
         } else if ('laravelEnv' in step) {
           const file = join(target, '.env')
-          if (existsSync(file)) writeFileSync(file, laravelEnv(readFileSync(file, 'utf8'), step.laravelEnv, ctx.db, ctx.domain))
+          if (existsSync(file)) writeFileSync(file, laravelEnv(readFileSync(file, 'utf8'), step.laravelEnv, ctx.db, ctx.domain, ctx.dbPassword))
         }
       }
 

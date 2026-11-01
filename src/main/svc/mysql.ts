@@ -1,3 +1,4 @@
+import { dbEnv } from '../secrets'
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { execFile } from 'child_process'
@@ -58,7 +59,7 @@ export function activeMysql(): string | null {
 
 function runOnce(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { maxBuffer: 1024 * 1024 * 16 }, (err, _o, stderr) => {
+    execFile(command, args, { maxBuffer: 1024 * 1024 * 16, env: dbEnv('mysql') }, (err, _o, stderr) => {
       if (err) reject(new Error(stderr || err.message))
       else resolve()
     })

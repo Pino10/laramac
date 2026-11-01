@@ -15,6 +15,7 @@ const defaults = (): AppSettings => ({
   glass: true,
   glassStyle: 'smoke',
   tourDone: false,
+  dumps: false,
   defaultPhp: null,
   phpFlavor: 'full',
   mysqlVersion: 'latest',
