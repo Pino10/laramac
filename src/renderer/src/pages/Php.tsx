@@ -124,7 +124,7 @@ export default function Php(): React.JSX.Element {
               <div className="hint" style={{ marginTop: 4 }}>
                 {php.some((p) => p.installed && !p.xdebug && p.xdebugAvailable)
                   ? "Turning it on updates your PHP to a build that includes Xdebug."
-                  : "Xdebug arrives with the next PHP build, usually within a day."}
+                  : 'Xdebug comes with Laramac’s newest PHP. Update to it, or wait for its next build (usually within a day).'}
               </div>
             )}
           </div>

@@ -216,7 +216,7 @@ The bug button next to the bell opens **Dumps**. Turn it on and `dump()` and `dd
 
 <img src="docs/screenshots/php.png" alt="PHP versions" width="820">
 
-Install any version from 8.0 to 8.5 and keep several side by side. Laramac follows php.net: a daily build turns each new release into a ready-to-run build for Apple Silicon and Intel, and the app offers it as an update. Every build has the common extensions compiled in (such as mysqli, pdo_mysql, intl, gd, zip and opcache; **Extensions** lists every one). Laramac writes a `php.ini` tuned for local development and for that version, and **Edit php.ini** gives you a file of your own settings that always wins. Composer is included.
+Laramac gives you the newest PHP and keeps it up to date: a daily build turns each new php.net release into a ready-to-run build for Apple Silicon and Intel, and the app offers it as an update. Need an older version for a project? Download the macOS `cli` and `fpm` files from [static-php.dev](https://dl.static-php.dev/static-php-cli/bulk/), press **Add a version** and choose both, the same way Laragon adds PHP from a zip. Keep as many side by side as you like and pick one per site. Every build has the common extensions compiled in (such as mysqli, pdo_mysql, intl, gd, zip and opcache; **Extensions** lists every one). Laramac writes a `php.ini` tuned for local development and for that version, and **Edit php.ini** gives you a file of your own settings that always wins. Composer is included.
 
 **Xdebug.** Turn it on with one switch to step through your code in VS Code, Cursor or PhpStorm (port 9003). It stays off until you need it, since it slows PHP down; while off, it is not loaded at all.
 

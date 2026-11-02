@@ -44,14 +44,14 @@ gh api -X POST repos/Pino10/laramac/actions/workflows/release.yml/dispatches -f 
 ## PHP builds
 
 - Made with [static-php-cli](https://static-php.dev): one self-contained `php` and `php-fpm` per version, about 50 extensions built in (the list is `EXTENSIONS` at the top of `php-builds.yml`).
-- Built for Apple Silicon and Intel, for every version in `SUPPORTED_PHP` (`src/main/versions.ts`), checked daily against php.net.
+- Only the **newest** PHP is built, for Apple Silicon and Intel, checked daily against php.net. When a new minor version comes out (8.6, say), it is built and the older builds are removed from the release automatically. People add older versions themselves from a static-php.dev download (PHP page › Add a version); PHP already on anyone's Mac is never touched.
 - Each version is published as: `php-X.Y.Z-cli-…`, `php-X.Y.Z-fpm-…`, `php-X.Y.Z-xdebug-…` (or a `.none` marker if Xdebug could not be built), the extension list, and a `.sha256` file. The app refuses any download that does not match the checksum.
 - **Xdebug** is a separate file (`xdebug.so`) because it can only be built that way. PHP loads it only when Xdebug is switched on, on the PHP page. If building Xdebug ever fails, PHP is built without it, so a PHP update is never held back.
 - If a build is not ready yet, the app falls back to static-php.dev's own builds.
 
 **Adding an extension:** add it to `EXTENSIONS`, then run **Build latest PHP** with **force** on. Check the build log first: some extensions need extra libraries.
 
-**Adding a PHP version** (for example 8.6): add it to `SUPPORTED_PHP` and to the `minors` default in `php-builds.yml`, then release the app.
+**A new PHP version** (for example 8.6) is picked up by the daily build on its own. Add it to `SUPPORTED_PHP` in `src/main/versions.ts` and release the app so the PHP page knows its name. To build a specific older version by hand, run **Build latest PHP** with that version in **minors**; manual runs never remove anything.
 
 **Can a PHP change break everything?** No. PHP is downloaded per version into `~/.laramac/php/X.Y`. A bad build affects only that version, and only for people who update to it. Fix it with a forced rebuild; people get the fix through the PHP page.
 

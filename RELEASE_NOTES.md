@@ -1,3 +1,10 @@
+## New in 0.18
+
+- **Just the newest PHP:** the PHP page offers the newest PHP and keeps it up to date. Versions you already have stay and keep working.
+- **Add an older PHP yourself, the Laragon way:** download the macOS `cli` and `fpm` files from static-php.dev, press **Add a version** and choose both (archives or a folder). Laramac checks they run on your Mac and match, then sets them up.
+- **Databases:** always the newest MySQL and PostgreSQL; the version boxes in Settings are gone.
+- Laramac's PHP builds now make only the newest PHP, with Xdebug, and remove older builds automatically, so releases never wait behind PHP builds again.
+
 ## New in 0.17.1
 
 - **Private review sessions:** every code review of a GitHub, Azure DevOps or other Git repository now downloads its own private copy, and that copy is deleted the moment the review finishes, whether it succeeded or not. Only the report stays. Reviews never share or reuse code, so you can run several at once.
