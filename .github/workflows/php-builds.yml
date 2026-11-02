@@ -1,8 +1,9 @@
 name: Build latest PHP
 
-# Keeps Laramac's PHP up to date. Every day this checks php.net for the newest release of each
-# supported PHP version and, if Laramac does not have it yet, builds a static PHP (CLI and FPM)
-# for Apple Silicon and Intel with static-php-cli, then publishes it to the "php-builds" release.
+# Keeps Laramac's PHP up to date. Every day this checks php.net for the newest PHP release and,
+# if Laramac does not have it yet, builds a static PHP (CLI, FPM and Xdebug) for Apple Silicon and
+# Intel with static-php-cli, then publishes it to the "php-builds" release. Only the newest PHP is
+# built; people add older versions themselves from a download (PHP page > Add a version).
 # The app prefers these builds and falls back to static-php.dev when one is not ready.
 
 on:
@@ -11,8 +12,8 @@ on:
   workflow_dispatch:
     inputs:
       minors:
-        description: 'PHP versions to check, comma separated'
-        default: '8.5,8.4,8.3,8.2'
+        description: 'PHP versions to build, comma separated. Leave empty for the newest only.'
+        default: ''
       force:
         description: 'Rebuild even if the build already exists'
         type: boolean
@@ -32,6 +33,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
+      keep: ${{ steps.plan.outputs.keep }}
     steps:
       - name: Work out which PHP releases are missing
         id: plan
@@ -39,11 +41,18 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
           REPO: ${{ vars.RELEASES_REPO || github.repository }}
           SELF_HOSTED: ${{ vars.MAC_RUNNER == 'self-hosted' }}
-          MINORS: ${{ inputs.minors || '8.5,8.4,8.3,8.2' }}
+          MINORS: ${{ inputs.minors }}
           FORCE: ${{ inputs.force || false }}
         run: |
           existing=$(gh release view "$RELEASE_TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
           include='[]'
+          if [ -z "$MINORS" ]; then
+            newest=$(curl -fsSL "https://www.php.net/releases/?json&version=8" | jq -r .version)
+            MINORS=$(cut -d. -f1,2 <<<"$newest")
+            echo "Newest PHP: $newest"
+            # Only an automatic run (newest PHP) removes older builds afterwards.
+            echo "keep=$MINORS" >> "$GITHUB_OUTPUT"
+          fi
           for minor in ${MINORS//,/ }; do
             version=$(curl -fsSL "https://www.php.net/releases/?json&version=$minor" | jq -r .version)
             [ -z "$version" ] || [ "$version" = "null" ] && continue
@@ -157,3 +166,24 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$REPO" --clobber \
             php-${{ matrix.version }}-*-macos-${{ matrix.arch }}.* \
             php-${{ matrix.version }}-macos-${{ matrix.arch }}.sha256
+
+  # Only the newest PHP is kept in the release; older builds are removed once the new one is out.
+  # PHP already installed on anyone's Mac is not affected.
+  tidy:
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove older PHP builds
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+          REPO: ${{ vars.RELEASES_REPO || github.repository }}
+          KEEP: ${{ needs.plan.outputs.keep }}
+        run: |
+          [ -n "$KEEP" ] || exit 0
+          pattern=$(sed 's/\./\\./g; s/,/|/g' <<<"$KEEP")
+          gh api "repos/$REPO/releases/tags/$RELEASE_TAG" --jq '.assets[] | "\(.id) \(.name)"' | while read -r id name; do
+            if ! grep -Eq "^php-($pattern)\." <<<"$name"; then
+              gh api -X DELETE "repos/$REPO/releases/assets/$id" && echo "Removed $name"
+            fi
+          done

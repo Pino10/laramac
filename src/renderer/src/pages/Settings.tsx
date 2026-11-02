@@ -210,8 +210,6 @@ export default function Settings(): React.JSX.Element {
             <option value="light">Lightweight</option>
           </select>
         </div>
-        <TextRow label="MySQL version" hint="latest picks the newest build for your Mac, or pin one such as 8.4.11." value={settings.mysqlVersion} onSave={(v) => updateSettings({ mysqlVersion: v })} />
-        <TextRow label="PostgreSQL version" hint="latest, or a major version such as 17." value={settings.postgresMajor} onSave={(v) => updateSettings({ postgresMajor: v })} />
       </div>
 
       <h2 className="section-title">Connections</h2>

@@ -1,34 +1,64 @@
-import { useState } from 'react'
-import { ArrowUpCircle, Bug, FileCog, Puzzle } from 'lucide-react'
-import type { PhpVersionInfo } from '@shared/types'
-import { useApp } from '../store'
-import { PageHead, Switch } from '../ui'
+import { useState } from "react";
+import { ArrowUpCircle, Bug, FileCog, FolderPlus, Puzzle } from "lucide-react";
+import type { PhpVersionInfo } from "@shared/types";
+import { useApp } from "../store";
+import { PageHead, Switch } from "../ui";
 
 export default function Php(): React.JSX.Element {
-  const { php, settings, act, busy, setPhp, jobs, sites, setPage, updateSettings } = useApp()
-  const api = window.laramac
-  const [extsFor, setExtsFor] = useState<PhpVersionInfo | null>(null)
-  const installing = jobs.some((j) => j.status === 'running' && j.label.includes('PHP'))
-  const def = php.find((p) => p.isDefault)
-  const usage = (minor: string): number => sites.filter((s) => s.php === minor).length
-  const updates = php.filter((p) => p.updateAvailable)
-  const install = (minor: string): Promise<unknown> => act(`install-php-${minor}`, () => api.invoke('php:install', minor).then(setPhp))
+  const {
+    php,
+    settings,
+    act,
+    busy,
+    setPhp,
+    jobs,
+    sites,
+    setPage,
+    updateSettings,
+  } = useApp();
+  const api = window.laramac;
+  const [extsFor, setExtsFor] = useState<PhpVersionInfo | null>(null);
+  const installing = jobs.some(
+    (j) => j.status === "running" && j.label.includes("PHP"),
+  );
+  const def = php.find((p) => p.isDefault);
+  const usage = (minor: string): number =>
+    sites.filter((s) => s.php === minor).length;
+  const updates = php.filter((p) => p.updateAvailable);
+  const install = (minor: string): Promise<unknown> =>
+    act(`install-php-${minor}`, () =>
+      api.invoke("php:install", minor).then(setPhp),
+    );
 
   return (
     <>
       <PageHead
         title="PHP"
-        desc="Keep every version you need side by side and pick one per site. Laramac tracks php.net and offers each new release as soon as it is built."
+        desc="Laramac gives you the newest PHP and keeps it up to date. Need an older one for a project? Add it from a download and pick it per site."
       >
+        <button
+          className="btn"
+          disabled={busy.has("php-import") || installing}
+          onClick={async () => {
+            const r = await act("php-import", () => api.invoke("php:import"));
+            if (r) setPhp(r);
+          }}
+        >
+          <FolderPlus size={14} />{" "}
+          {busy.has("php-import") ? "Adding…" : "Add a version"}
+        </button>
         {updates.length > 0 && (
           <button
             className="btn btn-primary"
             disabled={installing}
             onClick={async () => {
-              for (const u of updates) await install(u.minor)
+              for (const u of updates) await install(u.minor);
             }}
           >
-            <ArrowUpCircle size={14} /> Update {updates.length === 1 ? `PHP ${updates[0].minor}` : `all (${updates.length})`}
+            <ArrowUpCircle size={14} /> Update{" "}
+            {updates.length === 1
+              ? `PHP ${updates[0].minor}`
+              : `all (${updates.length})`}
           </button>
         )}
       </PageHead>
@@ -39,16 +69,23 @@ export default function Php(): React.JSX.Element {
           <div style={{ flex: 1 }}>
             <div className="card-title">
               Default version
-              {def.updateAvailable && <span className="tag tag-accent">{def.latest} available</span>}
+              {def.updateAvailable && (
+                <span className="tag tag-accent">{def.latest} available</span>
+              )}
             </div>
             <div className="dim">
-              PHP {def.installed}, used by {usage(def.minor)} {usage(def.minor) === 1 ? 'site' : 'sites'}, new projects, Composer and the terminal.
+              PHP {def.installed}, used by {usage(def.minor)}{" "}
+              {usage(def.minor) === 1 ? "site" : "sites"}, new projects,
+              Composer and the terminal.
             </div>
           </div>
-          <button className="btn" onClick={() => api.invoke('php:edit-ini', def.minor)}>
+          <button
+            className="btn"
+            onClick={() => api.invoke("php:edit-ini", def.minor)}
+          >
             <FileCog size={14} /> Edit php.ini
           </button>
-          <button className="btn" onClick={() => setPage('sites')}>
+          <button className="btn" onClick={() => setPage("sites")}>
             Choose per site
           </button>
         </div>
@@ -57,42 +94,51 @@ export default function Php(): React.JSX.Element {
           <div className="php-num dim">·</div>
           <div>
             <div className="card-title">No PHP yet</div>
-            <div className="dim">Install the newest version below to get started.</div>
+            <div className="dim">
+              Install the newest version below to get started.
+            </div>
           </div>
         </div>
       )}
 
       {def && (
-        <div className={`xdebug-card glass${settings?.xdebug ? ' on' : ''}`}>
+        <div className={`xdebug-card glass${settings?.xdebug ? " on" : ""}`}>
           <span className="xdebug-icon">
             <Bug size={18} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="card-title">
-              Xdebug {settings?.xdebug ? <span className="tag tag-accent">On</span> : <span className="tag">Off</span>}
+              Xdebug{" "}
+              {settings?.xdebug ? (
+                <span className="tag tag-accent">On</span>
+              ) : (
+                <span className="tag">Off</span>
+              )}
             </div>
             <div className="dim">
               {settings?.xdebug
-                ? 'PHP pauses at your breakpoints. In VS Code or Cursor, install “PHP Debug” and press Run › Start Debugging (Listen for Xdebug). PhpStorm: click the phone icon. Turn it off when you are done: it slows PHP down.'
-                : 'Step through your code line by line in VS Code, Cursor or PhpStorm. It stays off until you need it, because it makes PHP slower.'}
+                ? "PHP pauses at your breakpoints. In VS Code or Cursor, install “PHP Debug” and press Run › Start Debugging (Listen for Xdebug). PhpStorm: click the phone icon. Turn it off when you are done: it slows PHP down."
+                : "Step through your code line by line in VS Code, Cursor or PhpStorm. It stays off until you need it, because it makes PHP slower."}
             </div>
             {!settings?.xdebug && php.some((p) => p.installed && !p.xdebug) && (
               <div className="hint" style={{ marginTop: 4 }}>
                 {php.some((p) => p.installed && !p.xdebug && p.xdebugAvailable)
-                  ? 'Turning it on updates your PHP to a build that includes Xdebug.'
-                  : 'Xdebug arrives with the next PHP build, usually within a day.'}
+                  ? "Turning it on updates your PHP to a build that includes Xdebug."
+                  : "Xdebug arrives with the next PHP build, usually within a day."}
               </div>
             )}
           </div>
           <Switch
             on={!!settings?.xdebug}
             label="Xdebug"
-            disabled={busy.has('xdebug') || installing}
+            disabled={busy.has("xdebug") || installing}
             onChange={async () => {
-              const r = await act('xdebug', () => api.invoke('php:xdebug', !settings?.xdebug))
+              const r = await act("xdebug", () =>
+                api.invoke("php:xdebug", !settings?.xdebug),
+              );
               if (r) {
-                setPhp(r)
-                await updateSettings({})
+                setPhp(r);
+                await updateSettings({});
               }
             }}
           />
@@ -102,23 +148,34 @@ export default function Php(): React.JSX.Element {
       {php.length === 0 ? (
         <div className="panel empty">
           <strong>Could not load the version list</strong>
-          <span className="dim">Laramac could not reach php.net or the build server. Check your connection.</span>
+          <span className="dim">
+            Laramac could not reach php.net or the build server. Check your
+            connection.
+          </span>
         </div>
       ) : (
         <div className="grid-3">
           {php.map((v) => {
-            const state = v.isDefault ? 'default' : v.installed ? 'installed' : 'available'
-            const n = usage(v.minor)
-            const pending = v.upstream && v.upstream !== v.latest && !v.installed
+            const state = v.isDefault
+              ? "default"
+              : v.installed
+                ? "installed"
+                : "available";
+            const n = usage(v.minor);
+            const pending =
+              v.upstream && v.upstream !== v.latest && !v.installed;
             return (
               <div key={v.minor} className="card glass" data-state={state}>
-                <div className="card-head" style={{ justifyContent: 'space-between' }}>
+                <div
+                  className="card-head"
+                  style={{ justifyContent: "space-between" }}
+                >
                   <span className="php-tile-num">{v.minor}</span>
                   {v.updateAvailable ? (
                     <span className="tag tag-accent">Update</span>
-                  ) : state === 'default' ? (
+                  ) : state === "default" ? (
                     <span className="tag tag-accent">Default</span>
-                  ) : state === 'installed' ? (
+                  ) : state === "installed" ? (
                     <span className="tag tag-ok">Installed</span>
                   ) : null}
                 </div>
@@ -126,16 +183,26 @@ export default function Php(): React.JSX.Element {
                   {v.installed
                     ? v.updateAvailable
                       ? `${v.installed} installed, ${v.latest} is ready`
-                      : `${v.installed}${n ? `, used by ${n} ${n === 1 ? 'site' : 'sites'}` : ''}`
+                      : `${v.installed}${n ? `, used by ${n} ${n === 1 ? "site" : "sites"}` : ""}`
                     : `Newest: ${v.latest}`}
                   {pending && (
-                    <span style={{ display: 'block' }}>
-                      {v.upstream} is out on php.net and being built for your Mac.
+                    <span style={{ display: "block" }}>
+                      {v.upstream} is out on php.net and being built for your
+                      Mac.
                     </span>
                   )}
                 </div>
                 {v.installed && v.extensions.length > 0 && (
-                  <button className="link hint" style={{ alignSelf: 'flex-start', display: 'flex', gap: 5, alignItems: 'center' }} onClick={() => setExtsFor(v)}>
+                  <button
+                    className="link hint"
+                    style={{
+                      alignSelf: "flex-start",
+                      display: "flex",
+                      gap: 5,
+                      alignItems: "center",
+                    }}
+                    onClick={() => setExtsFor(v)}
+                  >
                     <Puzzle size={12} /> {v.extensions.length} extensions
                   </button>
                 )}
@@ -143,52 +210,129 @@ export default function Php(): React.JSX.Element {
                   {v.installed ? (
                     <>
                       {v.updateAvailable ? (
-                        <button className="btn btn-primary" disabled={busy.has(`install-php-${v.minor}`) || installing} onClick={() => install(v.minor)}>
-                          {busy.has(`install-php-${v.minor}`) ? 'Updating' : `Update to ${v.latest}`}
+                        <button
+                          className="btn btn-primary"
+                          disabled={
+                            busy.has(`install-php-${v.minor}`) || installing
+                          }
+                          onClick={() => install(v.minor)}
+                        >
+                          {busy.has(`install-php-${v.minor}`)
+                            ? "Updating"
+                            : `Update to ${v.latest}`}
                         </button>
                       ) : !v.isDefault ? (
-                        <button className="btn" onClick={() => act(`default-${v.minor}`, () => api.invoke('php:set-default', v.minor).then(setPhp))}>
+                        <button
+                          className="btn"
+                          onClick={() =>
+                            act(`default-${v.minor}`, () =>
+                              api
+                                .invoke("php:set-default", v.minor)
+                                .then(setPhp),
+                            )
+                          }
+                        >
                           Make default
                         </button>
                       ) : (
-                        <button className="btn btn-quiet" onClick={() => api.invoke('php:edit-ini', v.minor)}>
+                        <button
+                          className="btn btn-quiet"
+                          onClick={() => api.invoke("php:edit-ini", v.minor)}
+                        >
                           <FileCog size={14} /> php.ini
                         </button>
                       )}
                       <button
                         className="btn btn-quiet"
-                        disabled={busy.has(`remove-${v.minor}`) || n > 0 || v.isDefault}
-                        title={n > 0 ? 'Sites still use this version' : v.isDefault ? 'Choose another default first' : undefined}
-                        onClick={() => act(`remove-${v.minor}`, () => api.invoke('php:remove', v.minor).then(setPhp))}
+                        disabled={
+                          busy.has(`remove-${v.minor}`) || n > 0 || v.isDefault
+                        }
+                        title={
+                          n > 0
+                            ? "Sites still use this version"
+                            : v.isDefault
+                              ? "Choose another default first"
+                              : undefined
+                        }
+                        onClick={() =>
+                          act(`remove-${v.minor}`, () =>
+                            api.invoke("php:remove", v.minor).then(setPhp),
+                          )
+                        }
                       >
                         Remove
                       </button>
                     </>
                   ) : (
-                    <button className="btn" style={{ width: '100%' }} disabled={busy.has(`install-php-${v.minor}`) || installing} onClick={() => install(v.minor)}>
-                      {busy.has(`install-php-${v.minor}`) ? 'Installing' : `Install ${v.latest}`}
+                    <button
+                      className="btn"
+                      style={{ width: "100%" }}
+                      disabled={
+                        busy.has(`install-php-${v.minor}`) || installing
+                      }
+                      onClick={() => install(v.minor)}
+                    >
+                      {busy.has(`install-php-${v.minor}`)
+                        ? "Installing"
+                        : `Install ${v.latest}`}
                     </button>
                   )}
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       )}
 
-      <p className="hint" style={{ marginTop: 14, maxWidth: '84ch' }}>
-        Each build has its extensions compiled in, so nothing needs enabling. Laramac writes a php.ini tuned for local development and for
-        the version (newer PHP releases deprecate some settings, which are left out). Your own lines go in “Edit php.ini” and always win.
-        Using the {settings?.phpFlavor === 'full' ? 'full' : 'lightweight'} extension set.
+      <div className="php-older glass">
+        <FolderPlus
+          size={16}
+          style={{ color: "var(--ink-3)", flexShrink: 0 }}
+        />
+        <span>
+          <strong>Need an older PHP?</strong> Download the macOS{" "}
+          <span className="mono">cli</span> and{" "}
+          <span className="mono">fpm</span> files for your Mac (
+          {navigator.userAgent.includes("Intel")
+            ? "Intel: x86_64"
+            : "Apple Silicon: aarch64"}
+          ) from{" "}
+          <button
+            className="link"
+            onClick={() =>
+              api.invoke(
+                "tools:open-external",
+                "https://dl.static-php.dev/static-php-cli/bulk/",
+              )
+            }
+          >
+            static-php.dev
+          </button>
+          , then press <strong>Add a version</strong> and choose both. Laramac
+          checks they run and sets them up, the same way Laragon adds PHP from a
+          zip.
+        </span>
+      </div>
+
+      <p className="hint" style={{ marginTop: 14, maxWidth: "84ch" }}>
+        Each build has its extensions compiled in, so nothing needs enabling.
+        Laramac writes a php.ini tuned for local development and for the version
+        (newer PHP releases deprecate some settings, which are left out). Your
+        own lines go in “Edit php.ini” and always win. Using the{" "}
+        {settings?.phpFlavor === "full" ? "full" : "lightweight"} extension set.
       </p>
 
       {extsFor && (
         <div className="scrim" onMouseDown={() => setExtsFor(null)}>
-          <div className="dialog glass" style={{ width: 520 }} onMouseDown={(e) => e.stopPropagation()}>
+          <div
+            className="dialog glass"
+            style={{ width: 520 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <h2 className="page-title" style={{ fontSize: 18 }}>
               PHP {extsFor.installed} extensions
             </h2>
-            <p className="hint" style={{ margin: '4px 0 12px' }}>
+            <p className="hint" style={{ margin: "4px 0 12px" }}>
               All built in and ready. No extension= lines needed.
             </p>
             <div className="ext-list" style={{ maxHeight: 320 }}>
@@ -199,7 +343,10 @@ export default function Php(): React.JSX.Element {
               ))}
             </div>
             <div className="end" style={{ marginTop: 16 }}>
-              <button className="btn btn-primary" onClick={() => setExtsFor(null)}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setExtsFor(null)}
+              >
                 Close
               </button>
             </div>
@@ -207,5 +354,5 @@ export default function Php(): React.JSX.Element {
         </div>
       )}
     </>
-  )
+  );
 }

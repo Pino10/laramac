@@ -842,6 +842,7 @@ export interface Channels {
   'sites:open-log': { args: [string, string]; result: void }
   'import:choose': { args: []; result: ImportPlan | null }
   'php:xdebug': { args: [boolean]; result: PhpVersionInfo[] }
+  'php:import': { args: []; result: PhpVersionInfo[] | null }
   'import:git': { args: [string, string]; result: ImportPlan }
   'import:run': { args: [string, ImportAnswers]; result: ImportResult }
   'import:cancel': { args: [string]; result: void }

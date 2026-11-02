@@ -1,5 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
+import { basename, join } from 'path'
 import type { PhpVersionInfo } from '../shared/types'
 import { dirs } from './paths'
 import { getSettings, setSettings } from './settings'
@@ -54,7 +54,9 @@ export async function listVersions(): Promise<PhpVersionInfo[]> {
     resolvePhpBuilds(settings.phpFlavor).catch(() => ({}) as Record<string, PhpBuild>),
     fetchPhpNetLatest().catch(() => ({}) as Record<string, string>)
   ])
-  const minors = new Set([...SUPPORTED_PHP.filter((m) => builds[m] || upstream[m]), ...installed])
+  // Only the newest PHP is offered; older versions you add yourself from a download (Add a version).
+  const newest = SUPPORTED_PHP.filter((m) => builds[m] || upstream[m]).sort((a, b) => compareVersions(b, a))[0]
+  const minors = new Set([...(newest ? [newest] : []), ...installed])
   return [...minors]
     .sort((a, b) => compareVersions(b, a))
     .map((minor) => {
@@ -241,3 +243,84 @@ export function runningMinors(): string[] {
 }
 
 export { minorOf, phpPortFor }
+
+/** Finds a regular file (never a link) with this exact name, a few folders deep. */
+function findBinary(dir: string, name: string, depth = 0): string | null {
+  if (depth > 5) return null
+  for (const f of readdirSync(dir)) {
+    const p = join(dir, f)
+    const st = lstatSync(p)
+    if (st.isFile() && f === name) return p
+    if (st.isDirectory()) {
+      const hit = findBinary(p, name, depth + 1)
+      if (hit) return hit
+    }
+  }
+  return null
+}
+
+function untar(archive: string, dest: string): Promise<void> {
+  mkdirSync(dest, { recursive: true })
+  const zip = /\.zip$/i.test(archive)
+  return new Promise((resolve, reject) =>
+    execFile(zip ? 'unzip' : 'tar', zip ? ['-q', '-o', archive, '-d', dest] : ['-xf', archive, '-C', dest], { timeout: 5 * 60 * 1000 }, (err) =>
+      err ? reject(new Error(`${basename(archive)} could not be opened. Choose a .tar.gz, .tar.xz or .zip.`)) : resolve()
+    )
+  )
+}
+
+/**
+ * Adds a PHP version from files you downloaded (the Laragon way): a static PHP build for macOS,
+ * such as the "cli" and "fpm" downloads from static-php.dev, as archives or a folder.
+ */
+export async function importPhp(paths: string[]): Promise<string> {
+  if (paths.length === 0) throw new Error('Choose the PHP download first.')
+  const staging = join(dirs.downloads(), `php-import-${Date.now()}`)
+  mkdirSync(staging, { recursive: true, mode: 0o700 })
+  try {
+    for (const [i, p] of paths.entries()) {
+      const dest = join(staging, String(i))
+      if (statSync(p).isDirectory()) cpSync(p, dest, { recursive: true, filter: (src) => !lstatSync(src).isSymbolicLink() })
+      else await untar(p, dest)
+    }
+    const php = findBinary(staging, 'php')
+    const fpm = findBinary(staging, 'php-fpm')
+    if (!php || !fpm) {
+      throw new Error(
+        !php && !fpm
+          ? 'No PHP was found in what you chose. Choose a PHP build for macOS (static-php.dev has them).'
+          : `Found ${php ? 'php' : 'php-fpm'} but not ${php ? 'php-fpm' : 'php'}. Sites need both: choose the cli and the fpm downloads together.`
+      )
+    }
+    chmodSync(php, 0o755)
+    chmodSync(fpm, 0o755)
+    await removeQuarantine(staging)
+    const ask = (bin: string, args: string[]): Promise<string> =>
+      new Promise((resolve, reject) =>
+        execFile(bin, args, { timeout: 15000 }, (err, out) => (err ? reject(new Error('That PHP does not run on this Mac. Check it is a macOS build for your chip (Apple Silicon or Intel).')) : resolve(String(out))))
+      )
+    const version = (await ask(php, ['-n', '-r', 'echo PHP_VERSION;'])).trim()
+    if (!/^\d+\.\d+\.\d+/.test(version)) throw new Error('That does not look like PHP.')
+    const fpmVersion = /PHP (\d+\.\d+\.\d+)/.exec(await ask(fpm, ['-n', '-v']))?.[1]
+    if (fpmVersion !== version.replace(/[^0-9.].*$/, '')) throw new Error(`php is ${version} but php-fpm is ${fpmVersion ?? 'unknown'}. Choose matching downloads.`)
+    const minor = minorOf(version)
+
+    const wasRunning = runningMinors().includes(minor)
+    if (wasRunning) await stopFpm(minor)
+    const target = dirs.php(minor)
+    rmSync(target, { recursive: true, force: true })
+    mkdirSync(target, { recursive: true })
+    cpSync(php, join(target, 'php'))
+    cpSync(fpm, join(target, 'php-fpm'))
+    chmodSync(join(target, 'php'), 0o755)
+    chmodSync(join(target, 'php-fpm'), 0o755)
+    writeFileSync(join(target, 'VERSION'), version)
+    writeFileSync(join(target, 'SOURCE'), 'imported')
+    const modules = await runPhp(minor, ['-n', '-m']).catch(() => '')
+    writeFileSync(join(target, 'EXTENSIONS'), modules.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('[')).join('\n'))
+    if (!getSettings().defaultPhp) setSettings({ defaultPhp: minor })
+    return version
+  } finally {
+    rmSync(staging, { recursive: true, force: true })
+  }
+}

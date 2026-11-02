@@ -3979,3 +3979,16 @@ html[data-tone='light'] .nav-item[aria-current='page'] svg {
   border-color: rgba(251, 191, 36, 0.3);
   box-shadow: 0 0 18px rgba(251, 191, 36, 0.18);
 }
+
+/* "Need an older PHP?" note on the PHP page. */
+.php-older {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: var(--r-lg);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}

@@ -44,7 +44,7 @@ import { resetLaramac } from './reset'
 import { setupRecommended } from './setup'
 import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from './aitools'
 import * as ssh from './ssh'
-import { customIniPath, ensureCustomIni, ensureXdebug, xdebugPath } from './php'
+import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
 import type { ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
@@ -992,6 +992,22 @@ function registerIpc(): void {
     setSettings({ dumps: !!on })
     await restartPhp()
     return { enabled: !!on, running: dumps.dumpServerRunning() }
+  })
+  handle('php:import', async () => {
+    if (!mainWindow) return null
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Add a PHP version',
+      message: 'Choose the PHP download for macOS: the cli and fpm files together, or a folder with both.',
+      buttonLabel: 'Add',
+      properties: ['openFile', 'openDirectory', 'multiSelections'],
+      filters: [{ name: 'PHP builds', extensions: ['gz', 'tgz', 'xz', 'tar', 'zip'] }]
+    })
+    if (res.canceled || res.filePaths.length === 0) return null
+    const version = await jobs.run('Adding PHP', () => importPhp(res.filePaths.slice(0, 4))).catch((err) => {
+      throw new ValidationError((err as Error).message)
+    })
+    activity.push('success', `PHP ${version} added`, 'Pick it for a site on the Sites page.')
+    return listVersions()
   })
   handle('php:xdebug', async (on) => {
     if (on) {

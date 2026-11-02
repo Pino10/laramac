@@ -45,3 +45,50 @@ describe('0.17.1 review sessions', () => {
     expect(existsSync(join(reviewSourcesDir(), 'not-a-session'))).toBe(true)
   })
 })
+
+import { chmodSync as chmod2, existsSync as exists2, readFileSync as read2 } from 'fs'
+import { importPhp, listVersions } from '../src/main/php'
+import { dirs } from '../src/main/paths'
+
+const fakePhp = (dir: string, version: string, fpmVersion = version): void => {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'php'), `#!/bin/sh\ncase "$*" in *-m*) printf '[PHP Modules]\\nmbstring\\nopenssl\\n';; *) printf '${version}';; esac\n`)
+  writeFileSync(join(dir, 'php-fpm'), `#!/bin/sh\nprintf 'PHP ${fpmVersion} (fpm-fcgi)'\n`)
+  chmod2(join(dir, 'php'), 0o755)
+  chmod2(join(dir, 'php-fpm'), 0o755)
+}
+
+describe('0.18 older PHP from a download', () => {
+  it('adds PHP from a cli and an fpm archive, like static-php.dev gives them', async () => {
+    freshEnv()
+    const src = mkdtempSync(join(tmpdir(), 'lm-phpdl-'))
+    fakePhp(join(src, 'b'), '8.1.30')
+    execFileSync('tar', ['-czf', join(src, 'php-8.1.30-cli-macos-aarch64.tar.gz'), '-C', join(src, 'b'), 'php'])
+    execFileSync('tar', ['-czf', join(src, 'php-8.1.30-fpm-macos-aarch64.tar.gz'), '-C', join(src, 'b'), 'php-fpm'])
+    const v = await importPhp([join(src, 'php-8.1.30-cli-macos-aarch64.tar.gz'), join(src, 'php-8.1.30-fpm-macos-aarch64.tar.gz')])
+    expect(v).toBe('8.1.30')
+    expect(exists2(join(dirs.php('8.1'), 'php-fpm'))).toBe(true)
+    expect(read2(join(dirs.php('8.1'), 'SOURCE'), 'utf8')).toBe('imported')
+    expect(read2(join(dirs.php('8.1'), 'EXTENSIONS'), 'utf8')).toBe('mbstring\nopenssl')
+  })
+
+  it('explains what is missing or wrong', async () => {
+    freshEnv()
+    const src = mkdtempSync(join(tmpdir(), 'lm-phpbad-'))
+    fakePhp(join(src, 'only'), '8.2.1')
+    execFileSync('tar', ['-czf', join(src, 'cli.tar.gz'), '-C', join(src, 'only'), 'php'])
+    await expect(importPhp([join(src, 'cli.tar.gz')])).rejects.toThrow(/not php-fpm/)
+    fakePhp(join(src, 'mix'), '8.2.1', '8.3.4')
+    await expect(importPhp([join(src, 'mix')])).rejects.toThrow(/Choose matching/)
+  })
+
+  it('offers only the newest PHP, plus what you have', async () => {
+    freshEnv()
+    fakePhp(dirs.php('8.1'), '8.1.30')
+    writeFileSync(join(dirs.php('8.1'), 'VERSION'), '8.1.30')
+    const list = await listVersions()
+    const minors = list.map((v) => v.minor)
+    expect(minors).toContain('8.1')
+    expect(minors.filter((m) => m !== '8.1').length).toBeLessThanOrEqual(1)
+  })
+})
