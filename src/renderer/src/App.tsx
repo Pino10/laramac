@@ -20,6 +20,8 @@ import Servers from './pages/Servers'
 import Packages from './pages/Packages'
 import ApiClient from './pages/ApiClient'
 import Starters from './pages/Starters'
+import Languages from './pages/Languages'
+import Recon from './pages/Recon'
 import Security from './pages/Security'
 import GitHub from './pages/GitHub'
 import Updates from './pages/Updates'
@@ -82,6 +84,8 @@ function Shell(): React.JSX.Element {
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
               {page === 'starters' && <Starters />}
+              {page === 'languages' && <Languages />}
+              {page === 'recon' && <Recon />}
               {page === 'security' && <Security />}
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}

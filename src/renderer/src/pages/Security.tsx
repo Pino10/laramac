@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
-import type { AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
+import type { ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 import { Answer } from '../components/Answer'
@@ -48,7 +48,9 @@ export default function Security(): React.JSX.Element {
   const [token, setToken] = useState('')
   const [org, setOrg] = useState('')
   const [listed, setListed] = useState<Picked[] | null>(null)
-  const [reviewer, setReviewer] = useState<'claude' | 'model'>('claude')
+  const [reviewer, setReviewer] = useState<ReviewerKind>('claude')
+  const [reviewers, setReviewers] = useState<ReviewerOption[]>([])
+  const [scanners, setScanners] = useState(true)
   const [focus, setFocus] = useState<ReviewFocus>('security')
   const [result, setResult] = useState<ReviewResult | null>(null)
   const [history, setHistory] = useState<ReviewInfo[]>([])
@@ -56,6 +58,7 @@ export default function Security(): React.JSX.Element {
 
   useEffect(() => {
     void api.invoke('review:list').then(setHistory)
+    void api.invoke('review:reviewers').then(setReviewers)
     void api
       .invoke('github:repos')
       .then(setRepos)
@@ -120,7 +123,7 @@ export default function Security(): React.JSX.Element {
   const run = async (): Promise<void> => {
     const source =
       kind === 'site' ? { kind, site } : kind === 'github' && connected ? { kind, repo } : { kind: 'git', url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
-    const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus } as never))
+    const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus, scanners } as never))
     if (r) {
       setResult(r)
       setOpened(null)
@@ -216,13 +219,12 @@ export default function Security(): React.JSX.Element {
             <div className="sec-row">
               <div className="field">
                 <label>Reviewer</label>
-                <div className="seg" role="radiogroup" aria-label="Reviewer">
-                  <button role="radio" aria-checked={reviewer === 'claude'} onClick={() => setReviewer('claude')}>
-                    <Sparkles size={13} /> Claude Code
-                  </button>
-                  <button role="radio" aria-checked={reviewer === 'model'} onClick={() => setReviewer('model')}>
-                    <Bot size={13} /> {current ? `${current.provider}` : 'Your model'}
-                  </button>
+                <div className="seg" role="radiogroup" aria-label="Reviewer" style={{ flexWrap: 'wrap' }}>
+                  {(reviewers.length ? reviewers : [{ id: 'claude', name: 'Claude Code', installed: true } as ReviewerOption]).map((r) => (
+                    <button key={r.id} role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
+                      {r.id === 'model' ? <Bot size={13} /> : <Sparkles size={13} />} {r.name}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="field">
@@ -242,8 +244,18 @@ export default function Security(): React.JSX.Element {
                 </div>
               </div>
             </div>
+            <label className="check-row">
+              <input type="checkbox" checked={scanners} onChange={(e) => setScanners(e.target.checked)} />
+              Run MacSec’s scanners first (Semgrep, Gitleaks, OSV-Scanner), when MacSec is installed, and have the reviewer check each result
+            </label>
             <div className="hint">
-              {reviewer === 'claude'
+              {reviewer === 'claude-local'
+                ? 'Claude Code does the review with all its tools and Laramac’s security skills, but every request goes to your own model in LM Studio. Nothing leaves this Mac. Load the model with a context length of 32,000 or more.'
+                : reviewer === 'codex' || reviewer === 'gemini'
+                  ? `${reviewer === 'codex' ? 'Codex' : 'Gemini CLI'} reads the project in its read-only mode, with Laramac’s review method in the prompt.`
+                  : reviewer === 'coderabbit'
+                    ? 'CodeRabbit gives an independent second opinion on the changes in a Git project (not the whole project).'
+                    : reviewer === 'claude'
                 ? (
                   <>
                     Claude Code reads the whole project itself, in read-only mode: it can open and search files but not change or run anything. This needs Claude Code’s command line tool (the
@@ -277,6 +289,8 @@ export default function Security(): React.JSX.Element {
             />
           )}
 
+          <ClaudeConnect />
+
           {history.length > 0 && (
             <>
               <h2 className="section-title">Past reviews</h2>
@@ -295,9 +309,17 @@ export default function Security(): React.JSX.Element {
                       }}
                     >
                       <div className="row-title">{h.title}</div>
-                      <div className="row-sub">{h.reviewer === 'claude' ? 'Claude Code' : 'Model'} · {h.focus}</div>
+                      <div className="row-sub">
+                        {reviewers.find((r) => r.id === h.reviewer)?.name ?? h.reviewer} · {h.focus}
+                        {h.skills?.length ? ` · ${h.skills.length} skills` : ''}
+                      </div>
                     </button>
                     <Counts counts={h.counts} secrets={h.secrets} />
+                    {h.session && !h.remote && (
+                      <button className="btn btn-sm" title="Opens the same Claude Code conversation in Terminal" onClick={() => act('review-cont', () => api.invoke('review:continue', h.id, 'terminal'))}>
+                        <Sparkles size={12} /> Continue in Claude Code
+                      </button>
+                    )}
                     {!h.remote && (
                       <button className="icon-btn" data-tip="Show folder" aria-label="Show folder" onClick={() => act('review-open', () => api.invoke('review:open', h.id, 'folder'))}>
                         <FolderOpen />
@@ -555,5 +577,53 @@ function Packages(): React.JSX.Element {
         </div>
       )}
     </>
+  )
+}
+
+/** Laramac's skills in every Claude Code session, and Claude desktop connected to Laramac. */
+function ClaudeConnect(): React.JSX.Element {
+  const { act, busy } = useApp()
+  const api = window.laramac
+  const [skills, setSkills] = useState<{ names: string[]; installed: boolean; desktop: boolean } | null>(null)
+  const [desk, setDesk] = useState<{ app: boolean; connected: boolean; path: string } | null>(null)
+  useEffect(() => {
+    void api.invoke('skills:status').then(setSkills)
+    void api.invoke('desktop:status').then(setDesk)
+  }, [api])
+  return (
+    <div className="claude-connect glass">
+      <div>
+        <div className="row-title">Skills</div>
+        <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+          Every Claude Code review loads Laramac’s security skills: {skills?.names.join(', ') ?? '…'}. Add your own in ~/.laramac/my-skills/skills.
+        </div>
+      </div>
+      <button
+        className="btn btn-sm"
+        disabled={busy.has('skills')}
+        onClick={async () => {
+          const r = await act('skills', () => api.invoke('skills:install', !skills?.installed))
+          if (r) setSkills(r)
+        }}
+      >
+        {skills?.installed ? 'Remove from Claude' : 'Install for Claude Code and Claude desktop'}
+      </button>
+      <div>
+        <div className="row-title">Claude desktop</div>
+        <div className="row-sub" style={{ whiteSpace: 'normal' }}>
+          {desk?.app ? (desk.connected ? 'Connected. In the Claude app, ask it to review a site or run recon; it uses Laramac.' : 'Connect it, and Claude in the desktop app can review your sites, run recon and read the results through Laramac.') : 'The Claude desktop app is not installed (claude.ai/download).'}
+        </div>
+      </div>
+      <button
+        className="btn btn-sm"
+        disabled={!desk?.app || busy.has('desktop')}
+        onClick={async () => {
+          const r = await act('desktop', () => api.invoke('desktop:connect'))
+          if (r) setDesk({ app: true, connected: r.connected, path: r.path })
+        }}
+      >
+        {desk?.connected ? 'Connect again' : 'Connect Claude desktop'}
+      </button>
+    </div>
   )
 }

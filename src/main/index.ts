@@ -30,6 +30,9 @@ import { collectSiteLogs, explainSite } from './sitedoctor'
 import * as models from './models'
 import * as mailrelay from './mailrelay'
 import * as review from './review'
+import * as recon from './recon'
+import { installForClaude, installedForClaude, removeFromClaude, SKILLS } from './seckit/skills'
+import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath } from './desktop'
 import * as scan from './scan'
 import * as audit from './audit'
 import * as dumps from './dumps'
@@ -47,7 +50,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -78,7 +81,7 @@ import {
 } from './tools'
 import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
-import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, testLlm } from './integrations'
+import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, openTerminal, shellQuote, testLlm } from './integrations'
 import { assistantChat } from './ai'
 import { processEvents, tailFile } from './process'
 import { phpmyadminInstalled } from './webconf'
@@ -897,10 +900,10 @@ function registerIpc(): void {
   // ---- Code review and web scans. Everything stays read-only on your code.
   handle('review:run', async (req) => {
     if (!req || typeof req !== 'object' || !req.source) throw new ValidationError('That review request is not valid.')
-    const reviewer = req.reviewer === 'claude' ? 'claude' : 'model'
+    const reviewer = (['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(req.reviewer) ? req.reviewer : 'claude'
     const focus = (['security', 'bugs', 'all'] as const).includes(req.focus) ? req.focus : 'security'
     const st = getSettings()
-    if (reviewer === 'model' && !st.llm.model) throw new ValidationError('Pick a model on the Tools page or in the Assistant first.')
+    if ((reviewer === 'model' || reviewer === 'claude-local') && !st.llm.model) throw new ValidationError('Pick a model (LM Studio) in the Assistant first.')
     const src = req.source
     const label = src.kind === 'site' ? src.site : src.kind === 'github' ? src.repo : src.url.replace(/^https:\/\//, '').replace(/\.git$/, '')
     const result = await jobs.run(`Reviewing ${label}`, async (update) => {
@@ -930,7 +933,7 @@ function registerIpc(): void {
       }
       const remote = src.kind !== 'site'
       try {
-        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, remote }, update)
+        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, remote, scanners: req.scanners !== false }, update)
       } finally {
         // The downloaded code exists only for this review: it vanishes as soon as the review ends.
         if (remote) review.endReviewSession(root)
@@ -938,6 +941,70 @@ function registerIpc(): void {
     })
     activity.push('success', `Reviewed ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings, ${result.secrets.length} keys in files.`)
     return result
+  })
+  const skillsStatus = (): { names: string[]; installed: boolean; desktop: boolean } => ({ names: review.skillList(), installed: installedForClaude('laramac'), desktop: desktopAppInstalled() })
+  const desktopStatus = (): { app: boolean; connected: boolean; path: string } => ({ app: desktopAppInstalled(), connected: desktopConnected(), path: desktopConfigPath() })
+  review.ensurePlugins()
+  handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model))
+  handle('review:continue', async (id, where) => {
+    const info = review.listReviews().find((r) => r.id === id)
+    if (!info) throw new ValidationError('That review is gone.')
+    if (where === 'desktop') {
+      if (!existsSync('/Applications/Claude.app')) throw new ValidationError('The Claude desktop app is not installed. Get it at claude.ai/download.')
+      await shell.openPath('/Applications/Claude.app')
+      return
+    }
+    if (!info.folder || !existsSync(info.folder)) throw new ValidationError('The code for this review is no longer on this Mac.')
+    const report = join(review.reviewsDir(), `${info.id}.md`)
+    const ask = `Read the code review in ${report}. Go through the findings, most severe first, and help me fix them one by one.`
+    const line = info.session && /^[0-9a-f-]{36}$/.test(info.session) ? `claude --resume ${info.session} || claude ${shellQuote(ask)}` : `claude ${shellQuote(ask)}`
+    await openTerminal(info.folder, line)
+  })
+  handle('recon:start', (req) => {
+    const r = (req ?? {}) as Partial<ReconRequest>
+    if (typeof r.target !== 'string') throw new ValidationError('Enter a domain, such as example.com.')
+    const depth = (['passive', 'standard', 'deep'] as const).includes(r.depth as never) ? (r.depth as ReconRequest['depth']) : 'standard'
+    const reviewer = (['none', 'claude', 'claude-local', 'codex', 'gemini', 'model'] as const).includes(r.reviewer as never) ? (r.reviewer as ReconRequest['reviewer']) : 'none'
+    try {
+      const info = recon.startRecon({ target: r.target, depth, reviewer, authorized: r.authorized === true }, (i) => send('recon:changed', i), (id, text) => send('recon:line', { id, text: text.slice(0, 300) }))
+      activity.push('info', `Recon of ${info.domain} started`, depth === 'passive' ? 'Passive: nothing is sent to the site itself.' : 'Read-only: ordinary requests at a gentle rate.')
+      return info
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+  })
+  handle('recon:list', () => recon.listRecon())
+  handle('recon:get', (id) => {
+    try {
+      return recon.reconDetail(String(id))
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+  })
+  handle('recon:cancel', (id) => recon.cancelRecon(String(id)))
+  handle('recon:delete', (id) => {
+    recon.deleteRecon(String(id))
+    return recon.listRecon()
+  })
+  handle('recon:tools', () => ({ subfinder: recon.hasSubfinder() }))
+  handle('recon:install-subfinder', async () => {
+    await jobs.run('Installing subfinder', (u) => recon.installSubfinder(u))
+    return { subfinder: recon.hasSubfinder() }
+  })
+  handle('skills:status', () => skillsStatus())
+  handle('skills:install', (on) => {
+    if (on === true) installForClaude('laramac')
+    else removeFromClaude('laramac')
+    activity.push('success', on === true ? 'Security skills installed for Claude' : 'Security skills removed from Claude', on === true ? 'Claude Code in Terminal and in the Claude desktop app can use them now.' : '')
+    return skillsStatus()
+  })
+  handle('desktop:status', () => desktopStatus())
+  handle('desktop:connect', () => {
+    setSettings({ mcpEnabled: true })
+    void startMcp()
+    const r = connectClaudeDesktop(mcpUrl(), mcpToken())
+    activity.push('success', 'Claude desktop is connected to Laramac', 'Restart the Claude app, then ask it to review a site or run recon.')
+    return r
   })
   // Review sessions never outlive the app: anything left from a crash is removed at start.
   review.cleanReviewSessions()
@@ -1418,6 +1485,54 @@ function registerIpc(): void {
   }
   const engineArg = (v: unknown): 'mysql' | 'mariadb' => (v === 'mariadb' ? 'mariadb' : 'mysql')
   const mcpTools: McpTool[] = [
+    {
+      name: 'start_code_review',
+      description: 'Starts a read-only security code review of a local site with Laramac (Claude Code, Claude Code on the local model, Codex, Gemini CLI, CodeRabbit or the local model), with MacSec scanners when installed. Returns when the report is ready; read it with read_code_review.',
+      inputSchema: { type: 'object', properties: { site: { type: 'string' }, reviewer: { type: 'string', enum: ['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] }, focus: { type: 'string', enum: ['security', 'bugs', 'all'] } }, required: ['site'] },
+      writes: true,
+      run: async (a) => {
+        const site = siteByName(String(a.site))
+        const st = getSettings()
+        const reviewer = (['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(a.reviewer as never) ? (a.reviewer as ReviewerKind) : 'claude-local'
+        const focus = (['security', 'bugs', 'all'] as const).includes(a.focus as never) ? (a.focus as ReviewFocus) : 'security'
+        const r = await jobs.run(`Reviewing ${site.name}`, (u) => review.runReview({ root: site.path, name: site.name, reviewer, focus, modelName: st.llm.model, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, scanners: true }, u))
+        return { id: r.id, counts: r.counts, keysInFiles: r.secrets.length, report: r.markdown.slice(0, 60000) }
+      }
+    },
+    {
+      name: 'list_code_reviews',
+      description: 'Lists the code reviews Laramac has kept, newest first, with their findings by severity.',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () => review.listReviews()
+    },
+    {
+      name: 'read_code_review',
+      description: 'Reads one code review report (Markdown) by its id.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      run: async (a) => review.readReview(String(a.id)).slice(0, 80000)
+    },
+    {
+      name: 'start_recon',
+      description: 'Starts read-only recon of a domain the user owns or may assess: subdomains (certificate logs, subfinder, Wayback), DNS and takeover hints, live hosts and technologies, JavaScript source maps, endpoints and keys, and exposed files. Nothing is attacked. The user must have confirmed permission for domains that are not local. Returns the recon id; read it with read_recon.',
+      inputSchema: { type: 'object', properties: { domain: { type: 'string' }, depth: { type: 'string', enum: ['passive', 'standard', 'deep'] }, authorized: { type: 'boolean', description: 'The user confirmed they own the domain or have written permission.' } }, required: ['domain', 'authorized'] },
+      writes: true,
+      run: async (a) => recon.startRecon({ target: String(a.domain), depth: (['passive', 'standard', 'deep'] as const).includes(a.depth as never) ? (a.depth as ReconRequest['depth']) : 'standard', reviewer: 'none', authorized: a.authorized === true }, (i) => send('recon:changed', i), (id, text) => send('recon:line', { id, text })).id
+    },
+    {
+      name: 'list_recon',
+      description: 'Lists the recon sessions Laramac has kept, with their status and findings by severity.',
+      inputSchema: { type: 'object', properties: {} },
+      run: async () => recon.listRecon()
+    },
+    {
+      name: 'read_recon',
+      description: 'Reads one recon session: steps, hosts, JavaScript (source maps, endpoints, masked keys), parameters and findings.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      run: async (a) => {
+        const d = recon.reconDetail(String(a.id))
+        return { ...d, hosts: d.hosts.slice(0, 300), js: d.js.slice(0, 200), endpoints: d.endpoints.slice(0, 500) }
+      }
+    },
     {
       name: 'list_sites',
       description: 'Lists the local sites: name, URL, folder, project type, PHP version and the database each one uses.',

@@ -610,10 +610,23 @@ export type ReviewFocus = 'security' | 'bugs' | 'all'
 
 export type ReviewSource = { kind: 'site'; site: string } | { kind: 'github'; repo: string } | { kind: 'git'; url: string; token?: string }
 
+/** Who reviews: Claude Code (your sign-in or your own model), Codex, Gemini CLI, CodeRabbit, or a model directly. */
+export type ReviewerKind = 'claude' | 'claude-local' | 'codex' | 'gemini' | 'coderabbit' | 'model'
+
 export interface ReviewRequest {
   source: ReviewSource
-  reviewer: 'claude' | 'model'
+  reviewer: ReviewerKind
   focus: ReviewFocus
+  /** Run MacSec's scanners first (Semgrep, Gitleaks, OSV-Scanner) when MacSec is installed. */
+  scanners?: boolean
+}
+
+export interface ReviewerOption {
+  id: ReviewerKind
+  name: string
+  installed: boolean
+  /** Why it cannot run yet, in words. */
+  note?: string
 }
 
 export interface SecretHit {
@@ -626,7 +639,11 @@ export interface ReviewInfo {
   id: string
   title: string
   folder: string
-  reviewer: 'claude' | 'model'
+  reviewer: ReviewerKind
+  /** The Claude Code session that did the review, to carry on with it. */
+  session?: string
+  /** Skills the reviewer had. */
+  skills?: string[]
   focus: ReviewFocus
   at: string
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
@@ -639,7 +656,9 @@ export interface ReviewResult {
   id: string
   title: string
   folder: string
-  reviewer: 'claude' | 'model'
+  reviewer: ReviewerKind
+  session?: string
+  skills?: string[]
   markdown: string
   secrets: SecretHit[]
   files: number
@@ -871,6 +890,19 @@ export interface Channels {
   'dumps:status': { args: []; result: { enabled: boolean; running: boolean } }
   'dumps:open-file': { args: [string, number | null]; result: void }
   'review:list': { args: []; result: ReviewInfo[] }
+  'review:reviewers': { args: []; result: ReviewerOption[] }
+  'recon:start': { args: [ReconRequest]; result: ReconInfo }
+  'recon:list': { args: []; result: ReconInfo[] }
+  'recon:get': { args: [string]; result: ReconDetail }
+  'recon:cancel': { args: [string]; result: void }
+  'recon:delete': { args: [string]; result: ReconInfo[] }
+  'recon:tools': { args: []; result: { subfinder: boolean } }
+  'recon:install-subfinder': { args: []; result: { subfinder: boolean } }
+  'review:continue': { args: [string, 'terminal' | 'desktop']; result: void }
+  'skills:status': { args: []; result: { names: string[]; installed: boolean; desktop: boolean } }
+  'skills:install': { args: [boolean]; result: { names: string[]; installed: boolean; desktop: boolean } }
+  'desktop:connect': { args: []; result: { connected: boolean; path: string } }
+  'desktop:status': { args: []; result: { app: boolean; connected: boolean; path: string } }
   'review:read': { args: [string]; result: string }
   'review:delete': { args: [string]; result: ReviewInfo[] }
   'review:open': { args: [string, 'report' | 'folder' | 'agent']; result: void }
@@ -978,6 +1010,72 @@ export interface Events {
   /** The menu bar asks the window to show a page. */
   'app:navigate': string
   'dumps:new': DumpItem
+  'recon:changed': ReconInfo
+  'recon:line': { id: string; text: string }
+}
+
+// ---------------------------------------------------------------- Recon
+
+export type ReconDepth = 'passive' | 'standard' | 'deep'
+export type ReconSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export interface ReconStep {
+  id: string
+  label: string
+  status: 'waiting' | 'running' | 'done' | 'skipped' | 'failed'
+  detail?: string
+  startedAt?: string
+  ms?: number
+}
+
+export interface ReconFindingInfo {
+  id: string
+  severity: ReconSeverity
+  title: string
+  url?: string
+  description?: string
+  fix?: string
+  kind: string
+  verdict?: 'confirmed' | 'false-positive'
+  aiNote?: string
+}
+
+export interface ReconInfo {
+  id: string
+  target: string
+  domain: string
+  depth: ReconDepth
+  reviewer: ReviewerKind | 'none'
+  createdAt: string
+  finishedAt?: string
+  status: 'running' | 'done' | 'failed' | 'cancelled'
+  steps: ReconStep[]
+  counts: Record<ReconSeverity, number>
+  hosts?: number
+  live?: number
+  scripts?: number
+  sourceMaps?: number
+  endpoints?: number
+  error?: string
+}
+
+export interface ReconDetail extends Omit<ReconInfo, 'hosts' | 'endpoints'> {
+  findings: ReconFindingInfo[]
+  hostCount?: number
+  hosts: { host: string; ips: string[]; cname?: string; live?: { url: string; status: number; title?: string; tech: string[] }; sources: string[] }[]
+  js: { url: string; bytes: number; sourceMap?: { url: string; files: number; sample: string[] }; endpoints: string[]; secrets: { kind: string; masked: string }[] }[]
+  endpoints: string[]
+  params: string[]
+  urls: number
+  report?: string
+}
+
+export interface ReconRequest {
+  target: string
+  depth: ReconDepth
+  reviewer: ReviewerKind | 'none'
+  /** You own the domain or have written permission to assess it. */
+  authorized: boolean
 }
 
 export interface LaramacApi {

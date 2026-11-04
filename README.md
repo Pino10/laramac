@@ -42,7 +42,9 @@ It was built for people moving from **Laragon** on Windows who want the same "it
 - **GitHub.** Create, browse, clone, download and delete repositories, and push to main, a branch, a tag or a release.
 - **Dumps and logs.** `dump()` and `dd()` land in a Dumps window instead of the page, and every site has a live log viewer.
 - **Project files.** A `laramac.yml` in a project sets up PHP, services, the database and the dev server for everyone who clones it.
-- **Security.** AI code review of a site, a GitHub repository or an Azure DevOps repository, by Claude Code or your own model, plus Nuclei web scans and a check for leaked keys.
+- **Security.** AI code review of a site, a GitHub repository or an Azure DevOps repository, by Claude Code (with your account or your own LM Studio model), Codex, Gemini CLI, CodeRabbit or your model, with security skills and MacSec's scanners when installed; reviews you can continue in Claude Code; Claude desktop connected; Nuclei web scans and a check for leaked keys.
+- **Recon.** Read-only mapping of a domain: subdomains (certificate logs, subfinder, Wayback), DNS and takeover hints, live hosts and technologies, archived URLs and parameters, JavaScript source maps, endpoints and keys, and exposed files, with an optional AI write-up. Kept as sessions.
+- **Supabase and Firebase.** Run locally for a project, with keys written to .env.
 - **An API client.** Works like Postman: import collections and environments, write tests, run whole collections, and copy any request as code.
 - **AI.** Claude Code, Codex, OpenCode, vMLX, LM Studio and more, and a direct connection so Claude Code can drive Laramac.
 - **Safety.** Snapshots of any site's files and database, reset without uninstalling, and updates that keep everything.

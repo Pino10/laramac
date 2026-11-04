@@ -16,7 +16,9 @@ import {
   Terminal,
   Wrench,
   Rocket,
-  ShieldCheck
+  ShieldCheck,
+  Code2,
+  Radar
 } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
@@ -32,16 +34,25 @@ export const GROUPS: Group[] = [
     items: [
       { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={I} /> },
       { id: 'sites', label: 'Sites', icon: <Globe size={I} /> },
-      { id: 'starters', label: 'Starters', icon: <Rocket size={I} /> }
+      { id: 'starters', label: 'New project', icon: <Rocket size={I} /> }
     ]
   },
   {
     id: 'stack',
-    label: 'Stack',
+    label: 'Your stack',
     items: [
+      { id: 'servers', label: 'Web servers', icon: <Server size={I} /> },
+      { id: 'languages', label: 'Languages', icon: <Code2 size={I} /> },
       { id: 'php', label: 'PHP', icon: <Terminal size={I} /> },
-      { id: 'databases', label: 'Databases', icon: <Database size={I} /> },
-      { id: 'servers', label: 'Servers', icon: <Server size={I} /> }
+      { id: 'databases', label: 'Databases', icon: <Database size={I} /> }
+    ]
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    items: [
+      { id: 'security', label: 'Code review', icon: <ShieldCheck size={I} /> },
+      { id: 'recon', label: 'Recon', icon: <Radar size={I} /> }
     ]
   },
   {
@@ -50,16 +61,15 @@ export const GROUPS: Group[] = [
     items: [
       { id: 'api', label: 'API client', icon: <Send size={I} /> },
       { id: 'github', label: 'GitHub', icon: <FolderGit2 size={I} /> },
-      { id: 'security', label: 'Security', icon: <ShieldCheck size={I} /> }
+      { id: 'packages', label: 'Packages', icon: <Package size={I} /> }
     ]
   },
   {
     id: 'extras',
-    label: 'Extras',
+    label: 'AI and tools',
     items: [
-      { id: 'tools', label: 'Tools', icon: <Wrench size={I} /> },
       { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={I} /> },
-      { id: 'packages', label: 'Packages', icon: <Package size={I} /> }
+      { id: 'tools', label: 'Tools', icon: <Wrench size={I} /> }
     ]
   }
 ]

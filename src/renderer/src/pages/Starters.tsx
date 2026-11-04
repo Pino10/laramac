@@ -16,20 +16,17 @@ function Mark({ s, size = 44 }: { s: Starter; size?: number }): React.JSX.Elemen
 }
 
 export default function Starters(): React.JSX.Element {
-  const { act, busy, pendingStarter, setPendingStarter } = useApp()
+  const { pendingStarter, setPendingStarter, setPage } = useApp()
   const api = window.laramac
-  const [tab, setTab] = useState<'starters' | 'runtimes'>('starters')
   const [cat, setCat] = useState<StarterCategory | 'all'>('all')
   const [query, setQuery] = useState('')
   const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([])
-  const [latest, setLatest] = useState<Partial<Record<RuntimeId, string>>>({})
   const [versions, setVersions] = useState<Record<string, string>>({})
   const [picked, setPicked] = useState<Starter | null>(null)
 
   useEffect(() => {
     void api.invoke('runtimes:list').then(setRuntimes)
     void api.invoke('starters:versions').then(setVersions).catch(() => undefined)
-    void api.invoke('runtimes:latest').then(setLatest).catch(() => undefined)
   }, [api])
 
   useEffect(() => {
@@ -48,18 +45,11 @@ export default function Starters(): React.JSX.Element {
   return (
     <>
       <PageHead title="Starters" desc="Start a project with each framework's own official setup tool, so you always get the newest version. Laramac installs what it needs, sets up the database and gives it a .test address.">
-        <div className="seg-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'starters'} onClick={() => setTab('starters')}>
-            Starters
-          </button>
-          <button role="tab" aria-selected={tab === 'runtimes'} onClick={() => setTab('runtimes')}>
-            Languages
-          </button>
-        </div>
+        <button className="btn" onClick={() => setPage('languages')}>
+          Languages
+        </button>
       </PageHead>
 
-      {tab === 'starters' ? (
-        <>
           <div className="st-filters">
             <label className="searchbox">
               <Search size={15} />
@@ -99,53 +89,6 @@ export default function Starters(): React.JSX.Element {
             ))}
             {shown.length === 0 && <div className="empty dim">No starter matches “{query}”.</div>}
           </div>
-        </>
-      ) : (
-        <div className="panel">
-          {runtimes.map((r) => {
-            const newer = latest[r.id] && r.version && r.managed && r.id !== 'php' && latest[r.id] !== r.version && r.id !== 'python'
-            return (
-              <div key={r.id} className="rt-row">
-                <div className="row-main">
-                  <div className="row-title">
-                    {r.name}
-                    {r.installed && <span className="tag">{r.managed ? 'Laramac' : 'This Mac'}</span>}
-                  </div>
-                  <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-                    {r.description}
-                  </div>
-                </div>
-                <div className="rt-version">
-                  {r.installed ? <strong>{r.version}</strong> : <span className="hint">Not installed</span>}
-                  {latest[r.id] && <span className="hint">Latest {latest[r.id]}</span>}
-                </div>
-                {r.id === 'php' ? (
-                  <span className="hint" style={{ width: 120, textAlign: 'right' }}>
-                    On the PHP page
-                  </span>
-                ) : !r.installed || newer ? (
-                  <button
-                    className={r.installed ? 'btn btn-sm' : 'btn btn-primary btn-sm'}
-                    style={{ width: 120 }}
-                    disabled={busy.has(`rt-${r.id}`) || !r.canInstall}
-                    onClick={() => act(`rt-${r.id}`, () => api.invoke('runtimes:install', r.id).then(setRuntimes))}
-                  >
-                    {r.installed ? <RefreshCw size={13} /> : <Download size={13} />}
-                    {busy.has(`rt-${r.id}`) ? 'Installing' : r.installed ? 'Update' : 'Install'}
-                  </button>
-                ) : (
-                  <span className="st-ready">
-                    <Check size={14} /> Ready
-                  </span>
-                )}
-              </div>
-            )
-          })}
-          <div className="hint" style={{ padding: '12px 18px' }}>
-            Laramac keeps its own copies in its folder, so nothing else on your Mac changes. Copies you installed yourself (with Homebrew, say) are used when present.
-          </div>
-        </div>
-      )}
 
       {picked && <CreateDialog starter={picked} runtimes={runtimes} versions={versions} onClose={() => setPicked(null)} />}
     </>

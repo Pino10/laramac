@@ -80,6 +80,10 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 
 Adding a feature usually means: a function in `src/main/`, a channel in `Channels` (`src/shared/types.ts`), a `handle('…')` in `src/main/index.ts`, and a button in a page. The interface can only ask; the main process checks every request before doing anything.
 
+## Shared with MacSec
+
+`src/main/seckit/` (recon, reviewers, skills) is the same in Laramac and MacSec. Change it in one and copy it to the other.
+
 ## Working on it
 
 ```sh

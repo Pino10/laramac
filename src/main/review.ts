@@ -7,7 +7,10 @@ import { execFile, spawn } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { dirname, extname, join, relative, sep } from 'path'
 import { randomBytes } from 'crypto'
-import type { ReviewFocus, ReviewInfo, ReviewResult, SecretHit } from '../shared/types'
+import type { ReviewerKind, ReviewFocus, ReviewInfo, ReviewResult, SecretHit } from '../shared/types'
+import { reviewerRun, explainFailure, REVIEWER_NAMES, type LocalModel, type ReviewerId } from './seckit/reviewers'
+import { SKILLS, skillNames, skillText, writePlugin } from './seckit/skills'
+import { homedir } from 'os'
 import { dirs } from './paths'
 import { chatWithLlm } from './models'
 import { findCli } from './aitools'
@@ -126,47 +129,117 @@ Do not change any file.
 ${FORMAT}`
 }
 
-function runClaude(cwd: string, prompt: string, onLine: (l: string) => void, persistFlag = true): Promise<string> {
-  const claude = findCli(['claude'])
-  if (!claude) {
-    const app = existsSync('/Applications/Claude.app')
-    return Promise.reject(
-      new Error(
-        app
-          ? 'You have the Claude app, but code review needs Claude Code’s command line tool, which is installed separately. Press Install Claude Code, then try again, or choose a model instead.'
-          : 'Claude Code is not installed. Press Install Claude Code, then try again, or choose a model instead.'
-      )
-    )
+// ---------------------------------------------------------------- Skills
+
+/** Laramac's security skills, as a Claude Code plugin loaded for its reviews. */
+export const pluginDir = (): string => join(dirs.root(), 'claude-plugin')
+/** Your own skills: one folder each with a SKILL.md, loaded into every review too. */
+export const mySkillsDir = (): string => join(dirs.root(), 'my-skills')
+
+export function ensurePlugins(): string[] {
+  writePlugin(pluginDir(), 'laramac-security', 'Laramac security skills: code review method, secrets, dependencies, recon, JavaScript recon and reports.')
+  const mine = mySkillsDir()
+  if (!existsSync(join(mine, '.claude-plugin', 'plugin.json'))) {
+    mkdirSync(join(mine, '.claude-plugin'), { recursive: true })
+    mkdirSync(join(mine, 'skills'), { recursive: true })
+    writeFileSync(join(mine, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'my-skills', version: '1.0.0', description: 'Your own skills for Laramac reviews.', license: 'MIT' }, null, 2))
+    writeFileSync(join(mine, 'skills', 'README.md'), 'Put each skill in its own folder here, with a SKILL.md inside (name and description at the top). Laramac loads them into every review.\n')
   }
+  return [pluginDir(), ...(skillNames(join(mine, 'skills')).length ? [mine] : [])]
+}
+
+export const skillList = (): string[] => [...Object.keys(SKILLS), ...skillNames(join(mySkillsDir(), 'skills'))]
+
+// ---------------------------------------------------------------- MacSec's scanners, when MacSec is installed
+
+const macsecBin = (n: string): string => join(homedir(), 'MacSec', 'tools', 'bin', n)
+export const hasMacsec = (): boolean => existsSync(macsecBin('semgrep')) || existsSync(macsecBin('gitleaks'))
+
+function runFile(bin: string, args: string[], cwd: string, timeoutMs: number): Promise<string> {
+  const home = join(homedir(), 'MacSec', 'tools', 'home')
+  mkdirSync(join(home, 'tmp'), { recursive: true })
+  return new Promise((resolve) =>
+    execFile(bin, args, { cwd, timeout: timeoutMs, maxBuffer: 200 * 1024 * 1024, env: { PATH: `${dirname(bin)}:/usr/bin:/bin`, HOME: home, TMPDIR: join(home, 'tmp'), SEMGREP_SEND_METRICS: 'off', NO_COLOR: '1', ...Object.fromEntries(['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE'].filter((k) => process.env[k]).map((k) => [k, process.env[k] as string])) } }, (_e, out) => resolve(String(out)))
+  )
+}
+
+/** Semgrep, Gitleaks and OSV-Scanner from MacSec's folder: a list the AI reviewer then checks. */
+export async function macsecScan(root: string, onLine: (l: string) => void): Promise<string[]> {
+  const out: string[] = []
+  if (existsSync(macsecBin('semgrep'))) {
+    onLine('Semgrep (from MacSec) is reading the code')
+    try {
+      const j = JSON.parse(await runFile(macsecBin('semgrep'), ['scan', '--config', 'p/default', '--config', 'p/secrets', '--json', '--quiet', '--metrics', 'off', '--timeout', '20', '.'], root, 20 * 60_000)) as { results?: { path: string; start: { line: number }; check_id: string; extra: { severity: string; message: string } }[] }
+      for (const r of (j.results ?? []).slice(0, 80)) out.push(`[Semgrep ${r.extra.severity}] ${r.path}:${r.start.line} ${r.check_id.split('.').pop()}: ${r.extra.message.split('\n')[0].slice(0, 160)}`)
+    } catch {
+      // No usable report.
+    }
+  }
+  if (existsSync(macsecBin('gitleaks'))) {
+    onLine('Gitleaks (from MacSec) is looking for keys')
+    const report = join(reviewsDir(), `gitleaks-${randomBytes(4).toString('hex')}.json`)
+    mkdirSync(reviewsDir(), { recursive: true })
+    await runFile(macsecBin('gitleaks'), ['dir', '.', '--report-format', 'json', '--report-path', report, '--no-banner', '--redact', '--exit-code', '0', '--log-level', 'error'], root, 10 * 60_000)
+    try {
+      for (const g of (JSON.parse(readFileSync(report, 'utf8')) as { File: string; StartLine: number; Description: string }[]).slice(0, 40)) out.push(`[Gitleaks] ${g.File}:${g.StartLine} ${g.Description}`)
+    } catch {
+      // Nothing found.
+    }
+    rmSync(report, { force: true })
+  }
+  if (existsSync(macsecBin('osv-scanner'))) {
+    onLine('OSV-Scanner (from MacSec) is checking packages')
+    try {
+      const j = JSON.parse(await runFile(macsecBin('osv-scanner'), ['scan', 'source', '-r', '--format', 'json', '.'], root, 10 * 60_000)) as { results?: { packages?: { package: { name: string; version: string }; vulnerabilities?: { id: string; summary?: string }[] }[] }[] }
+      for (const r of j.results ?? []) for (const p of r.packages ?? []) for (const v of (p.vulnerabilities ?? []).slice(0, 3)) out.push(`[OSV] ${p.package.name} ${p.package.version}: ${v.id} ${v.summary ?? ''}`.slice(0, 200))
+    } catch {
+      // No lock files.
+    }
+  }
+  return out.slice(0, 160)
+}
+
+// ---------------------------------------------------------------- Any agent CLI
+
+function runAgent(bin: string, args: string[], env: Record<string, string>, cwd: string, onLine: (l: string) => void, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
-    // Plan mode and read-only tools: Claude Code can read and search, but not edit or run anything.
-    // Its own one-off session that Claude Code does not save, so no copy of the code or findings stays behind.
-    const child = spawn(claude, ['-p', prompt, '--output-format', 'text', '--permission-mode', 'plan', '--allowedTools', 'Read,Grep,Glob', ...(persistFlag ? ['--no-session-persistence'] : [])], {
-      cwd,
-      env: { ...process.env, ...runtimeEnv() },
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
+    const child = spawn(bin, args, { cwd, env: { ...process.env, ...runtimeEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
+    const t0 = Date.now()
     child.stdout.on('data', (d) => {
       out += d.toString()
-      onLine('Claude Code is reading the code…')
+      onLine(`Reading the code… ${Math.round((Date.now() - t0) / 60000)} min`)
     })
-    child.stderr.on('data', (d) => (err += d.toString()))
-    const timer = setTimeout(() => child.kill('SIGTERM'), 20 * 60 * 1000)
+    child.stderr.on('data', (d) => {
+      err += d.toString()
+      if (err.length > 100_000) err = err.slice(-50_000)
+    })
+    const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs)
     child.on('error', (e) => {
       clearTimeout(timer)
       reject(e)
     })
     child.on('exit', (code) => {
       clearTimeout(timer)
-      if (code === 0 && out.trim()) resolve(out.trim())
-      // Older Claude Code versions do not know the flag; run again without it.
-      else if (persistFlag && /unknown option.*no-session-persistence/i.test(err)) runClaude(cwd, prompt, onLine, false).then(resolve, reject)
-      else if (/log ?in|auth|credential|api key/i.test(err)) reject(new Error('Claude Code is not signed in. Open it once in Terminal and sign in, then try again.'))
-      else reject(new Error(`Claude Code stopped without a report. ${err.trim().split('\n').slice(-3).join(' ')}`.trim()))
+      if (out.trim() && (code === 0 || out.length > 200)) resolve(out.trim())
+      else reject(new Error(err || `exit ${code}`))
     })
   })
+}
+
+const CLI_NAMES: Record<ReviewerId, string[]> = { claude: ['claude'], 'claude-local': ['claude'], codex: ['codex'], gemini: ['gemini'], coderabbit: ['coderabbit', 'cr'] }
+
+export function reviewerOptions(model: string): { id: ReviewerKind; name: string; installed: boolean; note?: string }[] {
+  const has = (id: ReviewerId): boolean => !!findCli(CLI_NAMES[id])
+  return [
+    { id: 'claude', name: 'Claude Code', installed: has('claude'), note: has('claude') ? undefined : 'Install Claude Code on the AI tools page.' },
+    { id: 'claude-local', name: model ? `Claude Code on ${model.split('/').pop()}` : 'Claude Code on your model', installed: has('claude') && !!model, note: !has('claude') ? 'Install Claude Code first.' : !model ? 'Choose a model (LM Studio) in the Assistant first.' : 'Your model, through LM Studio 0.4.1 or newer. Load it with 32k context or more.' },
+    { id: 'codex', name: 'Codex', installed: has('codex'), note: has('codex') ? undefined : 'npm install -g @openai/codex' },
+    { id: 'gemini', name: 'Gemini CLI', installed: has('gemini'), note: has('gemini') ? undefined : 'npm install -g @google/gemini-cli' },
+    { id: 'coderabbit', name: 'CodeRabbit (changes only)', installed: has('coderabbit'), note: has('coderabbit') ? 'Reviews the changes in a Git project.' : 'curl -fsSL https://cli.coderabbit.ai/install.sh | sh' },
+    { id: 'model', name: model ? `${model.split('/').pop()} directly` : 'Your model directly', installed: !!model }
+  ]
 }
 
 /** Splits files into pieces small enough for a local model, risky files first. */
@@ -241,28 +314,55 @@ export function countFindings(md: string): Record<'critical' | 'high' | 'medium'
 
 const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'project'
 
-export async function runReview(o: { root: string; name: string; reviewer: 'claude' | 'model'; focus: ReviewFocus; modelName: string; remote?: boolean }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
+export async function runReview(o: { root: string; name: string; reviewer: ReviewerKind; focus: ReviewFocus; modelName: string; local?: LocalModel; remote?: boolean; scanners?: boolean }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
   const started = Date.now()
   update(5, 'Listing the source files')
   const files = listSourceFiles(o.root)
   update(10, 'Looking for leaked keys and passwords')
   const secrets = scanSecrets(o.root, files)
-  const report =
-    o.reviewer === 'claude'
-      ? await runClaude(o.root, reviewPrompt(o.focus, o.name), (l) => update(null, l))
-      : await runModel(o.root, o.name, o.focus, files, (l, p) => update(p ?? null, l))
+  const scanned = o.scanners && hasMacsec() ? await macsecScan(o.root, (l) => update(20, l)) : []
+  let session: string | undefined
+  const skills = skillList()
+  let report: string
+  if (o.reviewer === 'model') report = await runModel(o.root, o.name, o.focus, files, (l, p) => update(p ?? null, l))
+  else {
+    const id = o.reviewer as ReviewerId
+    const bin = findCli(CLI_NAMES[id])
+    if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed. ${reviewerOptions(o.modelName).find((r) => r.id === id)?.note ?? ''}`.trim())
+    const plugins = id === 'claude' || id === 'claude-local' ? ensurePlugins() : []
+    // Claude Code loads the skills itself; the others get the method in the prompt.
+    const method = id === 'claude' ? '' : `\n\nFollow this method:\n\n${skillText(['security-code-review', ...(id === 'claude-local' ? ['local-model-review'] : []), 'secrets-triage', 'security-report'], [join(mySkillsDir(), 'skills')])}`
+    const brief = scanned.length ? `\n\nScanners already ran. Check each against the code, say which are real, and add what they missed:\n${scanned.map((s) => `- ${s}`).join('\n')}` : ''
+    const prompt = `${reviewPrompt(o.focus, o.name)}${id === 'claude' || id === 'claude-local' ? '\n\nUse the laramac-security skills (security-code-review, secrets-triage, dependency-triage, security-report) and any of your own.' : ''}${brief}${method}`
+    const outFile = join(reviewsDir(), `codex-${randomBytes(4).toString('hex')}.md`)
+    mkdirSync(reviewsDir(), { recursive: true })
+    const run = reviewerRun(id, bin, prompt, { plugins, name: `Laramac review: ${o.name}`, local: o.local, outFile, cwd: o.root })
+    session = run.session
+    update(30, `${REVIEWER_NAMES[id]} is reading the code`)
+    try {
+      const text = await runAgent(run.bin, run.args, run.env, o.root, (l) => update(null, `${REVIEWER_NAMES[id]}: ${l}`), (id === 'claude-local' ? 60 : 30) * 60_000)
+      report = id === 'codex' && existsSync(outFile) ? readFileSync(outFile, 'utf8') : text
+    } catch (e) {
+      throw new Error(explainFailure(id, (e as Error).message))
+    } finally {
+      rmSync(outFile, { force: true })
+    }
+  }
+  if (scanned.length) report += `\n\n## What the scanners reported\n${scanned.map((s) => `- ${s}`).join('\n')}`
   const secretMd = secrets.length
     ? `\n\n## Keys and passwords in files\n${secrets.map((s) => `- ${s.kind} in \`${s.file}:${s.line}\``).join('\n')}\n\nMove them to environment variables and rotate any that were ever pushed.`
     : ''
   const when = new Date()
   const title = `${o.name}, ${when.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`
-  const markdown = `# Code review: ${o.name}\n\nReviewer: ${o.reviewer === 'claude' ? 'Claude Code' : o.modelName}. Focus: ${o.focus}. ${files.length} files.\n\n${report}${secretMd}\n`
+  const who = o.reviewer === 'model' ? o.modelName : o.reviewer === 'claude-local' ? `Claude Code on ${o.local?.model ?? o.modelName}` : REVIEWER_NAMES[o.reviewer as ReviewerId]
+  const markdown = `# Code review: ${o.name}\n\nReviewer: ${who}. Focus: ${o.focus}. ${files.length} files.${o.reviewer === 'claude' || o.reviewer === 'claude-local' ? ` Skills: ${skills.join(', ')}.` : ''}${scanned.length ? ` Scanners: ${scanned.length} results checked.` : ''}\n\n${report}${secretMd}\n`
   mkdirSync(reviewsDir(), { recursive: true })
   const id = `${slugOf(o.name)}-${when.toISOString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   const reportPath = join(reviewsDir(), `${id}.md`)
   writeFileSync(reportPath, markdown)
-  writeFileSync(join(reviewsDir(), `${id}.json`), JSON.stringify({ id, title, folder: o.remote ? '' : o.root, reviewer: o.reviewer, focus: o.focus, at: when.toISOString(), counts: countFindings(report), secrets: secrets.length, remote: !!o.remote }))
-  return { id, title, folder: o.remote ? '' : o.root, remote: !!o.remote, reviewer: o.reviewer, markdown, secrets, files: files.length, ms: Date.now() - started, reportPath, counts: countFindings(report) }
+  const usedSkills = o.reviewer === 'claude' || o.reviewer === 'claude-local' ? skills : undefined
+  writeFileSync(join(reviewsDir(), `${id}.json`), JSON.stringify({ id, title, folder: o.remote ? '' : o.root, reviewer: o.reviewer, focus: o.focus, at: when.toISOString(), counts: countFindings(report), secrets: secrets.length, remote: !!o.remote, session, skills: usedSkills }))
+  return { id, title, folder: o.remote ? '' : o.root, remote: !!o.remote, reviewer: o.reviewer, markdown, secrets, files: files.length, ms: Date.now() - started, reportPath, counts: countFindings(report), session, skills: usedSkills }
 }
 
 export function listReviews(): ReviewInfo[] {
