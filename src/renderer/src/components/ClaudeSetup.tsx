@@ -3,7 +3,7 @@ import { Check, Cpu, Sparkles, TerminalSquare, X } from 'lucide-react'
 import type { ClaudeSetupStatus } from '@shared/types'
 import { useApp } from '../store'
 
-/** One button that sets up claude, claude-lm, the Claude app and the skills, with what each is. */
+/** One button that sets up claude, claudelm, the Claude app and the skills, with what each is. */
 export default function ClaudeSetup(): React.JSX.Element {
   const { act, busy, notify, setPage } = useApp()
   const api = window.laramac
@@ -16,10 +16,10 @@ export default function ClaudeSetup(): React.JSX.Element {
   const items: { ok: boolean; label: string; text: string }[] = s
     ? [
         { ok: s.claudeCode && s.mcpClaudeCode === 'connected', label: 'claude', text: 'Claude Code with your Claude account, connected to Laramac.' },
-        { ok: s.claudeLm.installed, label: 'claude-lm', text: s.claudeLm.installed ? `Claude Code on ${s.claudeLm.model?.split('/').pop() ?? 'your model'} in LM Studio. Arguments pass through: claude-lm --resume.` : 'Claude Code on your own model in LM Studio. Needs a model chosen in the Assistant.' },
+        { ok: s.claudeLm.installed, label: 'claudelm', text: s.claudeLm.installed ? `Claude Code on ${s.claudeLm.model?.split('/').pop() ?? 'your model'} in LM Studio. Arguments pass through: claudelm --resume.` : 'Claude Code on your own model in LM Studio. Needs a model chosen in the Assistant.' },
         { ok: s.desktopConnected, label: 'Claude app', text: s.desktopApp ? 'Chats and Claude Code sessions in the Claude desktop app can use Laramac.' : 'Not installed on this Mac.' },
         { ok: s.skills, label: 'Skills', text: 'Laramac’s security skills, for every Claude Code session and the Claude app.' },
-        { ok: s.inPath, label: 'Terminal', text: 'laramac, claude-lm, node, npm and php in Terminal.' }
+        { ok: s.inPath, label: 'Terminal', text: 'laramac, claudelm, node, npm and php in Terminal.' }
       ]
     : []
   const all = items.length > 0 && items.every((i) => i.ok)
@@ -62,7 +62,7 @@ export default function ClaudeSetup(): React.JSX.Element {
               if (r) {
                 setS(r)
                 setToken('')
-                notify({ kind: 'info', text: 'Done. Open a new Terminal window, then type claude or claude-lm. Restart the Claude app to see Laramac there.' })
+                notify({ kind: 'info', text: 'Done. Open a new Terminal window, then type claude or claudelm. Restart the Claude app to see Laramac there.' })
               }
             }}
           >
@@ -70,7 +70,7 @@ export default function ClaudeSetup(): React.JSX.Element {
           </button>
           {s?.claudeLm.installed && (
             <button className="btn" onClick={() => act('claude-open-lm', () => api.invoke('claude:open-lm', null))}>
-              <TerminalSquare size={14} /> Open claude-lm
+              <TerminalSquare size={14} /> Open claudelm
             </button>
           )}
           {s?.model && (

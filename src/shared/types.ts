@@ -12,6 +12,7 @@ export type ServiceId =
   | 'mailpit'
   | 's3'
   | 'rabbitmq'
+  | 'ollama'
 
 export type ServiceGroup = 'web' | 'runtime' | 'database' | 'mail'
 
@@ -118,6 +119,60 @@ export interface SiteConfig {
   projectHash?: string
   /** Node.js major version for this site, like "20". Unset: what the project asks for, else the main one. */
   node?: string
+  /** Answer cross-origin requests from this Mac's own pages (localhost and .test). */
+  cors?: boolean
+  /** Background commands such as queue workers and schedulers. */
+  workers?: WorkerConfig[]
+  /** Forge or Ploi deploy hook, Vercel, Netlify or Azure App Service. */
+  hosting?: HostingConfig
+}
+
+export interface IntegrationsInfo {
+  webhook: { kind: 'slack' | 'teams' | 'discord' | 'generic'; events: 'errors' | 'all'; saved: boolean } | null
+  raycastDir: string
+  raycastInstalled: boolean
+  cli: string
+  /** Lines to paste into an Apple Shortcuts "Run Shell Script" action. */
+  shortcuts: { title: string; command: string }[]
+}
+
+export interface WorkersInfo {
+  suggested: WorkerConfig[]
+  configured: WorkerConfig[]
+  running: string[]
+}
+
+export interface RequestSummary {
+  lines: { at: string; host: string; method: string; path: string; status: number; ms: number; bytes: number }[]
+  count: number
+  errors: number
+  p50: number
+  p95: number
+  slowest: { path: string; method: string; ms: number; count: number }[]
+}
+
+export interface TestSummary {
+  passed: number
+  failed: number
+  skipped: number
+  failures: string[]
+}
+
+export interface WorkerConfig {
+  id: string
+  name: string
+  command: string[]
+  /** Start with the site's services. */
+  auto?: boolean
+}
+
+export interface HostingConfig {
+  kind: 'forge' | 'ploi' | 'vercel' | 'netlify' | 'azure'
+  /** Forge and Ploi: the deploy hook address is kept in the Keychain; this says one is saved. */
+  hookSaved?: boolean
+  /** Azure App Service: the app name and resource group. */
+  app?: string
+  group?: string
 }
 
 export interface SiteInfo {
@@ -509,15 +564,27 @@ export interface DeployTarget {
   excludes?: string[]
 }
 
+export interface SkillPackInfo {
+  id: string
+  name: string
+  repo: string
+  license: string
+  about: string
+  installed: boolean
+  commit: string | null
+  at: string | null
+  loaded: string[]
+}
+
 export interface ClaudeSetupStatus {
   claudeCode: boolean
-  /** Laramac's tools in Claude Code (claude and claude-lm). */
+  /** Laramac's tools in Claude Code (claude and claudelm). */
   mcpClaudeCode: McpStatus['claude']
   desktopApp: boolean
   desktopConnected: boolean
   skills: boolean
   claudeLm: { installed: boolean; model: string | null }
-  /** The model chosen in the Assistant, used by claude-lm and local reviews. */
+  /** The model chosen in the Assistant, used by claudelm and local reviews. */
   model: string | null
   inPath: boolean
   /** The model's context in LM Studio, when it was checked. */
@@ -608,6 +675,12 @@ export interface AppSettings {
   mcpEnabled: boolean
   /** Serve every project at http://localhost/<folder> and http://127.0.0.1/<folder>. */
   hostLocalhostFolders: boolean
+  /** Slack, Teams, Discord or other webhook for errors (and, if chosen, finished work). The address is in the Keychain. */
+  webhook?: { kind: 'slack' | 'teams' | 'discord' | 'generic'; events: 'errors' | 'all' }
+  /** Databases backed up once a day. */
+  dbBackups?: { engine: 'mysql' | 'mariadb'; name: string }[]
+  /** How many daily backups to keep per database. */
+  dbBackupKeep?: number
   /** Also answer <name>.localhost for every site. */
   hostDotLocalhost: boolean
   /** Which AI coding tool the per-site button opens. */
@@ -975,7 +1048,38 @@ export interface Channels {
   'site:facts': { args: [string]; result: SiteFacts }
   'site:node': { args: [string, string | null]; result: SiteNodeInfo }
   'node:versions': { args: []; result: NodeVersionsInfo }
+  'site:requests': { args: [string]; result: RequestSummary }
+  'integrations:get': { args: []; result: IntegrationsInfo }
+  'webhook:set': { args: [{ kind: 'slack' | 'teams' | 'discord' | 'generic'; events: 'errors' | 'all' } | null, string | null]; result: IntegrationsInfo }
+  'webhook:test': { args: []; result: void }
+  'raycast:install': { args: []; result: IntegrationsInfo }
+  'site:cors': { args: [string, boolean]; result: boolean }
+  'site:lan': { args: [string]; result: { urls: string[]; allowLan: boolean; folders: boolean; share: string | null } }
+  'site:debug-setup': { args: [string]; result: void }
+  'workers:list': { args: [string]; result: WorkersInfo }
+  'workers:save': { args: [string, WorkerConfig[]]; result: WorkersInfo }
+  'workers:start': { args: [string, string]; result: WorkersInfo }
+  'workers:stop': { args: [string, string]; result: WorkersInfo }
+  'workers:logs': { args: [string, string]; result: string }
+  'tests:runners': { args: [string]; result: { id: string; name: string; command: string[] }[] }
+  'tests:run': { args: [string, string]; result: { summary: TestSummary; output: string; ms: number } }
+  'compose:status': { args: [string]; result: { file: string | null; docker: boolean; services: { name: string; state: string; status: string; ports: string }[] } }
+  'compose:up': { args: [string]; result: void }
+  'compose:down': { args: [string]; result: void }
+  'compose:logs': { args: [string]; result: string }
+  'hosting:set': { args: [string, HostingConfig, string | null]; result: HostingConfig }
+  'hosting:deploy': { args: [string, boolean]; result: 'started' | 'terminal' }
+  'db:scramble-plan': { args: [string, string]; result: { table: string; column: string; sql: string }[] }
+  'db:scramble': { args: [string, string, string]; result: number }
+  'db:schema-diff': { args: [string, string, string]; result: { onlyA: string[]; onlyB: string[]; changed: { table: string; column: string; a: string; b: string }[]; missingColumns: { table: string; column: string; side: 'a' | 'b' }[] } }
+  'db:backups': { args: []; result: { list: { engine: string; name: string; files: { file: string; bytes: number; at: string }[] }[]; scheduled: { engine: 'mysql' | 'mariadb'; name: string }[] } }
+  'db:backup-now': { args: [string, string]; result: void }
+  'db:backup-schedule': { args: [string, string, boolean]; result: { engine: 'mysql' | 'mariadb'; name: string }[] }
+  'db:backup-reveal': { args: []; result: void }
   'claude:status': { args: []; result: ClaudeSetupStatus }
+  'packs:list': { args: []; result: SkillPackInfo[] }
+  'packs:install': { args: [string]; result: SkillPackInfo[] }
+  'packs:remove': { args: [string]; result: SkillPackInfo[] }
   'claude:setup': { args: [{ lmToken?: string }]; result: ClaudeSetupStatus }
   'claude:lm-context': { args: []; result: ClaudeSetupStatus }
   'claude:open-lm': { args: [string | null]; result: void }

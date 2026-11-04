@@ -37,6 +37,7 @@ export async function buildHostConfs(): Promise<HostConfs> {
       secure: s.secure,
       cert,
       aliases: s.aliases,
+      ...(getSettings().siteConfig[s.name]?.cors ? { cors: { tld } } : {}),
       ...(s.dev?.proxy ? { proxyTo: `http://127.0.0.1:${s.dev.port}` } : {})
     })
   }

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
 import { runtimesFor } from './importsetup'
 import { expandCommand } from './starterrun'
@@ -17,6 +17,9 @@ import { brew } from './brew'
 import * as upd from './updates'
 import * as azure from './azure'
 import * as apiRoutes from './apiroutes'
+import * as tools from './sitetools'
+import { checkHookUrl, hookBody, raycastScripts, sendHook, type HookKind } from './webhooks'
+import { startWorker, stopAllWorkers, stopWorker, workerLogs, workerRunning } from './workers'
 import { claudeLmConfigFor, claudeLmInstalled, installClaudeLm, storeLmToken } from './claudesetup'
 import { ensureLmContext } from './seckit/lmstudio'
 import { brewPrefix } from './platform'
@@ -40,14 +43,15 @@ import * as mailrelay from './mailrelay'
 import * as review from './review'
 import * as recon from './recon'
 import * as hub from './hub'
-import { installForClaude, installedForClaude, removeFromClaude, SKILLS } from './seckit/skills'
+import { installForClaude, installedForClaude, installPackSkillsForClaude, removeFromClaude, removePackSkillsFromClaude, SKILLS } from './seckit/skills'
+import { installPack, packSkillFolders, packState, removePack, SKILL_PACKS } from './seckit/skillpacks'
 import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath } from './desktop'
 import * as scan from './scan'
 import * as audit from './audit'
 import * as dumps from './dumps'
 import * as project from './project'
 import * as cli from './cli'
-import { dbPassword, setSecret, setSecretsCrypto } from './secrets'
+import { dbPassword, getSecret, setSecret, setSecretsCrypto } from './secrets'
 import { createPgDatabase } from './svc/postgres'
 import { runQuiet } from './starterrun'
 import { runtimeEnv } from './runtimes'
@@ -59,7 +63,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -472,7 +476,7 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
-    // claude-lm follows the model chosen in the Assistant.
+    // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
       const claude = findCli(['claude'])
       if (claude && next.llm.model) installClaudeLm(claudeLmConfigFor({ claude, baseUrl: next.llm.baseUrl, model: next.llm.model, plugins: review.ensurePlugins() }), process.execPath, true)
@@ -1423,10 +1427,35 @@ function registerIpc(): void {
     return r.filePath
   })
 
+  const packList = (): SkillPackInfo[] => SKILL_PACKS.map((p) => {
+    const st = packState(review.packsRoot(), p.id)
+    return { name: p.name, repo: p.repo, license: p.license, about: p.about, ...st, id: p.id }
+  })
+  handle('packs:list', () => packList())
+  handle('packs:install', async (id) => {
+    if (!SKILL_PACKS.some((p) => p.id === id)) throw new ValidationError('That skill pack is not on the list.')
+    const st = await jobs.run(`Getting the ${SKILL_PACKS.find((p) => p.id === id)!.name} skills`, () => installPack(review.packsRoot(), String(id)))
+    if (installedForClaude('laramac')) installPackSkillsForClaude('laramac', packSkillFolders(review.packsRoot()))
+    activity.push('success', `${st.loaded.length} skills from ${SKILL_PACKS.find((p) => p.id === id)!.name} are ready`, `Every Claude Code review loads them. Commit ${st.commit?.slice(0, 7)}.`)
+    return packList()
+  })
+  handle('packs:remove', (id) => {
+    removePack(review.packsRoot(), String(id))
+    if (installedForClaude('laramac')) {
+      removePackSkillsFromClaude('laramac')
+      installPackSkillsForClaude('laramac', packSkillFolders(review.packsRoot()))
+    }
+    return packList()
+  })
   handle('skills:status', () => skillsStatus())
   handle('skills:install', (on) => {
-    if (on === true) installForClaude('laramac')
-    else removeFromClaude('laramac')
+    if (on === true) {
+      installForClaude('laramac')
+      installPackSkillsForClaude('laramac', packSkillFolders(review.packsRoot()))
+    } else {
+      removeFromClaude('laramac')
+      removePackSkillsFromClaude('laramac')
+    }
     activity.push('success', on === true ? 'Security skills installed for Claude' : 'Security skills removed from Claude', on === true ? 'Claude Code in Terminal and in the Claude desktop app can use them now.' : '')
     return skillsStatus()
   })
@@ -2287,7 +2316,7 @@ function registerIpc(): void {
     return mcpStatus()
   })
 
-  // ---- Claude everywhere: Claude Code, claude-lm, the Claude app, skills
+  // ---- Claude everywhere: Claude Code, claudelm, the Claude app, skills
   const nodeBinDir = (): string | undefined => {
     const n = locate('node')
     return n ? dirname(n.path) : undefined
@@ -2317,6 +2346,14 @@ function registerIpc(): void {
     if (!st.llm.model || !st.llm.baseUrl) return
     const r = await ensureLmContext(st.llm.baseUrl, st.llm.model)
     lastContext = { ok: r.ok, after: r.after, max: r.max, note: r.note }
+  }
+  // 0.21 wrote claude-lm; move people to claudelm on their own.
+  if (existsSync(join(dirs.bin(), 'claude-lm'))) {
+    try {
+      writeClaudeLm()
+    } catch {
+      // Set up Claude everywhere again fixes it.
+    }
   }
   handle('claude:status', () => claudeStatus())
   handle('claude:lm-context', async () => {
@@ -2355,16 +2392,346 @@ function registerIpc(): void {
       if (writeClaudeLm()) {
         update(85, 'Checking the model in LM Studio')
         await checkContext().catch(() => undefined)
-      } else notes.push('claude-lm needs a model: choose one from LM Studio in the Assistant, then run this again.')
+      } else notes.push('claudelm needs a model: choose one from LM Studio in the Assistant, then run this again.')
     })
-    activity.push('success', 'Claude is set up everywhere', 'claude, claude-lm and the Claude app can use Laramac and its skills. Restart the Claude app to see it.')
+    activity.push('success', 'Claude is set up everywhere', 'claude, claudelm and the Claude app can use Laramac and its skills. Restart the Claude app to see it.')
     return claudeStatus(notes)
   })
   handle('claude:open-lm', async (name) => {
     if (!claudeLmInstalled().installed) throw new ValidationError('Set up Claude everywhere first, in Tools.')
     const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
-    await openTerminal(dir, 'claude-lm')
+    await openTerminal(dir, 'claudelm')
   })
+  // ---- Site tools: requests, workers, tests, Compose, debugging, other devices, hosting
+  const siteCmdEnv = (site: SiteInfo): NodeJS.ProcessEnv => {
+    const minor = site.php ?? defaultMinor()
+    const env = nodes.siteRuntimeEnv(site.path, getSettings().siteConfig[site.name]?.node)
+    // php and composer in commands resolve to the site's own PHP.
+    if (minor) env.PATH = `${dirname(phpBinary(minor))}:${env.PATH ?? ''}`
+    return env
+  }
+  handle('site:requests', (name) => {
+    const site = siteByName(name)
+    const logs = [join(dirs.logs(), 'nginx-access.log'), join(dirs.logs(), 'apache-access.log')]
+    const text = logs.filter((f) => existsSync(f)).map((f) => tailFile(f, 20000)).join('\n')
+    return tools.siteRequests(text, [site.domain, ...site.aliases])
+  })
+  handle('site:cors', async (name, on) => {
+    const site = siteByName(name)
+    setSiteConfig(site.name, { cors: on === true ? true : undefined })
+    await services.reloadWeb()
+    activity.push('info', on === true ? `${site.name} answers cross-origin requests` : `${site.name} no longer answers cross-origin requests`, on === true ? `Pages on localhost and .${getSettings().tld} addresses may call it, with cookies. Nothing on the internet can.` : '')
+    notifySitesChanged()
+    return on === true
+  })
+  handle('site:lan', (name) => {
+    const site = siteByName(name)
+    const st = getSettings()
+    const folder = site.path.split('/').pop()!
+    const port = st.httpPort === 80 ? '' : `:${st.httpPort}`
+    const urls = st.allowLan && st.hostLocalhostFolders ? tools.lanAddresses().map((ip) => `http://${ip}${port}/${encodeURIComponent(folder)}/`) : []
+    return { urls, allowLan: st.allowLan, folders: st.hostLocalhostFolders, share: site.shareUrl ?? null }
+  })
+  // Workers
+  const workerList = (site: SiteInfo): { suggested: WorkerConfig[]; configured: WorkerConfig[]; running: string[] } => {
+    const configured = getSettings().siteConfig[site.name]?.workers ?? []
+    const suggested = tools.suggestWorkers(site).filter((w) => !configured.some((c) => c.id === w.id))
+    return { suggested, configured, running: configured.filter((w) => workerRunning(site.name, w.id)).map((w) => w.id) }
+  }
+  handle('workers:list', (name) => workerList(siteByName(name)))
+  handle('workers:save', (name, list) => {
+    const site = siteByName(name)
+    if (!Array.isArray(list) || list.length > 20) throw new ValidationError('Up to 20 workers per site.')
+    const clean: WorkerConfig[] = list.map((w) => {
+      const x = w as Partial<WorkerConfig>
+      if (typeof x.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(x.id) || typeof x.name !== 'string') throw new ValidationError('Each worker needs a name.')
+      try {
+        return { id: x.id, name: x.name.slice(0, 60), command: tools.checkCommand(x.command), auto: x.auto === true }
+      } catch (e) {
+        throw new ValidationError((e as Error).message)
+      }
+    })
+    setSiteConfig(site.name, { workers: clean })
+    return workerList(site)
+  })
+  handle('workers:start', async (name, id) => {
+    const site = siteByName(name)
+    const w = (getSettings().siteConfig[site.name]?.workers ?? []).find((x) => x.id === id)
+    if (!w) throw new ValidationError('Add the worker first.')
+    await startWorker(site, w, siteCmdEnv(site)).catch((e) => {
+      throw new ValidationError(`${w.name} stopped: ${(e as Error).message}. Its log says more.`)
+    })
+    activity.push('success', `${w.name} is running for ${site.name}`)
+    return workerList(site)
+  })
+  handle('workers:stop', async (name, id) => {
+    const site = siteByName(name)
+    await stopWorker(site.name, String(id))
+    return workerList(site)
+  })
+  handle('workers:logs', (name, id) => workerLogs(siteByName(name).name, String(id)))
+  // Tests
+  handle('tests:runners', (name) => tools.findTestRunners(siteByName(name)))
+  handle('tests:run', async (name, id) => {
+    const site = siteByName(name)
+    const runner = tools.findTestRunners(site).find((r) => r.id === id)
+    if (!runner) throw new ValidationError('That test runner was not found in this project.')
+    const started = Date.now()
+    let out = ''
+    await jobs.run(`Running ${runner.name} for ${site.name}`, (update) =>
+      runQuiet(runner.command, site.path, { ...siteCmdEnv(site), CI: '1', NO_COLOR: '1' }, (l) => {
+        out += `${l}\n`
+        if (out.length > 400_000) out = out.slice(-300_000)
+        update(null, `${runner.name}: ${l.slice(0, 70)}`)
+      }, 30 * 60_000).catch(() => undefined)
+    )
+    const summary = tools.summariseTests(out)
+    activity.push(summary.failed ? 'error' : 'success', `${runner.name} for ${site.name}: ${summary.passed} passed${summary.failed ? `, ${summary.failed} failed` : ''}`)
+    return { summary, output: out.slice(-60_000), ms: Date.now() - started }
+  })
+  // Docker Compose
+  const dockerBin = (): string | null => findOnPath('docker', ['/usr/local/bin', '/opt/homebrew/bin', join(app.getPath('home'), '.orbstack', 'bin'), '/Applications/Docker.app/Contents/Resources/bin'])
+  const compose = (site: SiteInfo, args: string[], timeout = 20 * 60_000): Promise<string> => {
+    const docker = dockerBin()
+    if (!docker) throw new ValidationError('Docker is not installed. Install OrbStack, Docker Desktop or Colima first.')
+    return new Promise((resolve, reject) => execFile(docker, ['compose', ...args], { cwd: site.path, timeout, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, ...runtimeEnv() } }, (err, out, errOut) => (err ? reject(new ValidationError(String(errOut || err.message).trim().split('\n').slice(-2).join(' '))) : resolve(String(out)))))
+  }
+  handle('compose:status', async (name) => {
+    const site = siteByName(name)
+    const file = tools.composeFile(site.path)
+    if (!file) return { file: null, docker: !!dockerBin(), services: [] }
+    const services = dockerBin() ? tools.parseComposePs(await compose(site, ['ps', '--all', '--format', 'json'], 30000).catch(() => '')) : []
+    return { file: file.split('/').pop()!, docker: !!dockerBin(), services }
+  })
+  handle('compose:up', async (name) => {
+    const site = siteByName(name)
+    await jobs.run(`Starting ${site.name}'s containers`, () => compose(site, ['up', '-d', '--remove-orphans']))
+    activity.push('success', `${site.name}'s containers are up`)
+  })
+  handle('compose:down', async (name) => {
+    const site = siteByName(name)
+    await jobs.run(`Stopping ${site.name}'s containers`, () => compose(site, ['down']))
+  })
+  handle('compose:logs', (name) => compose(siteByName(name), ['logs', '--no-color', '--tail', '300'], 30000))
+  // Debugging in the editor
+  handle('site:debug-setup', async (name) => {
+    const site = siteByName(name)
+    if (!getSettings().xdebug) {
+      for (const m of installedMinors()) await ensureXdebug(m).catch(() => false)
+      if (!installedMinors().some((m) => existsSync(xdebugPath(m)))) throw new ValidationError('Xdebug is not ready for your PHP versions yet. Try again tomorrow, when Laramac’s PHP builds include it.')
+      setSettings({ xdebug: true })
+      await restartPhp()
+    }
+    const dir = join(site.path, '.vscode')
+    const file = join(dir, 'launch.json')
+    mkdirSync(dir, { recursive: true })
+    try {
+      writeFileSync(file, tools.mergeLaunchJson(existsSync(file) ? readFileSync(file, 'utf8') : null))
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+    activity.push('success', `Debugging is ready for ${site.name}`, 'Xdebug is on, and .vscode/launch.json has "Listen for Xdebug (Laramac)". In VS Code or Cursor, press F5, then load the page.')
+  })
+  // Hosting
+  handle('hosting:set', (name, cfg, hook) => {
+    const site = siteByName(name)
+    const c = (cfg ?? {}) as HostingConfig
+    if (!['forge', 'ploi', 'vercel', 'netlify', 'azure'].includes(c.kind)) throw new ValidationError('Choose where it is hosted.')
+    if (c.kind === 'forge' || c.kind === 'ploi') {
+      if (typeof hook === 'string' && hook.trim()) {
+        try {
+          setSecret(`deploy-hook-${site.name}`, tools.checkDeployHook(c.kind, hook))
+        } catch (e) {
+          throw new ValidationError((e as Error).message)
+        }
+      }
+      if (!getSecret(`deploy-hook-${site.name}`)) throw new ValidationError('Paste the deploy hook address.')
+    }
+    const hosting: HostingConfig = { kind: c.kind, hookSaved: c.kind === 'forge' || c.kind === 'ploi', ...(c.kind === 'azure' ? { app: String(c.app ?? '').slice(0, 60), group: String(c.group ?? '').slice(0, 90) } : {}) }
+    setSiteConfig(site.name, { hosting })
+    return hosting
+  })
+  handle('hosting:deploy', async (name, prod) => {
+    const site = siteByName(name)
+    const h = getSettings().siteConfig[site.name]?.hosting
+    if (!h) throw new ValidationError('Choose where it is hosted first.')
+    if (h.kind === 'forge' || h.kind === 'ploi') {
+      const hook = getSecret(`deploy-hook-${site.name}`)
+      if (!hook) throw new ValidationError('Paste the deploy hook address again.')
+      const res = await fetch(tools.checkDeployHook(h.kind, hook), { method: 'POST', signal: AbortSignal.timeout(30000) }).catch(() => null)
+      if (!res || !res.ok) throw new ValidationError(`${h.kind === 'forge' ? 'Forge' : 'Ploi'} did not accept the deploy (${res?.status ?? 'no answer'}).`)
+      activity.push('success', `${h.kind === 'forge' ? 'Forge' : 'Ploi'} is deploying ${site.name}`, 'Follow it on their site.')
+      return 'started'
+    }
+    let cmd: string
+    try {
+      cmd = tools.hostingCommand(h.kind, { app: h.app, group: h.group, prod: prod === true })
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+    await openTerminal(site.path, cmd)
+    return 'terminal'
+  })
+  // Database extras
+  handle('db:scramble-plan', async (engine, name) => {
+    const t = dbTarget(dbEngine(engine))
+    const db = dbadmin.checkName(String(name))
+    const cols = await dbadmin.readOnlyQuery(t, db, `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = '${db}'`, 20000)
+    const ids = await dbadmin.readOnlyQuery(t, db, `SELECT table_name FROM information_schema.columns WHERE table_schema = '${db}' AND column_name = 'id'`, 5000)
+    return tools.scramblePlan(cols.rows.map((r) => ({ table: r[0], column: r[1] })), new Set(ids.rows.map((r) => r[0])))
+  })
+  handle('db:scramble', async (engine, name, typed) => {
+    const eng = dbEngine(engine)
+    const db = dbadmin.checkName(String(name))
+    if (typed !== db) throw new ValidationError(`Type ${db} to confirm.`)
+    const t = dbTarget(eng)
+    const cols = await dbadmin.readOnlyQuery(t, db, `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = '${db}'`, 20000)
+    const ids = await dbadmin.readOnlyQuery(t, db, `SELECT table_name FROM information_schema.columns WHERE table_schema = '${db}' AND column_name = 'id'`, 5000)
+    const plan = tools.scramblePlan(cols.rows.map((r) => ({ table: r[0], column: r[1] })), new Set(ids.rows.map((r) => r[0])))
+    if (!plan.length) return 0
+    await jobs.run(`Scrambling personal data in ${db}`, async (update) => {
+      update(null, `Saving a backup of ${db} first`)
+      await backupDatabase(eng, db)
+      await dbadmin.execSql(t, db, plan.map((p) => p.sql).join('\n'))
+    })
+    activity.push('success', `Scrambled ${plan.length} columns in ${db}`, 'A backup was saved first, under Databases, Backups.')
+    return plan.length
+  })
+  handle('db:schema-diff', async (engine, a, b) => {
+    const t = dbTarget(dbEngine(engine))
+    const read = async (db: string): Promise<Map<string, Map<string, string>>> => {
+      const r = await dbadmin.readOnlyQuery(t, dbadmin.checkName(db), `SELECT table_name, column_name, column_type, is_nullable FROM information_schema.columns WHERE table_schema = '${dbadmin.checkName(db)}' ORDER BY table_name, ordinal_position`, 50000)
+      const m = new Map<string, Map<string, string>>()
+      for (const [tb, c, ty, n] of r.rows) {
+        if (!m.has(tb)) m.set(tb, new Map())
+        m.get(tb)!.set(c, `${ty}${n === 'YES' ? ' null' : ''}`)
+      }
+      return m
+    }
+    return tools.schemaDiff(await read(String(a)), await read(String(b)))
+  })
+  const backupsDir = (): string => join(dirs.root(), 'backups')
+  const backupDatabase = async (engine: 'mysql' | 'mariadb', db: string): Promise<string> => {
+    const dir = join(backupsDir(), `${engine}-${db}`)
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const file = join(dir, `${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`)
+    await dbadmin.exportDatabase(dbTarget(engine), db, file)
+    // Keep the newest few.
+    const keep = getSettings().dbBackupKeep ?? 7
+    const all = readdirSync(dir).filter((f) => f.endsWith('.sql.gz')).sort()
+    for (const old of all.slice(0, Math.max(0, all.length - keep))) rmSync(join(dir, old), { force: true })
+    return file
+  }
+  handle('db:backups', () => {
+    const out: { engine: string; name: string; files: { file: string; bytes: number; at: string }[] }[] = []
+    if (!existsSync(backupsDir())) return { list: out, scheduled: getSettings().dbBackups ?? [] }
+    for (const d of readdirSync(backupsDir())) {
+      const m = /^(mysql|mariadb)-([A-Za-z0-9_]+)$/.exec(d)
+      if (!m) continue
+      const files = readdirSync(join(backupsDir(), d)).filter((f) => f.endsWith('.sql.gz')).sort().reverse().map((f) => ({ file: f, bytes: statSync(join(backupsDir(), d, f)).size, at: f.replace('.sql.gz', '') }))
+      out.push({ engine: m[1], name: m[2], files })
+    }
+    return { list: out, scheduled: getSettings().dbBackups ?? [] }
+  })
+  handle('db:backup-now', async (engine, name) => {
+    const eng = dbEngine(engine)
+    const db = dbadmin.checkName(String(name))
+    const file = await jobs.run(`Backing up ${db}`, () => backupDatabase(eng, db))
+    activity.push('success', `Backed up ${db}`, file.replace(app.getPath('home'), '~'))
+  })
+  handle('db:backup-schedule', (engine, name, on) => {
+    const eng = dbEngine(engine)
+    const db = dbadmin.checkName(String(name))
+    const list = (getSettings().dbBackups ?? []).filter((x) => !(x.engine === eng && x.name === db))
+    if (on === true) list.push({ engine: eng, name: db })
+    setSettings({ dbBackups: list })
+    return list
+  })
+  handle('db:backup-reveal', () => {
+    mkdirSync(backupsDir(), { recursive: true })
+    void shell.openPath(backupsDir())
+  })
+  // Daily backups, at most once a day each, checked every hour.
+  setInterval(() => {
+    for (const b of getSettings().dbBackups ?? []) {
+      const dir = join(backupsDir(), `${b.engine}-${b.name}`)
+      const last = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.sql.gz')).sort().pop() : undefined
+      const lastAt = last ? Date.parse(last.replace('.sql.gz', '').replace(/T(\d\d)-(\d\d)-(\d\d)-(\d+)Z/, 'T$1:$2:$3.$4Z')) : 0
+      if (Date.now() - lastAt < 23 * 3600_000) continue
+      if (services.list().find((x) => x.id === b.engine)?.status !== 'running') continue
+      void backupDatabase(b.engine, b.name).catch((e) => activity.push('error', `Daily backup of ${b.name} failed`, (e as Error).message.slice(0, 200)))
+    }
+  }, 3600_000)
+
+  // ---- Integrations: webhooks, Raycast, Apple Shortcuts
+  const raycastDir = (): string => join(dirs.root(), 'raycast')
+  const integrations = (): IntegrationsInfo => {
+    const w = getSettings().webhook
+    return {
+      webhook: w ? { ...w, saved: !!getSecret('webhook-url') } : null,
+      raycastDir: raycastDir(),
+      raycastInstalled: existsSync(join(raycastDir(), 'laramac-status.sh')),
+      cli: cli.cliBin(),
+      shortcuts: [
+        { title: 'Start everything', command: `"${cli.cliBin()}" start apache; "${cli.cliBin()}" start mysql` },
+        { title: 'Your sites as JSON', command: `"${cli.cliBin()}" sites --json` },
+        { title: 'Open a site', command: `"${cli.cliBin()}" open shop` },
+        { title: 'Start a dev server', command: `"${cli.cliBin()}" dev shop` }
+      ]
+    }
+  }
+  handle('integrations:get', () => integrations())
+  handle('webhook:set', (cfg, url) => {
+    if (cfg === null) {
+      setSettings({ webhook: undefined })
+      setSecret('webhook-url', '')
+      return integrations()
+    }
+    const c = cfg as { kind: HookKind; events: 'errors' | 'all' }
+    if (!['slack', 'teams', 'discord', 'generic'].includes(c.kind)) throw new ValidationError('Choose Slack, Teams, Discord or another address.')
+    if (typeof url === 'string' && url.trim()) {
+      try {
+        setSecret('webhook-url', checkHookUrl(c.kind, url))
+      } catch (e) {
+        throw new ValidationError((e as Error).message)
+      }
+    }
+    if (!getSecret('webhook-url')) throw new ValidationError('Paste the webhook address.')
+    setSettings({ webhook: { kind: c.kind, events: c.events === 'all' ? 'all' : 'errors' } })
+    return integrations()
+  })
+  handle('webhook:test', async () => {
+    const w = getSettings().webhook
+    const url = getSecret('webhook-url')
+    if (!w || !url) throw new ValidationError('Save a webhook first.')
+    await sendHook(w.kind, url, hookBody(w.kind, 'Laramac', 'info', 'Test message', 'Laramac can post here.')).catch((e) => {
+      throw new ValidationError((e as Error).message)
+    })
+  })
+  handle('raycast:install', () => {
+    cli.installCli(process.execPath)
+    mkdirSync(raycastDir(), { recursive: true })
+    for (const f of raycastScripts(cli.cliBin(), 'Laramac')) {
+      writeFileSync(join(raycastDir(), f.file), f.text)
+      chmodSync(join(raycastDir(), f.file), 0o755)
+    }
+    void shell.openPath(raycastDir())
+    return integrations()
+  })
+  let hookSentAt = 0
+  let lastHookId = ''
+  activity.on('changed', (items: { id: string; kind: 'error' | 'success' | 'info'; title: string; body?: string }[]) => {
+    const w = getSettings().webhook
+    const it = items[0]
+    if (!w || !it || it.id === lastHookId) return
+    lastHookId = it.id
+    if (it.kind !== 'error' && !(w.events === 'all' && it.kind === 'success')) return
+    if (Date.now() - hookSentAt < 3000) return
+    hookSentAt = Date.now()
+    const url = getSecret('webhook-url')
+    if (url) void sendHook(w.kind, url, hookBody(w.kind, 'Laramac', it.kind, it.title, it.body?.slice(0, 500))).catch(() => undefined)
+  })
+
   // ---- Snapshots
   const snapDeps: snapshots.SnapshotDeps = {
     target: (engine) => {
@@ -2599,7 +2966,7 @@ app.on('before-quit', (event) => {
   quitting = true
   ssh.disconnectAll()
   dumps.stopDumpServer()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllBackends()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends()]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

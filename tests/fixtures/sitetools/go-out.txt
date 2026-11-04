@@ -1,0 +1,5 @@
+--- FAIL: TestBad (0.00s)
+    x_test.go:4: nope
+FAIL
+FAIL	x	0.002s
+FAIL

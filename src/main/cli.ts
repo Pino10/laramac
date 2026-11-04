@@ -17,7 +17,8 @@ const MARK = '# Added by Laramac'
 const JS = (tokenFile: string, port: number): string => `// Written by Laramac. Usage: laramac help
 const fs = require('fs')
 const { execFileSync } = require('child_process')
-const [cmd, ...args] = process.argv.slice(2)
+const JSON_OUT = process.argv.includes('--json')
+const [cmd, ...args] = process.argv.slice(2).filter((a) => a !== '--json')
 const HELP = \`laramac: control Laramac from Terminal
 
   laramac status                 services and whether they run
@@ -31,6 +32,10 @@ const HELP = \`laramac: control Laramac from Terminal
   laramac db                     list MySQL databases
   laramac db create <name>       create a MySQL database
   laramac logs [name] [lines]    list logs, or show the end of one
+  laramac tool <name> [k=v ...]  call any Laramac tool (what Claude uses), as JSON
+
+Add --json to status, sites and db for machine-readable output (for scripts,
+Raycast and Apple Shortcuts).
 
 Laramac must be open, with "Let AI tools use Laramac" on in Tools.\`
 
@@ -60,11 +65,18 @@ const dot = (s) => s === 'running' ? '\\x1b[32m●\\x1b[0m' : s === 'error' ? '\
 ;(async () => {
   switch (cmd) {
     case undefined: case 'help': case '-h': case '--help': console.log(HELP); break
+    case 'tool': {
+      if (!args[0]) fail('Usage: laramac tool <name> [key=value ...]')
+      const a = Object.fromEntries(args.slice(1).map((kv) => { const i = kv.indexOf('='); const v = kv.slice(i + 1); return [kv.slice(0, i), v === 'true' ? true : v === 'false' ? false : /^\\d+$/.test(v) ? Number(v) : v] }))
+      console.log(JSON.stringify(await call(args[0], a), null, 2)); break
+    }
     case 'status': {
+      if (JSON_OUT) { console.log(JSON.stringify(await call('list_services'), null, 2)); break }
       for (const s of await call('list_services')) if (s.status !== 'not-installed') console.log(dot(s.status), pad(s.name, 14), pad(s.status, 9), s.port ? ':' + s.port : '')
       break
     }
     case 'sites': {
+      if (JSON_OUT) { console.log(JSON.stringify(await call('list_sites'), null, 2)); break }
       for (const s of await call('list_sites')) console.log(pad(s.name, 22), pad(s.url, 34), s.kind + (s.php ? ' · PHP ' + s.php : ''))
       break
     }
@@ -92,6 +104,7 @@ const dot = (s) => s === 'running' ? '\\x1b[32m●\\x1b[0m' : s === 'error' ? '\
     }
     case 'db': {
       if (args[0] === 'create') { await call('create_database', { engine: 'mysql', name: args[1] }); console.log('Created ' + args[1]); break }
+      if (JSON_OUT) { console.log(JSON.stringify(await call('list_databases', { engine: 'mysql' }), null, 2)); break }
       for (const d of await call('list_databases', { engine: 'mysql' })) console.log(pad(d.name, 30), d.size ?? '')
       break
     }

@@ -1,4 +1,5 @@
 import DbBrowser from '../components/DbBrowser'
+import DbExtras, { BackupsFolderButton } from '../components/DbExtras'
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowUpRight, Download, Plus, Trash2, Upload, Copy } from 'lucide-react'
 import type { DatabaseInfo } from '@shared/types'
@@ -157,6 +158,7 @@ export default function Databases(): React.JSX.Element {
                       {browse === `${d.engine}/${d.name}` && (
                         <div className="db-browse">
                           <DbBrowser engine={d.engine as 'mysql' | 'mariadb'} name={d.name} />
+                          <DbExtras db={d} all={dbs ?? []} />
                         </div>
                       )}
                       </div>
@@ -168,6 +170,10 @@ export default function Databases(): React.JSX.Element {
           )
         })
       )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <BackupsFolderButton />
+      </div>
 
       <h2 className="section-title">Servers</h2>
       <div className="group">

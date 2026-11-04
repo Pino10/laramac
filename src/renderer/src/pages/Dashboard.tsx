@@ -1,5 +1,7 @@
-import { ArrowUpRight, Database, Mail, Plus, Upload } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowUpRight, Database, Info, Mail, Plus, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
+import SiteQuickView from '../components/SiteQuickView'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
 import Doctor from '../components/Doctor'
@@ -258,7 +260,9 @@ export default function Dashboard(): React.JSX.Element {
 /** Your sites at a glance: open one, or start its dev server. */
 function YourSites(): React.JSX.Element | null {
   const { sites, showSite, act, setSites, setPage } = useApp()
+  const [details, setDetails] = useState<string | null>(null)
   if (!sites.length) return null
+  const open = sites.find((s) => s.name === details)
   const list = [...sites].sort((a, b) => Number(!!b.dev?.running) - Number(!!a.dev?.running)).slice(0, 8)
   return (
     <div className="your-sites">
@@ -276,6 +280,17 @@ function YourSites(): React.JSX.Element | null {
               <div className="row-title">{s.name}</div>
               <div className="row-sub">{s.domain}</div>
             </div>
+            <button
+              className="icon-btn ys-info"
+              aria-label={`Details of ${s.name}`}
+              data-tip="Details"
+              onClick={(e) => {
+                e.stopPropagation()
+                setDetails(s.name)
+              }}
+            >
+              <Info />
+            </button>
             {s.dev ? (
               <button
                 className={s.dev.running ? 'pill-live' : 'btn btn-sm'}
@@ -296,6 +311,7 @@ function YourSites(): React.JSX.Element | null {
           <Plus size={18} /> New project
         </button>
       </div>
+      {open && <SiteQuickView site={open} onClose={() => setDetails(null)} />}
     </div>
   )
 }

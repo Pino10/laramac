@@ -207,7 +207,7 @@ describe('Azure DevOps', () => {
 })
 
 describe('Claude everywhere', () => {
-  it('claude-lm settings point Claude Code at LM Studio without a token', () => {
+  it('claudelm settings point Claude Code at LM Studio without a token', () => {
     const c = claudeLmConfigFor({ claude: '/usr/local/bin/claude', baseUrl: 'http://localhost:1234/v1', model: 'qwen/qwen3-coder-30b', plugins: ['/p'] })
     expect(c.env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1234')
     expect(c.env.ANTHROPIC_MODEL).toBe('qwen/qwen3-coder-30b')

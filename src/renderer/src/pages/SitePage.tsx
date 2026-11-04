@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Bot, Camera, Code2, Database, ExternalLink, FileCog, FolderOpen, GitBranch, Globe, Lock, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
+import { Activity, ArrowLeft, Bot, Cog, FlaskConical, Camera, Code2, Database, ExternalLink, FileCog, FolderOpen, GitBranch, Globe, Lock, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
 import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
@@ -9,14 +9,18 @@ import DbBrowser from '../components/DbBrowser'
 import { BackendRow, DeployDialog, kindLabel, PushDialog, SiteDoctor, SnapshotsDialog } from './Sites'
 import { FindingsList } from './Security'
 import { AzurePushDialog } from './Azure'
+import { HostingPanel, RequestsTab, SiteExtras, TestsTab, WorkersTab } from '../components/SiteTools'
 
-type Tab = 'overview' | 'logs' | 'database' | 'env' | 'packages' | 'security' | 'deploy'
+type Tab = 'overview' | 'logs' | 'requests' | 'database' | 'env' | 'packages' | 'workers' | 'tests' | 'security' | 'deploy'
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <Globe size={14} /> },
   { id: 'logs', label: 'Logs', icon: <ScrollText size={14} /> },
+  { id: 'requests', label: 'Requests', icon: <Activity size={14} /> },
   { id: 'database', label: 'Database', icon: <Database size={14} /> },
   { id: 'env', label: 'Environment', icon: <FileCog size={14} /> },
   { id: 'packages', label: 'Packages', icon: <Package size={14} /> },
+  { id: 'workers', label: 'Workers', icon: <Cog size={14} /> },
+  { id: 'tests', label: 'Tests', icon: <FlaskConical size={14} /> },
   { id: 'security', label: 'Security', icon: <ShieldCheck size={14} /> },
   { id: 'deploy', label: 'Ship', icon: <Rocket size={14} /> }
 ]
@@ -81,7 +85,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           <button className="btn" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={14} /> Claude Code
           </button>
-          <button className="icon-btn" aria-label="Claude Code on your model (claude-lm)" data-tip="claude-lm: on your model" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
+          <button className="icon-btn" aria-label="Claude Code on your model (claudelm)" data-tip="claudelm: on your model" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
             <Bot />
           </button>
           <button className="icon-btn" aria-label="Show folder" data-tip="Show folder" onClick={() => api.invoke('sites:open-folder', site.path)}>
@@ -115,6 +119,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
               <BackendRow site={site} />
             </div>
           )}
+          <SiteExtras site={site} />
           <div className="quick-grid">
             <Quick icon={<Stethoscope size={18} />} title="Ask the Site Doctor" text="Reads the logs and explains what is wrong." onClick={() => setDialog('doctor')} />
             <Quick icon={<Camera size={18} />} title="Snapshots" text="Save the files and database, and go back." onClick={() => setDialog('snap')} />
@@ -124,6 +129,9 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
         </div>
       )}
       {tab === 'logs' && <Logs site={site} />}
+      {tab === 'requests' && <RequestsTab site={site} />}
+      {tab === 'workers' && <WorkersTab site={site} />}
+      {tab === 'tests' && <TestsTab site={site} />}
       {tab === 'database' && (
         <div className="panel pad">
           {facts?.database ? (
@@ -167,6 +175,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           <Quick icon={<Camera size={18} />} title="Snapshot first" text="A safety copy before you ship." onClick={() => setDialog('snap')} />
         </div>
       )}
+      {tab === 'deploy' && <HostingPanel site={site} />}
 
       {dialog === 'snap' && <SnapshotsDialog site={site} onClose={() => setDialog(null)} />}
       {dialog === 'deploy' && <DeployDialog site={site} onClose={() => setDialog(null)} />}

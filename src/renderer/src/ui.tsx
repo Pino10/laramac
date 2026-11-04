@@ -50,6 +50,7 @@ export const SERVICE_LOOK: Record<string, [string, string]> = {
   memcached: ['Mc', '#1f9c90'],
   mongodb: ['Mo', '#3f9a44'],
   meilisearch: ['Me', '#e0457b'],
+  ollama: ['Ol', '#7f8c8d'],
   s3: ['S3', '#e8590c'],
   rabbitmq: ['Rq', '#ff6600'],
   mailpit: ['@', '#3d7cf0']
@@ -105,6 +106,7 @@ const HUES: Record<string, [string, string]> = {
   mailpit: ['Mp', '#8b6fd6'],
   memcached: ['Mc', '#1f9c90'],
   meilisearch: ['Me', '#e0457b'],
+  ollama: ['Ol', '#7f8c8d'],
   s3: ['S3', '#e8590c'],
   rabbitmq: ['Rq', '#ff6600'],
   adminer: ['Ad', '#34567a']

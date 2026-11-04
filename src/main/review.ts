@@ -4,6 +4,7 @@
  * problems and bugs with the file, line and fix. A built-in check also looks for leaked keys.
  */
 import { ensureLmContext } from './seckit/lmstudio'
+import { packPluginDirs } from './seckit/skillpacks'
 import { execFile, spawn } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { dirname, extname, join, relative, sep } from 'path'
@@ -136,6 +137,8 @@ ${FORMAT}`
 export const pluginDir = (): string => join(dirs.root(), 'claude-plugin')
 /** Your own skills: one folder each with a SKILL.md, loaded into every review too. */
 export const mySkillsDir = (): string => join(dirs.root(), 'my-skills')
+/** Skill packs from the internet (Trail of Bits, Sentry), cloned here. */
+export const packsRoot = (): string => join(dirs.root(), 'skill-packs')
 
 export function ensurePlugins(): string[] {
   writePlugin(pluginDir(), 'laramac-security', 'Laramac security skills: code review method, secrets, dependencies, recon, JavaScript recon and reports.')
@@ -146,7 +149,7 @@ export function ensurePlugins(): string[] {
     writeFileSync(join(mine, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'my-skills', version: '1.0.0', description: 'Your own skills for Laramac reviews.', license: 'MIT' }, null, 2))
     writeFileSync(join(mine, 'skills', 'README.md'), 'Put each skill in its own folder here, with a SKILL.md inside (name and description at the top). Laramac loads them into every review.\n')
   }
-  return [pluginDir(), ...(skillNames(join(mine, 'skills')).length ? [mine] : [])]
+  return [pluginDir(), ...(skillNames(join(mine, 'skills')).length ? [mine] : []), ...packPluginDirs(packsRoot())]
 }
 
 export const skillList = (): string[] => [...Object.keys(SKILLS), ...skillNames(join(mySkillsDir(), 'skills'))]

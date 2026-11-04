@@ -15,6 +15,44 @@ export interface SiteConf {
   cert?: { cert: string; key: string }
   /** More names that serve this site: name.localhost and any you add. */
   aliases?: string[]
+  /** Answer cross-origin requests from local pages (localhost and .test addresses only). */
+  cors?: { tld: string }
+}
+
+/** Origins that may call a site with CORS on: this Mac's own addresses, never the internet. */
+export const corsOriginPattern = (tld: string): string => `^https?://(localhost|127\\.0\\.0\\.1|([a-z0-9-]+\\.)*${tld.replace(/[^a-z0-9-]/gi, '')})(:[0-9]+)?$`
+
+/** One line per request in the access logs, read by the site page's Requests tab. */
+export const NGINX_LOG_FORMAT = "log_format laramac 'n|$time_iso8601|$host|$request_method|$request_uri|$status|$request_time|$body_bytes_sent';"
+export const APACHE_LOG_FORMAT = 'LogFormat "a|%{%Y-%m-%dT%H:%M:%S%z}t|%V|%m|%U%q|%>s|%D|%B" laramac'
+
+function nginxCors(site: SiteConf): string {
+  if (!site.cors) return ''
+  return `
+    set $laramac_cors "";
+    if ($http_origin ~* "${corsOriginPattern(site.cors.tld)}") { set $laramac_cors $http_origin; }
+    add_header Access-Control-Allow-Origin $laramac_cors always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With, X-CSRF-TOKEN, X-XSRF-TOKEN" always;
+    add_header Vary Origin always;
+    if ($request_method = OPTIONS) { return 204; }`
+}
+
+function apacheCors(cors: SiteConf['cors']): string {
+  if (!cors) return ''
+  return `
+    <If "%{HTTP:Origin} =~ m#${corsOriginPattern(cors.tld)}#i">
+        Header always set Access-Control-Allow-Origin "expr=%{req:Origin}"
+        Header always set Access-Control-Allow-Credentials "true"
+        Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        Header always set Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With, X-CSRF-TOKEN, X-XSRF-TOKEN"
+        Header always merge Vary "Origin"
+    </If>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} =OPTIONS
+    RewriteCond %{HTTP:Origin} .
+    RewriteRule ^ - [R=204,L]`
 }
 
 /** Serves every project folder at http://localhost/<folder>, the way Laragon does. */
@@ -202,7 +240,7 @@ ${nginxPhpBlock(o.localhost.phpPort, o)}
 server {
 ${nginxListen(secure, o)}
     server_name ${site.domain} *.${site.domain}${(site.aliases ?? []).map((a) => ` ${a}`).join('')};
-${nginxSsl(site.cert, secure)}
+${nginxSsl(site.cert, secure)}${nginxCors(site)}
 ${nginxProxy(site.proxyTo, site.domain)}
 }`)
       continue
@@ -214,7 +252,7 @@ ${nginxListen(secure, o)}
     server_name ${site.domain} *.${site.domain}${(site.aliases ?? []).map((a) => ` ${a}`).join('')};
     root "${site.docRoot}";
     index index.php index.html index.htm;
-${nginxSsl(site.cert, secure)}
+${nginxSsl(site.cert, secure)}${nginxCors(site)}
 
     location / {
         try_files $uri $uri/ ${fallback};
@@ -274,7 +312,8 @@ events {
 http {
 ${nginxMimeTypes()}
     default_type application/octet-stream;
-    access_log "${o.accessLog}";
+    ${NGINX_LOG_FORMAT}
+    access_log "${o.accessLog}" laramac;
     sendfile on;
     keepalive_timeout 65;
     client_max_body_size 512m;
@@ -346,7 +385,8 @@ export function generateApacheConf(o: ApacheOptions): string {
     cert: { cert: string; key: string } | undefined,
     secure: boolean,
     port: number,
-    extraNames: string[] = []
+    extraNames: string[] = [],
+    cors?: SiteConf['cors']
   ): string => {
     const handler =
       phpPort === null
@@ -365,7 +405,7 @@ export function generateApacheConf(o: ApacheOptions): string {
 <VirtualHost *:${port}>
     ServerName ${domain}${alias ? `\n    ServerAlias *.${domain}` : ''}${extraNames.length ? `\n    ServerAlias ${extraNames.join(' ')}` : ''}
     DocumentRoot "${root}"
-    DirectoryIndex index.php index.html${ssl}
+    DirectoryIndex index.php index.html${ssl}${apacheCors(cors)}
     <Directory "${root}">
         Options Indexes FollowSymLinks
         AllowOverride All
@@ -374,7 +414,7 @@ export function generateApacheConf(o: ApacheOptions): string {
 </VirtualHost>`
   }
 
-  const proxyHost = (domain: string, to: string, cert: { cert: string; key: string } | undefined, secure: boolean, port: number, extraNames: string[]): string => {
+  const proxyHost = (domain: string, to: string, cert: { cert: string; key: string } | undefined, secure: boolean, port: number, extraNames: string[], cors?: SiteConf['cors']): string => {
     const target = to.replace(/\/?$/, '/')
     const ssl = secure && cert ? `\n    SSLEngine on\n    SSLCertificateFile "${cert.cert}"\n    SSLCertificateKeyFile "${cert.key}"` : ''
     return `
@@ -384,7 +424,7 @@ export function generateApacheConf(o: ApacheOptions): string {
     ProxyRequests Off
     ProxyPreserveHost Off
     ProxyTimeout 3600
-    RequestHeader set X-Forwarded-Proto "${secure ? 'https' : 'http'}"
+    RequestHeader set X-Forwarded-Proto "${secure ? 'https' : 'http'}"${apacheCors(cors)}
     <Location />
         ${access}
     </Location>
@@ -402,19 +442,20 @@ export function generateApacheConf(o: ApacheOptions): string {
     phpPort: number | null,
     cert: { cert: string; key: string } | undefined,
     secure: boolean,
-    extraNames: string[] = []
+    extraNames: string[] = [],
+    cors?: SiteConf['cors']
   ): void => {
-    blocks.push(vhost(domain, alias, root, phpPort, undefined, false, o.port, extraNames))
-    if (secure && cert) blocks.push(vhost(domain, alias, root, phpPort, cert, true, o.httpsPort))
+    blocks.push(vhost(domain, alias, root, phpPort, undefined, false, o.port, extraNames, cors))
+    if (secure && cert) blocks.push(vhost(domain, alias, root, phpPort, cert, true, o.httpsPort, [], cors))
   }
 
   // The first virtual host answers any name Apache does not recognise, so localhost goes first.
   if (o.localhost) emit('localhost', false, o.localhost.root, o.localhost.phpPort, undefined, false, ['127.0.0.1', '[::1]'])
   for (const s of o.sites) {
     if (s.proxyTo) {
-      blocks.push(proxyHost(s.domain, s.proxyTo, undefined, false, o.port, s.aliases ?? []))
-      if (s.secure && s.cert) blocks.push(proxyHost(s.domain, s.proxyTo, s.cert, true, o.httpsPort, s.aliases ?? []))
-    } else emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure, s.aliases ?? [])
+      blocks.push(proxyHost(s.domain, s.proxyTo, undefined, false, o.port, s.aliases ?? [], s.cors))
+      if (s.secure && s.cert) blocks.push(proxyHost(s.domain, s.proxyTo, s.cert, true, o.httpsPort, s.aliases ?? [], s.cors))
+    } else emit(s.domain, true, s.docRoot, s.phpPort, s.cert, s.secure, s.aliases ?? [], s.cors)
   }
   for (const e of o.extras) {
     if (e.root) emit(e.domain, false, e.root, e.phpPort ?? null, e.cert, e.secure)
@@ -446,8 +487,8 @@ ${modules}
 
 ErrorLog "${o.errorLog}"
 LogLevel warn
-LogFormat "%h %l %u %t \\"%r\\" %>s %b" common
-CustomLog "${o.accessLog}" common
+${APACHE_LOG_FORMAT}
+CustomLog "${o.accessLog}" laramac
 ${types}
 ${anySecure ? 'SSLSessionCache "shmcb:' + o.serverRoot + '/ssl_scache(512000)"\n' : ''}${blocks.join('\n')}
 `

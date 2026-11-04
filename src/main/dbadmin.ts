@@ -131,3 +131,12 @@ export async function readOnlyQuery(t: DbTarget, database: string, sql: string, 
   const rows = lines.slice(0, maxRows).map((l) => l.split('\t'))
   return { columns, rows, truncated: lines.length > maxRows }
 }
+
+/** Runs statements that change data in one database (used for scrambling a local copy). */
+export function execSql(t: DbTarget, database: string, sql: string): Promise<void> {
+  checkName(database)
+  return new Promise((resolve, reject) => {
+    const child = execFile(t.client, [...base(t), `--database=${database}`], { maxBuffer: 16 * 1024 * 1024, timeout: 30 * 60_000, env: dbEnv(t.engine) }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).trim().split('\n').pop())) : resolve()))
+    child.stdin?.end(sql)
+  })
+}

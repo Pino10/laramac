@@ -145,13 +145,17 @@ Every push asks how it should go up:
 
 If GitHub has commits your Mac does not, the push stops and explains; tick **Replace what is on GitHub** only when you mean to overwrite them. A site that is not on GitHub yet gets a new repository (private by default) and a `.gitignore` that keeps secrets out.
 
+### A site's page
+
+Every site has Overview (with CORS, debugging, a QR code for your phone and Docker Compose), Logs, Requests (live, with timings), Database, Environment, Packages, Workers (queues and schedulers), Tests, Security and Ship (GitHub, Azure DevOps, SSH deploy, Forge, Ploi, Vercel, Netlify and Azure App Service). The Overview's site cards have a details button too.
+
 ### Node.js per project
 
 Each site runs on the Node.js version it asks for (.nvmrc, .node-version, .tool-versions, Volta or engines), or the one you pick on its page. Laramac installs that version for the project only. In Terminal, node, npm and npx switch on their own inside a project.
 
 ### Claude everywhere
 
-**Tools, Set up Claude everywhere** connects Claude Code and the Claude desktop app to Laramac, installs the security skills, and adds two Terminal commands: `claude` (your normal Claude Code) and `claude-lm` (Claude Code on your model in LM Studio, with its context made big enough first). `claude-lm --resume` and every other option work as with claude.
+**Tools, Set up Claude everywhere** connects Claude Code and the Claude desktop app to Laramac, installs the security skills, and adds two Terminal commands: `claude` (your normal Claude Code) and `claudelm` (Claude Code on your model in LM Studio, with its context made big enough first). `claudelm --resume` and every other option work as with claude.
 
 ### Starters
 

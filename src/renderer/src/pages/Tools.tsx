@@ -4,6 +4,7 @@ import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
 import ModelServers from '../components/ModelServers'
 import ClaudeSetup from '../components/ClaudeSetup'
+import Integrations from '../components/Integrations'
 import MailDelivery, { relaySummary } from '../components/MailDelivery'
 import type { MailRelay } from '@shared/types'
 import { CopyField, PageHead, Switch } from '../ui'
@@ -382,6 +383,8 @@ export default function Tools(): React.JSX.Element {
           </div>
         </div>
       </div>
+      <h2 className="section-title">Integrations</h2>
+      <Integrations app="Laramac" />
     </>
   )
 }

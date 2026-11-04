@@ -72,9 +72,14 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 | Folder | What is there |
 | --- | --- |
 | `src/main/` | Everything that touches the Mac: servers, PHP, databases, downloads, imports, security tools. Runs in Electron's main process. |
+| `src/main/sitetools.ts` | The site page's Requests, Workers, Tests, Compose, debugging, QR, scrambling, schema compare and hosting helpers (pure functions, tested). |
+| `src/main/workers.ts` | Background workers per site. |
+| `src/main/webhooks.ts` | Slack, Teams and Discord messages, and Raycast script commands. |
+| `src/main/svc/ollama.ts` | Ollama as a service. |
+| `src/main/seckit/skillpacks.ts` | Shared with MacSec: Trail of Bits and Sentry skill packs. |
 | `src/main/nodeversions.ts` | Node.js per project: what a project asks for, installing other major versions, the node/npm/npx commands that switch by folder. |
 | `src/main/updates.ts` | Helpers for the Updates page: version jumps, Homebrew and tool version parsing. The collecting and applying is in `index.ts`. |
-| `src/main/claudesetup.ts` | The claude-lm command and "Set up Claude everywhere". |
+| `src/main/claudesetup.ts` | The claudelm command and "Set up Claude everywhere". |
 | `src/main/azure.ts` | Azure DevOps: repositories, pipelines, pull requests, clone and push. |
 | `src/main/apiroutes.ts` | The API client's "requests from a site's code": route readers per framework. |
 | `src/main/seckit/lmstudio.ts` | Shared with MacSec: makes sure an LM Studio model has enough context for Claude Code. |

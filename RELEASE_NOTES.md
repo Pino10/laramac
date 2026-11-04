@@ -1,41 +1,33 @@
-## New in 0.21
+## New in 0.22
 
-### Node.js per project
-- Each site runs on the Node.js version it asks for: .nvmrc, .node-version, .tool-versions, Volta or "engines" in package.json. You can also pick one on the site's page.
-- Laramac installs the version for that project only (checked against nodejs.org's checksums); other sites keep theirs. Its dev server, package updates and setup steps all use it.
-- In Terminal, node, npm and npx switch on their own when you are inside a project folder.
-- Languages lists every Node.js line, with Install, Update and Remove. The Doctor offers **Install Node 18** (or whichever) when a site needs one you do not have.
+### claudelm
+The command for Claude Code on your LM Studio model is now **claudelm** (no hyphen). **claude** stays your normal Claude Code. Laramac moves an existing claude-lm over on its own.
 
-### Updates for everything
-- The Updates page now shows everything Laramac looks after, with what you have and what is new: Laramac, PHP, Node.js, other languages, Homebrew services (Apache, Nginx, MariaDB, Redis, Memcached), Composer, phpMyAdmin, Cloudflare Tunnel, Claude Code, and each site's npm and Composer packages.
-- **Update all**, or tick what you want. Services restart if they were running.
-- A site's packages only update when you agree, because npm and Composer run the project's own install scripts. Laramac saves a snapshot first, and only installs versions the project already allows. Bigger jumps wait on the site's Packages tab, with **Update to** per package.
-- Laramac looks once a day (if you let it) and puts a dot on Updates.
-- The changelog shows what is new since your version first, and marks changes that touch what you use.
+### Site details on the Overview
+Each card under Your sites has a **details** button: address, status, kind, folder, PHP or Node version, database, dev server, HTTPS, Git, .env files and the last security review, with buttons for the editor, Claude Code, claudelm, the folder, logs and its page.
 
-### Claude everywhere
-- **Set up Claude everywhere** (Tools) does it all in one go: Claude Code connected to Laramac, the Claude desktop app connected, the security skills installed, and the commands added to Terminal.
-- **claude-lm**: a new Terminal command that starts Claude Code on your model in LM Studio, while **claude** stays your normal Claude Code. Everything you type after it is passed on, so `claude-lm --resume` works. `claude-lm --lm-models` lists your models and `--lm-model` picks another one for that session.
-- **No more "context too small".** Before claude-lm or a review on your model starts, Laramac asks LM Studio what context the model was loaded with and, when it is too small for Claude Code, loads it again with enough (64k tokens, or the most the model allows). It tells you when a model is simply too small.
-- The Claude app connection now works even when Node.js is not on its PATH.
-- An LM Studio API token, if you use one, is kept in the macOS Keychain.
+### A site's page does more
+- **Requests**: the site's latest requests from the web server, live, with timings, the slowest addresses, and errors highlighted.
+- **Workers**: queue workers, the Laravel scheduler, Horizon, Reverb, Symfony Messenger or your own command, each with Start, Stop and its log. Laramac suggests the ones the project needs.
+- **Tests**: runs Pest, PHPUnit, Vitest, Jest, Playwright, npm test, pytest, go test or cargo test, with passed and failed counts and what failed.
+- **Hosting** on the Ship tab: deploy to Laravel Forge or Ploi (their deploy hook, kept in the Keychain), Vercel, Netlify or Azure App Service.
+- On the overview: a **CORS** switch (pages on localhost and .test may call the site, nothing on the internet can), **Set up debugging** (Xdebug on, plus “Listen for Xdebug” in .vscode/launch.json), a **QR code** to open the site on your phone, and **Docker Compose** start and stop when the project has a compose file.
 
-### GitHub and Azure DevOps
-- **Azure DevOps** has its own tab: connect with a personal access token, see every repository by project, its pipelines, pull requests and commits, open a pull request, create a repository, and clone it. The token is encrypted in the Keychain and sent only to dev.azure.com.
-- Push a site to Azure Repos from its page (Ship, then Push to Azure DevOps): main, a new branch or a version tag.
-- GitHub repositories show their latest **Actions** runs.
+### Databases
+- **Daily backups** per database (the newest 7 kept), and **Back up now**.
+- **Scramble personal data** in a local copy of production: emails, names, phone numbers, addresses, IPs and birth dates become fake ones. A backup is saved first.
+- **Compare the structure** of two databases.
 
-### API client
-- **Your sites are environments.** Each site gives you {{base}}, its address and the non-secret URLs from its .env.
-- **Requests from a site's code**: Laramac reads Laravel, Next.js, Express, Fastify, Hono, NestJS, FastAPI and Flask routes (and OpenAPI files) and makes a collection, without running anything.
-- **GraphQL** bodies with variables; **API key** and **OAuth 2** (client credentials) sign-in; cookies kept between requests like a browser (and a switch to turn that off).
-- History opens a past request again.
-- Code in more languages: HTTPie, axios, Laravel's Http, and Go.
+### Ollama
+Ollama is now a service like MySQL: Laramac installs it (checked against its published checksums), starts it on 127.0.0.1:11434 and keeps its models in its own folder.
 
-### Settings
-- **Search** every setting: type "port", "theme" or ".test". Settings also appear in ⌘K.
+### Skills from security teams
+On the Code review page, add the **Trail of Bits** and **Sentry** security skill sets from GitHub. Every Claude Code review loads them next to Laramac's own, which are now **29**: audit context, entry points, threat model, variant analysis, false-positive checks, change review, insecure defaults, sharp edges and fix verification are new. Reviews stay read-only.
 
-### Security reviews and recon
-- Twelve new review skills, so reviews cover far more ground: API security (OWASP API Top 10, GraphQL, webhooks), sign-in and sessions (JWT, OAuth, password reset, MFA), every kind of injection, browser-side issues, business logic and races, Docker and CI configuration (GitHub Actions, Azure Pipelines), supply chain, personal data, Supabase and Firebase rules, AI features, and Electron apps. A **review-vectors** plan makes every review say which areas apply.
-- Recon asks five more free public sources for subdomains (CertSpotter, AlienVault OTX, HackerTarget, urlscan.io and Anubis). None of them contacts the site itself.
+### Use Laramac from everywhere
+Under Tools, Integrations:
+- **Messages to Slack, Teams or Discord** when something fails (or also when work finishes). The webhook address is kept in the Keychain.
+- **Raycast** script commands.
+- **Apple Shortcuts**: commands to paste into “Run Shell Script”.
+- The laramac command has **--json** and `laramac tool <name>` for scripts.
 

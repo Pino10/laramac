@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
+import SkillPacks from '../components/SkillPacks'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 import { Answer } from '../components/Answer'
@@ -290,6 +291,7 @@ export default function Security(): React.JSX.Element {
           )}
 
           <ClaudeConnect />
+          <SkillPacks />
 
           {history.length > 0 && (
             <>
@@ -665,7 +667,7 @@ function ClaudeConnect(): React.JSX.Element {
       <div>
         <div className="row-title">Skills</div>
         <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-          Every Claude Code review loads Laramac’s security skills: {skills?.names.join(', ') ?? '…'}. Add your own in ~/.laramac/my-skills/skills.
+          Every Claude Code review loads Laramac’s {skills?.names.length ?? ''} security skills: {skills?.names.join(', ') ?? '…'}. Add your own in ~/.laramac/my-skills/skills.
         </div>
       </div>
       <button
