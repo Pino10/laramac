@@ -22,7 +22,8 @@ import { dirs } from './paths'
 import { homedir } from 'os'
 import { checkForUpdate, installUpdate, releaseNotes } from './updater'
 import { installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
-import { createFromStarter } from './starterrun'
+import { createFromStarter, prepareWeb, starterReadiness } from './starterrun'
+import { backendStatus, setupFirebase, setupSupabase, startBackend, stopAllBackends, stopBackend } from './backends'
 import { devFromScript, devLogFile, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
 import { STARTERS, starterById } from '../shared/starters'
 import { collectSiteLogs, explainSite } from './sitedoctor'
@@ -507,20 +508,55 @@ function registerIpc(): void {
     const options: Record<string, string> = {}
     for (const [k, v] of Object.entries(req.options ?? {})) if (typeof v === 'string') options[k] = v
     const name = req.name.trim()
-    const { devPort } = await createFromStarter({ starter: starter.id, name, options, start: !!req.start, git: !!req.git })
+    const { devPort, warning } = await createFromStarter({ starter: starter.id, name, options, start: !!req.start, git: !!req.git, web: req.web === 'nginx' ? 'nginx' : req.web === 'apache' ? 'apache' : undefined })
     activity.push('success', `Created ${name}`, `New ${starter.name} project in your www folder.`)
+    if (warning) activity.push('error', `${name}: database not ready`, warning)
     notifySitesChanged()
     if (devPort && req.start) {
       const site = siteByName(name)
       const cfg = getSettings().siteConfig[name]?.dev
+      const backend = getSettings().siteConfig[name]?.backend
+      if (backend) await startBackend(name, site.path, backend).catch((err) => activity.push('error', `${name}: ${backend.kind === 'supabase' ? 'Supabase' : 'Firebase'} did not start`, (err as Error).message.slice(0, 300)))
       if (cfg) await startDev(site, cfg).catch((err) => activity.push('error', `${name} dev server did not start`, (err as Error).message.slice(0, 300)))
+      // The web server picks up the new address before you open it.
+      await services.reloadWeb()
     }
+    return listSites()
+  })
+  handle('starters:readiness', () => starterReadiness())
+  handle('backends:status', () => backendStatus())
+  handle('backends:add', async (name, kind) => {
+    const site = siteByName(name)
+    if (kind !== 'supabase' && kind !== 'firebase') throw new ValidationError('Choose Supabase or Firebase.')
+    const starterId = existsSync(join(site.path, 'next.config.ts')) || existsSync(join(site.path, 'next.config.mjs')) || existsSync(join(site.path, 'next.config.js')) ? 'nextjs' : existsSync(join(site.path, 'nuxt.config.ts')) ? 'nuxt' : existsSync(join(site.path, 'svelte.config.js')) ? 'sveltekit' : existsSync(join(site.path, 'astro.config.mjs')) ? 'astro' : existsSync(join(site.path, 'vite.config.ts')) || existsSync(join(site.path, 'vite.config.js')) ? 'vite' : 'node'
+    const backend = await jobs.run(`Adding ${kind === 'supabase' ? 'Supabase' : 'Firebase'} to ${site.name}`, (u) => (kind === 'supabase' ? setupSupabase : setupFirebase)(site.path, site.name, starterId, (l) => u(null, l.slice(0, 80))))
+    setSiteConfig(site.name, { backend })
+    activity.push('success', `${kind === 'supabase' ? 'Supabase' : 'Firebase'} is ready for ${site.name}`, `Its keys are in the project's .env file. ${backend.studioUrl ? `Open ${backend.studioUrl} to manage it.` : ''}`)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('backends:start', async (name) => {
+    const site = siteByName(name)
+    const b = getSettings().siteConfig[site.name]?.backend
+    if (!b) throw new ValidationError('This site has no Supabase or Firebase.')
+    await jobs.run(`Starting ${b.kind === 'supabase' ? 'Supabase' : 'Firebase'} for ${site.name}`, (u) => startBackend(site.name, site.path, b, (l) => u(null, l.slice(0, 80))))
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('backends:stop', async (name) => {
+    const site = siteByName(name)
+    const b = getSettings().siteConfig[site.name]?.backend
+    if (b) await stopBackend(site.name, site.path, b)
+    notifySitesChanged()
     return listSites()
   })
   handle('dev:start', async (name) => {
     const site = siteByName(name)
     const cfg = getSettings().siteConfig[site.name]?.dev
     if (!cfg) throw new ValidationError('This site has no dev server set up.')
+    const backend = getSettings().siteConfig[site.name]?.backend
+    if (backend) await startBackend(site.name, site.path, backend).catch((err) => activity.push('error', `${site.name}: ${backend.kind === 'supabase' ? 'Supabase' : 'Firebase'} did not start`, (err as Error).message.slice(0, 300)))
+    if (!services.anyRunning()) await prepareWeb().catch((err) => activity.push('error', 'The web server is not running', (err as Error).message.slice(0, 300)))
     await startDev(site, cfg)
     notifySitesChanged()
     return listSites()
@@ -1815,7 +1851,7 @@ app.on('before-quit', (event) => {
   quitting = true
   ssh.disconnectAll()
   dumps.stopDumpServer()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllBackends()]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

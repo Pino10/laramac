@@ -64,6 +64,43 @@ export interface StarterRequest {
   /** Start the dev server when done. */
   start: boolean
   git: boolean
+  /** The web server to install when there is none yet. */
+  web?: 'apache' | 'nginx'
+}
+
+export type BackendKind = 'supabase' | 'firebase'
+
+/** Supabase or Firebase, running on this Mac for one project. */
+export interface BackendConfig {
+  kind: BackendKind
+  /** Which block of ports this project uses, so several can run at once. */
+  slot?: number
+  /** Supabase Studio, or the Firebase Emulator UI. */
+  studioUrl?: string
+  apiUrl?: string
+  /** Firebase: the demo- project id. */
+  projectId?: string
+}
+
+export interface BackendStatus {
+  supabaseCli: boolean
+  /** A container runtime is answering. */
+  docker: boolean
+  /** Docker Desktop, OrbStack or Colima, when one is installed. */
+  dockerApp: string | null
+  java: boolean
+  homebrew: boolean
+}
+
+/** What a new project needs that this Mac does not have yet. */
+export interface StarterReadiness {
+  /** Apache or Nginx installed, and which is running. */
+  web: { installed: ('apache' | 'nginx')[]; running: boolean }
+  /** name.test addresses work. */
+  dns: boolean
+  mysql: boolean
+  postgres: boolean
+  backends: BackendStatus
 }
 
 export interface SiteConfig {
@@ -75,6 +112,8 @@ export interface SiteConfig {
   /** Where Deploy sends this site. */
   deploy?: DeployTarget
   dev?: DevConfig
+  /** Supabase or Firebase for this project. */
+  backend?: BackendConfig
   /** Fingerprint of the laramac.yml last applied. */
   projectHash?: string
 }
@@ -94,6 +133,7 @@ export interface SiteInfo {
   /** Other addresses that open this site. */
   aliases: string[]
   dev?: { port: number; proxy: boolean; running: boolean; command: string }
+  backend?: BackendConfig & { running?: boolean }
   /** A dev command found in package.json that can be set up with one click. */
   devSuggestion?: string
   /** The project has a laramac.yml that has not been applied, or has changed since. */
@@ -784,6 +824,11 @@ export interface Channels {
   'runtimes:install': { args: [RuntimeId]; result: RuntimeInfo[] }
   'starters:versions': { args: []; result: Record<string, string> }
   'starters:create': { args: [StarterRequest]; result: SiteInfo[] }
+  'starters:readiness': { args: []; result: StarterReadiness }
+  'backends:status': { args: []; result: BackendStatus }
+  'backends:add': { args: [string, BackendKind]; result: SiteInfo[] }
+  'backends:start': { args: [string]; result: SiteInfo[] }
+  'backends:stop': { args: [string]; result: SiteInfo[] }
   'dev:start': { args: [string]; result: SiteInfo[] }
   'dev:stop': { args: [string]; result: SiteInfo[] }
   'dev:logs': { args: [string]; result: string }

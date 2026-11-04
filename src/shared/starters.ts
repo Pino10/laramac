@@ -1049,6 +1049,20 @@ export const STARTERS: Starter[] = [
 ]
 
 /** Extra command line tools some starters need, installed with Homebrew when missing. */
+/** A database or backend for JavaScript projects: written to .env, with Supabase and Firebase running locally. */
+export const DATA_CHOICES = [
+  { id: 'none', label: 'None' },
+  { id: 'supabase', label: 'Supabase' },
+  { id: 'firebase', label: 'Firebase' },
+  { id: 'pgsql', label: 'PostgreSQL' },
+  { id: 'mysql', label: 'MySQL' },
+  { id: 'sqlite', label: 'SQLite' }
+]
+const WITH_DATA = new Set(['nextjs', 'nuxt', 'sveltekit', 'react-router', 'astro', 'react', 'vue', 'angular', 'vite', 'nestjs', 'hono', 'elysia', 'expo'])
+for (const s of STARTERS) {
+  if (WITH_DATA.has(s.id) && !s.options?.some((o) => o.id === 'data')) s.options = [...(s.options ?? []), { id: 'data', label: 'Database', choices: DATA_CHOICES, default: 'none' }]
+}
+
 export const BREW_TOOLS: Record<string, string> = { xcodegen: 'xcodegen', vapor: 'vapor' }
 
 export const starterById = (id: string): Starter | undefined => STARTERS.find((s) => s.id === id)

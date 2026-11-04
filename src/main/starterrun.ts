@@ -21,7 +21,10 @@ import { findOnPath } from './platform'
 import { setSiteConfig } from './sites'
 import { pickDevPort } from './devservers'
 import { dbPassword } from './secrets'
-import type { ServiceId } from '../shared/types'
+import type { ServiceId, StarterReadiness } from '../shared/types'
+import { toolsStatus } from './tools'
+import { installResolver, startDnsServer } from './dns'
+import { backendStatus, envFileFor, setupFirebase, setupSupabase, writeEnv } from './backends'
 
 type Update = (p: number | null, label?: string) => void
 
@@ -83,7 +86,61 @@ async function ensureService(id: ServiceId): Promise<void> {
   await services.start(id)
 }
 
-export async function createFromStarter(req: StarterRequest): Promise<{ target: string; devPort: number | null }> {
+const status = (id: ServiceId): string | undefined => services.list().find((s) => s.id === id)?.status
+
+/** What a new project needs that this Mac does not have yet, for the starter window to show. */
+export async function starterReadiness(): Promise<StarterReadiness> {
+  const web = (['apache', 'nginx'] as const).filter((id) => status(id) !== 'not-installed')
+  return {
+    web: { installed: [...web], running: web.some((id) => status(id) === 'running') },
+    dns: (await toolsStatus()).dnsReady,
+    mysql: status('mysql') !== 'not-installed' || status('mariadb') !== 'not-installed',
+    postgres: status('postgres') !== 'not-installed',
+    backends: await backendStatus()
+  }
+}
+
+/**
+ * A web server that is running and name.test addresses that resolve: without both, the
+ * project is made but its address opens nothing. Installs the server you chose when there is none.
+ */
+export async function prepareWeb(choice: 'apache' | 'nginx' = 'apache'): Promise<void> {
+  const installed = (['apache', 'nginx'] as const).filter((id) => status(id) !== 'not-installed')
+  const use = installed.includes(choice) ? choice : (installed[0] ?? choice)
+  if (!installed.length) await jobs.run(`Installing ${use === 'apache' ? 'Apache' : 'Nginx'}`, () => services.install(use))
+  if (!installed.some((id) => status(id) === 'running')) {
+    await services.start('php').catch(() => undefined)
+    await services.start(use)
+    if (status(use) !== 'running') throw new Error(`${use === 'apache' ? 'Apache' : 'Nginx'} did not start: ${services.list().find((s) => s.id === use)?.error?.split('\n')[0] ?? 'see its log on the Servers page'}.`)
+  }
+  if (!(await toolsStatus()).dnsReady) {
+    const tld = getSettings().tld
+    await jobs.run(`Setting up .${tld} addresses`, async () => {
+      await installResolver(tld)
+      await startDnsServer(() => getSettings().tld)
+    })
+  }
+}
+
+/** The database you chose for a JavaScript project, set up and written to its .env file. */
+async function setupData(choice: string, target: string, name: string, starterId: string, db: string, password: string, update: (l: string) => void): Promise<void> {
+  if (!choice || choice === 'none') return
+  const file = envFileFor(starterId)
+  if (choice === 'sqlite') return writeEnv(target, file, { DATABASE_URL: 'file:./dev.db' })
+  if (choice === 'mysql') {
+    if (!(await createDatabase(db))) throw new Error('The MySQL database could not be created. Is MySQL running?')
+    return writeEnv(target, file, { DATABASE_URL: `mysql://root${password ? `:${encodeURIComponent(password)}` : ''}@127.0.0.1:3306/${db}` })
+  }
+  if (choice === 'pgsql') {
+    if (!(await createPgDatabase(db))) throw new Error('The PostgreSQL database could not be created. Is PostgreSQL running?')
+    return writeEnv(target, file, { DATABASE_URL: `postgresql://postgres@127.0.0.1:5432/${db}` })
+  }
+  const backend = choice === 'supabase' ? await setupSupabase(target, name, starterId, update) : await setupFirebase(target, name, starterId, update)
+  setSiteConfig(name, { backend })
+}
+
+export async function createFromStarter(req: StarterRequest): Promise<{ target: string; devPort: number | null; warning?: string }> {
+  let warning: string | undefined
   const starter = starterById(req.starter)
   if (!starter) throw new Error('That starter does not exist.')
   const problem = validateProjectName(req.name)
@@ -96,8 +153,9 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
   const ctx = { ...starterContext(req.name, getSettings().tld), dbPassword: dbPassword('mysql') }
   const steps = starter.steps(ctx, opts)
 
-  // Everything it needs, before touching the www folder.
+  // Everything it needs, before touching the www folder: the language, a web server and .test addresses.
   await ensureRuntimes(starter.runtimes)
+  await prepareWeb(req.web)
   let php: { bin: string; ini: string; composer: string } | null = null
   if (starter.runtimes.includes('php')) {
     const minor = defaultMinor()
@@ -120,6 +178,8 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
   for (const s of steps) {
     if ('database' in s) await ensureService(s.database === 'postgres' ? 'postgres' : 'mysql')
   }
+  if (opts.data === 'mysql') await ensureService('mysql')
+  if (opts.data === 'pgsql') await ensureService('postgres')
 
   let devPort: number | null = null
   await jobs.run(`Creating ${req.name} with ${starter.name}`, async (update: Update) => {
@@ -147,6 +207,14 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
         }
       }
 
+      if (opts.data && opts.data !== 'none') {
+        update(88, `Setting up ${opts.data === 'pgsql' ? 'PostgreSQL' : opts.data === 'mysql' ? 'MySQL' : opts.data === 'sqlite' ? 'SQLite' : opts.data === 'supabase' ? 'Supabase' : 'Firebase'}`)
+        // A database that cannot be set up should not cost you the project: it can be added later.
+        await setupData(opts.data, target, req.name, starter.id, ctx.db, ctx.dbPassword ?? '', (l) => update(88, l.slice(0, 80))).catch((e) => {
+          warning = `${opts.data === 'supabase' ? 'Supabase' : opts.data === 'firebase' ? 'Firebase' : 'The database'} was not set up: ${(e as Error).message.split('\n')[0]} Add it again from the site's page.`
+        })
+      }
+
       if (req.git && existsSync(target) && !existsSync(join(target, '.git'))) {
         update(96, 'Making the first Git commit')
         await runQuiet(['git', 'init', '-q', '-b', 'main'], target, env, () => undefined)
@@ -165,5 +233,5 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
       throw err
     }
   })
-  return { target, devPort }
+  return { target, devPort, warning }
 }

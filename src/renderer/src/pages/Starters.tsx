@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowUpRight, Check, Download, GitCommitHorizontal, Play, RefreshCw, Search, Sparkles, X } from 'lucide-react'
-import type { RuntimeId, RuntimeInfo } from '@shared/types'
+import type { RuntimeId, RuntimeInfo, StarterReadiness } from '@shared/types'
 import { CATEGORIES, STARTERS, starterContext, type Starter, type StarterCategory } from '@shared/starters'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
@@ -152,12 +152,54 @@ export default function Starters(): React.JSX.Element {
   )
 }
 
+/** Everything Laramac will set up first, so the new project opens straight away. */
+function Prep({ ready, web, data, db }: { ready: StarterReadiness; web: 'apache' | 'nginx'; data?: string; db?: string }): React.JSX.Element | null {
+  const b = ready.backends
+  const items: string[] = []
+  if (ready.web.installed.length === 0) items.push(`Installs and starts ${web === 'apache' ? 'Apache' : 'Nginx'}`)
+  else if (!ready.web.running) items.push(`Starts ${ready.web.installed[0] === 'apache' ? 'Apache' : 'Nginx'}`)
+  if (!ready.dns) items.push('Sets up .test addresses (your Mac asks for your password once)')
+  if ((data === 'mysql' || db === 'mysql') && !ready.mysql) items.push('Installs MySQL')
+  if ((data === 'pgsql' || db === 'pgsql') && !ready.postgres) items.push('Installs PostgreSQL')
+  if (data === 'supabase') {
+    if (!b.supabaseCli) items.push('Installs the Supabase CLI')
+    if (!b.docker) items.push(b.dockerApp ? `Starts ${b.dockerApp} for Supabase's containers` : 'Installs Colima, a free container runtime, for Supabase')
+    items.push('Starts Supabase on this Mac and writes its keys to .env (the first start downloads a few GB)')
+  }
+  if (data === 'firebase') {
+    if (!b.java) items.push('Installs Java for the Firebase emulators')
+    items.push('Sets up the Firebase emulators (Auth, Firestore, Storage) with a demo project, and writes .env')
+  }
+  if (!items.length) return null
+  const needsBrew = !b.homebrew && (ready.web.installed.length === 0 || data === 'supabase' || data === 'firebase')
+  return (
+    <>
+      <div style={{ marginTop: 6 }}>First, it gets this Mac ready:</div>
+      <ul className="st-prep">
+        {items.map((i) => (
+          <li key={i}>{i}</li>
+        ))}
+      </ul>
+      {needsBrew && (
+        <div className="hint" style={{ color: 'var(--bad)' }}>
+          This needs Homebrew. Install it from brew.sh first, then come back.
+        </div>
+      )}
+    </>
+  )
+}
+
 function CreateDialog({ starter, runtimes, versions, onClose }: { starter: Starter; runtimes: RuntimeInfo[]; versions: Record<string, string>; onClose: () => void }): React.JSX.Element {
   const { act, busy, settings, setSites, setPage } = useApp()
   const [name, setName] = useState('')
   const [opts, setOpts] = useState<Record<string, string>>(() => Object.fromEntries((starter.options ?? []).map((o) => [o.id, o.default])))
   const [start, setStart] = useState(true)
   const [git, setGit] = useState(true)
+  const [web, setWeb] = useState<'apache' | 'nginx'>('apache')
+  const [ready, setReady] = useState<StarterReadiness | null>(null)
+  useEffect(() => {
+    void window.laramac.invoke('starters:readiness').then(setReady).catch(() => undefined)
+  }, [])
   const working = busy.has('starter-create')
   const ctx = starterContext(name.trim() || 'my-app', settings?.tld ?? 'test')
   const dev = starter.dev?.(opts)
@@ -165,7 +207,7 @@ function CreateDialog({ starter, runtimes, versions, onClose }: { starter: Start
   const valid = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,60}$/.test(name.trim())
 
   const create = async (): Promise<void> => {
-    const sites = await act('starter-create', () => window.laramac.invoke('starters:create', { starter: starter.id, name: name.trim(), options: opts, start, git }))
+    const sites = await act('starter-create', () => window.laramac.invoke('starters:create', { starter: starter.id, name: name.trim(), options: opts, start, git, web }))
     if (sites) {
       setSites(sites)
       onClose()
@@ -224,6 +266,20 @@ function CreateDialog({ starter, runtimes, versions, onClose }: { starter: Start
           </div>
         ))}
 
+        {ready && ready.web.installed.length === 0 && (
+          <div className="field">
+            <label>Web server</label>
+            <div className="seg" role="radiogroup" aria-label="Web server">
+              {(['apache', 'nginx'] as const).map((w) => (
+                <button key={w} role="radio" aria-checked={web === w} onClick={() => setWeb(w)}>
+                  {w === 'apache' ? 'Apache' : 'Nginx'}
+                </button>
+              ))}
+            </div>
+            <span className="hint">You have no web server yet. Laramac installs this one and starts it, so {ctx.domain} opens.</span>
+          </div>
+        )}
+
         <div className="st-toggles">
           {dev && (
             <label className="check-row">
@@ -241,6 +297,7 @@ function CreateDialog({ starter, runtimes, versions, onClose }: { starter: Start
           <Sparkles size={14} />
           <div>
             {missing.length > 0 && <div>Installs {missing.map((m) => RUNTIME_NAME[m]).join(' and ')} first.</div>}
+            {ready && <Prep ready={ready} web={web} data={opts.data} db={opts.db} />}
             <div>Runs the official setup tool{starter.steps(ctx, opts).some((s) => 'database' in s) ? ', creates the database' : ''}{dev?.proxy ? ' and gives it its own dev server' : ''}.</div>
             {starter.note && <div className="hint">{starter.note}</div>}
           </div>

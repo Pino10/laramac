@@ -1,3 +1,4 @@
+import { isBackendRunning } from './backends'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import type { SiteConfig, SiteInfo, SiteKind } from '../shared/types'
@@ -102,6 +103,7 @@ export function scanSites(): SiteInfo[] {
       php,
       aliases,
       ...projectState(full, cfg.projectHash),
+      ...(cfg.backend ? { backend: { ...cfg.backend, running: cfg.backend.kind === 'firebase' ? isBackendRunning(entry) : undefined } } : {}),
       ...(cfg.dev
         ? { dev: { port: cfg.dev.port, proxy: cfg.dev.proxy, running: isDevRunning(entry), command: cfg.dev.command.join(' ') } }
         : kind === 'node' && suggestDevScript(full)

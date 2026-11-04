@@ -3992,3 +3992,9 @@ html[data-tone='light'] .nav-item[aria-current='page'] svg {
   line-height: 1.55;
   color: var(--ink-2);
 }
+
+/* Starter: what gets set up first */
+.st-prep { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.st-prep li { color: var(--ink-2, inherit); }
+.backend-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+.backend-row > span:first-child { margin-right: auto; }

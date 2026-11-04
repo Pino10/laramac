@@ -130,6 +130,7 @@ function DevLogs({ site, onClose }: { site: SiteInfo; onClose: () => void }): Re
         <pre ref={box} className="code-block dev-out">
           {text || (dev?.running ? 'Waiting for output…' : 'Not running. Press play on the Sites page to start it.')}
         </pre>
+        <BackendRow site={site} />
         <div className="end" style={{ marginTop: 14 }}>
           <button
             className="btn btn-quiet danger-text"
@@ -154,6 +155,48 @@ function DevLogs({ site, onClose }: { site: SiteInfo; onClose: () => void }): Re
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Supabase or Firebase beside the dev server: open its dashboard, or add one. */
+function BackendRow({ site }: { site: SiteInfo }): React.JSX.Element {
+  const { act, busy, setSites } = useApp()
+  const b = site.backend
+  const name = b?.kind === 'supabase' ? 'Supabase' : 'Firebase'
+  const run = async (key: string, fn: () => Promise<SiteInfo[]>): Promise<void> => {
+    const r = await act(key, fn)
+    if (r) setSites(r)
+  }
+  return (
+    <div className="backend-row">
+      {b ? (
+        <>
+          <span>
+            <strong>{name}</strong> <span className="hint">{b.kind === 'supabase' ? 'runs in containers and starts with the dev server' : b.running ? 'emulators running' : 'emulators start with the dev server'}</span>
+          </span>
+          {b.studioUrl && (
+            <button className="btn btn-sm" onClick={() => window.laramac.invoke('sites:open-url', b.studioUrl!)}>
+              {b.kind === 'supabase' ? 'Open Studio' : 'Open Emulator UI'}
+            </button>
+          )}
+          <button className="btn btn-sm" disabled={busy.has(`be-${site.name}`)} onClick={() => run(`be-${site.name}`, () => window.laramac.invoke('backends:start', site.name))}>
+            Start
+          </button>
+          <button className="btn btn-sm btn-quiet" onClick={() => run(`be-${site.name}`, () => window.laramac.invoke('backends:stop', site.name))}>
+            Stop
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="hint">Add a backend that runs on this Mac:</span>
+          {(['supabase', 'firebase'] as const).map((k) => (
+            <button key={k} className="btn btn-sm" disabled={busy.has(`be-${site.name}`)} onClick={() => run(`be-${site.name}`, () => window.laramac.invoke('backends:add', site.name, k))}>
+              {busy.has(`be-${site.name}`) ? 'Setting up…' : k === 'supabase' ? 'Add Supabase' : 'Add Firebase'}
+            </button>
+          ))}
+        </>
+      )}
     </div>
   )
 }
