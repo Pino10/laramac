@@ -34,6 +34,7 @@ import {
 import type { SiteLogSource, DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer, SecretHit } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
+import SitePage from './SitePage'
 import { useAsk } from '../components/Ask'
 import { ServerDialog } from './Servers'
 import { Answer } from '../components/Answer'
@@ -160,7 +161,7 @@ function DevLogs({ site, onClose }: { site: SiteInfo; onClose: () => void }): Re
 }
 
 /** Supabase or Firebase beside the dev server: open its dashboard, or add one. */
-function BackendRow({ site }: { site: SiteInfo }): React.JSX.Element {
+export function BackendRow({ site }: { site: SiteInfo }): React.JSX.Element {
   const { act, busy, setSites } = useApp()
   const b = site.backend
   const name = b?.kind === 'supabase' ? 'Supabase' : 'Firebase'
@@ -201,7 +202,7 @@ function BackendRow({ site }: { site: SiteInfo }): React.JSX.Element {
   )
 }
 
-function SiteDoctor({ site, aiName, onClose }: { site: SiteInfo; aiName: string; onClose: () => void }): React.JSX.Element {
+export function SiteDoctor({ site, aiName, onClose }: { site: SiteInfo; aiName: string; onClose: () => void }): React.JSX.Element {
   const { act, busy, setPage, settings } = useApp()
   const [turns, setTurns] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [sources, setSources] = useState<SiteLogSource[]>([])
@@ -311,7 +312,7 @@ function SiteDoctor({ site, aiName, onClose }: { site: SiteInfo; aiName: string;
   )
 }
 
-const kindLabel: Record<SiteInfo['kind'], string> = {
+export const kindLabel: Record<SiteInfo['kind'], string> = {
   laravel: 'Laravel',
   wordpress: 'WordPress',
   symfony: 'Symfony',
@@ -326,7 +327,7 @@ const kindLabel: Record<SiteInfo['kind'], string> = {
 }
 
 export default function Sites(): React.JSX.Element {
-  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject, setImportOpen, setPage } = useApp()
+  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject, setImportOpen, setPage, openSite, showSite } = useApp()
   const [query, setQuery] = useState('')
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
@@ -355,7 +356,10 @@ export default function Sites(): React.JSX.Element {
     }
   }
   const menuFor = (s: SiteInfo): React.ReactNode => <SiteMenu site={s} onLogs={() => setSiteLogsFor(s)} onProject={() => setProjectFor(s)} onDoctor={() => setDoctorFor(s)} />
-  const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()))
+  const [only, setOnly] = useState<'all' | 'running' | 'php' | 'js' | 'other'>('all')
+  const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()) && (only === 'all' || (only === 'running' ? !!s.dev?.running || !s.dev : only === 'php' ? PHP_KINDS.includes(s.kind) : only === 'js' ? s.kind === 'node' : !PHP_KINDS.includes(s.kind) && s.kind !== 'node')))
+  const current = openSite ? sites.find((s) => s.name === openSite.name) : undefined
+  if (current) return <SitePage key={current.name} site={current} tab={openSite?.tab} onBack={() => showSite(null)} />
 
   return (
     <>
@@ -382,6 +386,21 @@ export default function Sites(): React.JSX.Element {
             <Search size={14} />
             <input placeholder="Filter sites" aria-label="Filter sites" value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
+          <div className="seg" role="radiogroup" aria-label="Show">
+            {(
+              [
+                ['all', 'All'],
+                ['running', 'Live'],
+                ['php', 'PHP'],
+                ['js', 'JavaScript'],
+                ['other', 'Other']
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} role="radio" aria-checked={only === k} onClick={() => setOnly(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
           <button className="btn btn-quiet" onClick={() => api.invoke('www:reveal')}>
             <FolderOpen size={14} /> Show folder
           </button>
@@ -432,10 +451,10 @@ export default function Sites(): React.JSX.Element {
             <div key={site.path} className="site-row">
               <Monogram id={site.kind} />
               <div className="row-main">
-                <div className="row-title">
+                <button className="row-title link-title" onClick={() => showSite(site.name)} title="Open the site page">
                   {site.name}
                   {site.secure && <Lock size={12} aria-label="HTTPS" style={{ color: 'var(--ok)' }} />}
-                </div>
+                </button>
                 {site.shareUrl ? (
                   <button className="link row-sub" style={{ display: 'block' }} onClick={() => api.invoke('tools:open-external', site.shareUrl!)}>
                     Public at {site.shareUrl.replace('https://', '')}
@@ -587,7 +606,7 @@ function IconBtn({
   )
 }
 
-function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+export function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
   const { act, busy, notify } = useApp()
   const api = window.laramac
   const [list, setList] = useState<SnapshotInfo[] | null>(null)
@@ -701,7 +720,7 @@ function SnapshotsDialog({ site, onClose }: { site: SiteInfo; onClose: () => voi
   )
 }
 
-function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+export function DeployDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
   const { settings, act, busy, notify, setPage, jobs } = useApp()
   const api = window.laramac
   const saved = settings?.siteConfig[site.name]?.deploy
@@ -867,7 +886,7 @@ const PUSH_MODES: { id: GitPushOptions['mode']; title: string; desc: string }[] 
   { id: 'release', title: 'New release', desc: 'A version tag plus a GitHub release with notes.' }
 ]
 
-function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
+export function PushDialog({ site, onClose }: { site: SiteInfo; onClose: () => void }): React.JSX.Element {
   const { act, busy, notify, setPage } = useApp()
   const api = window.laramac
   const [acc, setAcc] = useState<boolean | null>(null)

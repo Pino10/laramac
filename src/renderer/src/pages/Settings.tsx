@@ -83,6 +83,17 @@ export default function Settings(): React.JSX.Element {
   return (
     <>
       <PageHead title="Settings" desc="Everything here is saved outside the app, so updates keep it." />
+      <nav className="settings-jump" aria-label="Sections">
+        {['Sites', 'Addresses', 'Web servers', 'Downloads', 'Connections', 'Appearance and alerts', 'Updates', 'Start over'].map((t) => (
+          <button
+            key={t}
+            className="chip-ask"
+            onClick={() => [...document.querySelectorAll('h2.section-title')].find((h) => h.textContent?.trim() === t)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            {t}
+          </button>
+        ))}
+      </nav>
 
       <h2 className="section-title" style={{ marginTop: 0 }}>
         Sites

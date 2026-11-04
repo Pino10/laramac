@@ -7,6 +7,15 @@ import { PageHead } from '../ui'
 
 const RUNTIME_NAME: Record<RuntimeId, string> = { node: 'Node.js', bun: 'Bun', python: 'Python', dotnet: '.NET', go: 'Go', rust: 'Rust', swift: 'Swift', php: 'PHP' }
 
+/** Whole apps, not just frameworks: a starter with the right choices already made. */
+const RECIPES: { id: string; title: string; text: string; starter: string; options: Record<string, string>; color: string }[] = [
+  { id: 'saas', title: 'SaaS app', text: 'Next.js, TypeScript, Tailwind and Supabase for sign-in and data.', starter: 'nextjs', options: { lang: 'ts', tailwind: 'yes', data: 'supabase' }, color: '#7c3aed' },
+  { id: 'admin', title: 'App with an admin panel', text: 'Laravel with React and the Filament admin, on MySQL.', starter: 'laravel', options: { kit: 'react', admin: 'filament', db: 'mysql' }, color: '#ef4444' },
+  { id: 'realtime', title: 'Real-time app', text: 'React and Vite with Firebase Auth and Firestore emulators.', starter: 'react', options: { lang: 'ts', data: 'firebase' }, color: '#f59e0b' },
+  { id: 'blog', title: 'Blog or docs', text: 'Astro’s blog template, fast and simple to host.', starter: 'astro', options: { template: 'blog' }, color: '#22c55e' },
+  { id: 'api', title: 'API with a database', text: 'NestJS on PostgreSQL, ready for routes and tests.', starter: 'nestjs', options: { data: 'pgsql' }, color: '#0ea5e9' }
+]
+
 function Mark({ s, size = 44 }: { s: Starter; size?: number }): React.JSX.Element {
   return (
     <span className="st-mark" style={{ width: size, height: size, background: s.color, fontSize: size * 0.36 }} aria-hidden>
@@ -23,6 +32,8 @@ export default function Starters(): React.JSX.Element {
   const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([])
   const [versions, setVersions] = useState<Record<string, string>>({})
   const [picked, setPicked] = useState<Starter | null>(null)
+  const [preset, setPreset] = useState<Record<string, string> | undefined>(undefined)
+  const { setImportOpen } = useApp()
 
   useEffect(() => {
     void api.invoke('runtimes:list').then(setRuntimes)
@@ -50,6 +61,30 @@ export default function Starters(): React.JSX.Element {
         </button>
       </PageHead>
 
+          <div className="recipes">
+            {RECIPES.map((r) => {
+              const s = STARTERS.find((x) => x.id === r.starter)
+              if (!s) return null
+              return (
+                <button
+                  key={r.id}
+                  className="recipe glass"
+                  style={{ ['--rc' as string]: r.color }}
+                  onClick={() => {
+                    setPreset(r.options)
+                    setPicked(s)
+                  }}
+                >
+                  <strong>{r.title}</strong>
+                  <span>{r.text}</span>
+                </button>
+              )
+            })}
+            <button className="recipe glass" style={{ ['--rc' as string]: '#64748b' }} onClick={() => setImportOpen(true)}>
+              <strong>From a Git repository</strong>
+              <span>Clone a project from GitHub or any Git address, and set it up.</span>
+            </button>
+          </div>
           <div className="st-filters">
             <label className="searchbox">
               <Search size={15} />
@@ -90,7 +125,18 @@ export default function Starters(): React.JSX.Element {
             {shown.length === 0 && <div className="empty dim">No starter matches “{query}”.</div>}
           </div>
 
-      {picked && <CreateDialog starter={picked} runtimes={runtimes} versions={versions} onClose={() => setPicked(null)} />}
+      {picked && (
+        <CreateDialog
+          starter={picked}
+          runtimes={runtimes}
+          versions={versions}
+          preset={preset}
+          onClose={() => {
+            setPicked(null)
+            setPreset(undefined)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -132,10 +178,10 @@ function Prep({ ready, web, data, db }: { ready: StarterReadiness; web: 'apache'
   )
 }
 
-function CreateDialog({ starter, runtimes, versions, onClose }: { starter: Starter; runtimes: RuntimeInfo[]; versions: Record<string, string>; onClose: () => void }): React.JSX.Element {
+function CreateDialog({ starter, runtimes, versions, preset, onClose }: { starter: Starter; runtimes: RuntimeInfo[]; versions: Record<string, string>; preset?: Record<string, string>; onClose: () => void }): React.JSX.Element {
   const { act, busy, settings, setSites, setPage } = useApp()
   const [name, setName] = useState('')
-  const [opts, setOpts] = useState<Record<string, string>>(() => Object.fromEntries((starter.options ?? []).map((o) => [o.id, o.default])))
+  const [opts, setOpts] = useState<Record<string, string>>(() => ({ ...Object.fromEntries((starter.options ?? []).map((o) => [o.id, o.default])), ...Object.fromEntries(Object.entries(preset ?? {}).filter(([k, v]) => starter.options?.some((o) => o.id === k && o.choices.some((c) => c.id === v)))) }))
   const [start, setStart] = useState(true)
   const [git, setGit] = useState(true)
   const [web, setWeb] = useState<'apache' | 'nginx'>('apache')

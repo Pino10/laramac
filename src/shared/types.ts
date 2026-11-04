@@ -644,6 +644,8 @@ export interface ReviewInfo {
   session?: string
   /** Skills the reviewer had. */
   skills?: string[]
+  /** What you decided about each finding, by its number in the report. */
+  triage?: Record<number, 'fixed' | 'accepted' | 'not-a-problem'>
   focus: ReviewFocus
   at: string
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
@@ -892,6 +894,19 @@ export interface Channels {
   'review:list': { args: []; result: ReviewInfo[] }
   'review:reviewers': { args: []; result: ReviewerOption[] }
   'recon:start': { args: [ReconRequest]; result: ReconInfo }
+  'recon:diff': { args: [string]; result: ReconDiff }
+  'recon:export': { args: [string, 'csv' | 'urls' | 'markdown']; result: string | null }
+  'health:check': { args: []; result: HealthIssue[] }
+  'health:fix': { args: [string]; result: HealthIssue[] }
+  'site:facts': { args: [string]; result: SiteFacts }
+  'site:env-read': { args: [string, string]; result: string }
+  'site:env-write': { args: [string, string, string]; result: void }
+  'site:outdated': { args: [string]; result: OutdatedPackage[] }
+  'db:tables': { args: ['mysql' | 'mariadb', string]; result: { name: string; rows: string }[] }
+  'db:query': { args: ['mysql' | 'mariadb', string, string]; result: { columns: string[]; rows: string[][]; truncated: boolean } }
+  'review:findings': { args: [string]; result: ReviewFinding[] }
+  'review:triage': { args: [string, number, 'fixed' | 'accepted' | 'not-a-problem' | null]; result: ReviewFinding[] }
+  'review:fix-one': { args: [string, number]; result: void }
   'recon:list': { args: []; result: ReconInfo[] }
   'recon:get': { args: [string]; result: ReconDetail }
   'recon:cancel': { args: [string]; result: void }
@@ -1012,6 +1027,62 @@ export interface Events {
   'dumps:new': DumpItem
   'recon:changed': ReconInfo
   'recon:line': { id: string; text: string }
+}
+
+// ---------------------------------------------------------------- Site page and Doctor
+
+export interface HealthIssue {
+  id: string
+  level: 'error' | 'warn' | 'info'
+  title: string
+  detail: string
+  site?: string
+  /** What Laramac can do about it: start-web, setup-dns, restart:<service>, start-dev:<site>, logs:<site>. */
+  fix?: string
+  fixLabel?: string
+}
+
+export interface OutdatedPackage {
+  name: string
+  manager: 'npm' | 'composer'
+  current: string
+  wanted: string
+  latest: string
+  /** A new major version: read its changes before updating. */
+  major: boolean
+  dev: boolean
+  abandoned?: boolean
+}
+
+export interface ReviewFinding {
+  index: number
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  title: string
+  file?: string
+  line?: number
+  what?: string
+  fix?: string
+  triage?: 'fixed' | 'accepted' | 'not-a-problem'
+}
+
+export interface ReconDiff {
+  first: boolean
+  since?: string
+  newHosts: string[]
+  goneHosts: string[]
+  newSourceMaps: string[]
+  newFindings: { severity: string; title: string }[]
+  fixedFindings: { severity: string; title: string }[]
+  newEndpoints: string[]
+}
+
+export interface SiteFacts {
+  database: { engine: string; name: string } | null
+  node: string | null
+  git: boolean
+  envFiles: { file: string; exists: boolean }[]
+  reviews: ReviewInfo[]
+  answers: number | null
 }
 
 // ---------------------------------------------------------------- Recon

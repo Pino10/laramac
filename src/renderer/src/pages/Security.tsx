@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
-import type { ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
+import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 import { Answer } from '../components/Answer'
@@ -378,7 +378,77 @@ function ReportView({ title, md, id, onAgent, remote }: { title: string; md: str
           )}
         </span>
       </div>
-      <Answer text={md.replace(/^# .*\n/, '')} />
+      <ReviewFindings id={id} remote={remote} />
+      <details className="report-full">
+        <summary>The whole report</summary>
+        <Answer text={md.replace(/^# .*\n/, '')} />
+      </details>
+    </div>
+  )
+}
+
+function ReviewFindings({ id, remote }: { id: string; remote?: boolean }): React.JSX.Element | null {
+  const [f, setF] = useState<ReviewFinding[] | null>(null)
+  useEffect(() => {
+    void window.laramac.invoke('review:findings', id).then(setF).catch(() => setF([]))
+  }, [id])
+  if (!f || f.length === 0) return null
+  return <FindingsList id={id} findings={f} onChange={setF} canFix={!remote} />
+}
+
+const TRIAGE: Record<NonNullable<ReviewFinding['triage']>, string> = { fixed: 'Fixed', accepted: 'Risk accepted', 'not-a-problem': 'Not a problem' }
+
+/** Each finding of a review, to fix with Claude Code or mark as dealt with. */
+export function FindingsList({ id, findings, onChange, canFix = true }: { id: string; findings: ReviewFinding[]; onChange: (f: ReviewFinding[]) => void; canFix?: boolean }): React.JSX.Element {
+  const { act } = useApp()
+  const api = window.laramac
+  const open = findings.filter((x) => !x.triage).length
+  const set = async (index: number, t: ReviewFinding['triage'] | null): Promise<void> => {
+    const r = await act('triage', () => api.invoke('review:triage', id, index, t ?? null))
+    if (r) onChange(r)
+  }
+  return (
+    <div className="panel findings">
+      <div className="findings-head">
+        <b>{open} open</b>
+        <span className="hint">of {findings.length} findings</span>
+      </div>
+      {findings.map((f) => (
+        <details key={f.index} className="finding" data-done={!!f.triage}>
+          <summary>
+            <span className="sev" data-sev={f.severity}>
+              {f.severity}
+            </span>
+            <span className="row-title">{f.title}</span>
+            {f.file && <span className="mono hint">{f.file}{f.line ? `:${f.line}` : ''}</span>}
+            {f.triage && <span className="tag">{TRIAGE[f.triage]}</span>}
+          </summary>
+          {f.what && <p>{f.what}</p>}
+          {f.fix && (
+            <p>
+              <strong>Fix:</strong> {f.fix}
+            </p>
+          )}
+          <div className="finding-actions">
+            {canFix && !f.triage && (
+              <button className="btn btn-sm btn-primary" onClick={() => void act('fix-one', () => api.invoke('review:fix-one', id, f.index))}>
+                <Sparkles size={12} /> Fix with Claude Code
+              </button>
+            )}
+            {f.triage ? (
+              <button className="btn btn-sm" onClick={() => void set(f.index, null)}>
+                Open again
+              </button>
+            ) : (
+              (['fixed', 'accepted', 'not-a-problem'] as const).map((t) => (
+                <button key={t} className="btn btn-sm btn-quiet" onClick={() => void set(f.index, t)}>
+                  {t === 'fixed' ? 'Fixed' : t === 'accepted' ? 'Accept the risk' : 'Not a problem'}
+                </button>
+              ))
+            )}
+          </div>
+        </details>
+      ))}
     </div>
   )
 }

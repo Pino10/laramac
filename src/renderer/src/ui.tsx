@@ -90,7 +90,7 @@ const HUES: Record<string, [string, string]> = {
   laravel: ['La', '#f05340'],
   symfony: ['Sy', '#7a7f87'],
   php: ['Ph', '#7a7fc8'],
-  node: ['No', '#3c9a3f'],
+  node: ['JS', '#3c9a3f'],
   static: ['Ht', '#8a919c'],
   python: ['Py', '#3776ab'],
   dotnet: ['C#', '#512bd4'],

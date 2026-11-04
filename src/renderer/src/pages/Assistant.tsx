@@ -247,6 +247,20 @@ export default function Assistant(): React.JSX.Element {
         <div ref={endRef} />
       </div>
 
+      <div className="quick-asks">
+        {[
+          'Why is one of my sites not opening?',
+          'Which services are running, and which failed?',
+          'Create a MySQL database for my newest site',
+          'Take a snapshot of every site before I update',
+          'Switch my Laravel site to the newest PHP',
+          'Show me the last errors in my sites’ logs'
+        ].map((q) => (
+          <button key={q} className="chip-ask" disabled={busy.has('chat')} onClick={() => void send(q)}>
+            {q}
+          </button>
+        ))}
+      </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <input
           className="input"

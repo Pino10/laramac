@@ -4017,3 +4017,82 @@ html[data-tone='light'] .nav-item[aria-current='page'] svg {
 .rc-finding[data-fp='true'] { opacity: 0.55; }
 .rc-finding p { margin: 8px 0 0; font-size: 13px; line-height: 1.55; }
 .report-md { white-space: pre-wrap; font: 13px/1.6 var(--font, inherit); margin: 0; }
+
+/* ===== 0.20: site page, Doctor, Overview, recipes ===== */
+.pad { padding: 16px 18px; }
+.link-title { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; display: inline-flex; gap: 6px; align-items: center; }
+.link-title:hover { color: var(--accent-text); }
+
+.health { border-radius: var(--r-lg); padding: 14px 16px; margin-bottom: 16px; display: grid; gap: 4px; }
+.doctor-head { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; }
+.doctor-row { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-top: 1px solid var(--line); }
+.doctor-row[data-level='error'] > svg { color: var(--bad); }
+.doctor-row[data-level='warn'] > svg { color: var(--warn); }
+.doctor-row[data-level='info'] > svg { color: var(--ink-3); }
+.doctor-ok { display: flex; align-items: center; gap: 10px; color: var(--ok); }
+.doctor-ok span { color: var(--ink-2); }
+
+.site-hero { display: flex; align-items: center; gap: 18px; padding: 20px 22px; border-radius: var(--r-xl); margin-bottom: 14px; }
+.site-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.site-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--sel); color: var(--ink-2); }
+.status-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status-pill[data-state='up'] { color: var(--ok); background: var(--ok-soft); }
+.status-pill[data-state='down'] { color: var(--bad); background: var(--bad-soft); }
+.status-pill[data-state='warn'], .status-pill[data-state='stopped'] { color: var(--warn); background: rgba(168, 105, 13, 0.12); }
+.site-tabs { margin-bottom: 14px; }
+.site-tabs button { display: inline-flex; gap: 6px; align-items: center; }
+.site-grid { display: grid; gap: 14px; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.quick { display: grid; gap: 6px; text-align: left; padding: 16px; border-radius: var(--r-lg); border: 0; cursor: pointer; color: inherit; transition: transform 0.2s var(--spring); }
+.quick:hover { transform: translateY(-2px); }
+.quick-icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-text); }
+.env-text { width: 100%; min-height: 320px; font-size: 12.5px; line-height: 1.6; white-space: pre; cursor: text; }
+
+.dbb { display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 260px; }
+.dbb-tables { border-right: 1px solid var(--line); max-height: 480px; overflow: auto; padding-right: 8px; }
+.dbb-table { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; background: none; border-radius: 8px; color: inherit; cursor: pointer; font-size: 12.5px; text-align: left; }
+.dbb-table:hover { background: var(--sel); }
+.dbb-table span:nth-child(2) { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.dbb-main { min-width: 0; }
+.dbb-grid { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: 12px; }
+.dbb-grid table { border-collapse: collapse; font-size: 12px; width: max-content; min-width: 100%; }
+.dbb-grid th, .dbb-grid td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbb-grid th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; }
+.db-browse { padding: 12px 14px 16px; border-top: 1px solid var(--line); }
+
+.findings { margin-top: 14px; }
+.findings-head { display: flex; gap: 8px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.finding { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.finding summary { display: flex; gap: 10px; align-items: center; cursor: pointer; list-style: none; }
+.finding summary .row-title { flex: 1; }
+.finding[data-done='true'] { opacity: 0.55; }
+.finding p { margin: 8px 0 0; font-size: 13px; line-height: 1.55; }
+.finding-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.report-full { margin-top: 12px; }
+.report-full summary { cursor: pointer; color: var(--ink-3); font-size: 13px; }
+
+.your-sites { margin-bottom: 18px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; }
+.ys-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.ys-card { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--r-md); cursor: pointer; border: 0; color: inherit; text-align: left; transition: transform 0.2s var(--spring); }
+.ys-card:hover { transform: translateY(-2px); }
+.ys-new { justify-content: center; color: var(--accent-text); font-weight: 600; }
+.pill-live { border: 0; height: 22px; padding: 0 10px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+
+.jobs-head { display: flex; align-items: center; gap: 8px; border: 0; color: inherit; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; justify-self: end; }
+
+.recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.recipe { display: grid; gap: 4px; text-align: left; padding: 14px 16px; border-radius: var(--r-md); border: 0; border-left: 3px solid var(--rc); color: inherit; cursor: pointer; transition: transform 0.2s var(--spring); }
+.recipe:hover { transform: translateY(-2px); }
+.recipe span { font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+
+.changes { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; }
+.quick-asks, .settings-jump { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.settings-jump { margin: 0 0 16px; position: sticky; top: 0; z-index: 2; padding: 6px 0; }
+.chip-ask { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.chip-ask:hover { border-color: var(--accent); color: var(--accent-text); }
+.site-hero > .row-main { flex: 1; min-width: 0; }
+.recipes { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+.recipes > * { align-content: start; justify-content: start; text-align: left; }
+.site-grid .health { margin-bottom: 0; }

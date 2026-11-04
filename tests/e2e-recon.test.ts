@@ -7,6 +7,8 @@ const run = existsSync('/tmp/lm/myapp/package.json') ? describe : describe.skip
 
 run('recon of a real Next.js site', () => {
   it('finds the host, its technology, scripts, source maps and endpoints', async () => {
+    // Needs the site actually answering; otherwise there is nothing to test against.
+    if (!(await fetch('http://myapp.test/', { signal: AbortSignal.timeout(3000) }).then(() => true).catch(() => false))) return console.log('myapp.test is not running: skipped')
     const steps: string[] = []
     const lines: string[] = []
     const r = await runRecon('myapp.test', {

@@ -28,7 +28,7 @@ All four are in `.github/workflows/` and run on GitHub's own Macs, for free on a
 ## Releasing a new version
 
 1. Edit `package.json`: `"version": "0.18.0"` (no `v`).
-2. Add a `## New in 0.18.0` section at the top of `RELEASE_NOTES.md`. The app shows this text on its Updates page.
+2. Add a `## New in 0.20` section at the top of `RELEASE_NOTES.md`. The app shows this text on its Updates page.
 3. Commit and push to `main`. Wait for the green tick from **CI**.
 4. On GitHub: **Actions** › **Build and release** › **Run workflow**, tag `v0.18.0` (with the `v`). Or tag and push it: `git tag v0.18.0 && git push origin v0.18.0`.
 5. In about 10 to 15 minutes the release appears with 3 files: a `.dmg` for Apple Silicon, one for Intel, and `SHA256SUMS.txt`.
@@ -72,6 +72,7 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 | Folder | What is there |
 | --- | --- |
 | `src/main/` | Everything that touches the Mac: servers, PHP, databases, downloads, imports, security tools. Runs in Electron's main process. |
+| `src/main/hub.ts` | The site page and the Doctor: health checks and their fixes, .env files, outdated packages, review findings, recon compare and export. |
 | `src/main/svc/` | One file per service (MySQL, Redis, Mailpit…): install, start, stop. |
 | `src/renderer/` | The interface (React). Pages in `pages/`, dialogs and panels in `components/`, all styles in `theme.css`. |
 | `src/shared/` | Types and data both sides use. `types.ts` lists every message between the interface and the main process (`Channels`). |

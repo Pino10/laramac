@@ -57,6 +57,9 @@ interface AppCtx {
   /** A starter picked from the command bar, opened by the Starters page. */
   pendingStarter: string | null
   setPendingStarter: (id: string | null) => void
+  /** The site page that is open, and on which tab. */
+  openSite: { name: string; tab?: string } | null
+  showSite: (name: string | null, tab?: string) => void
 }
 
 const Ctx = createContext<AppCtx | null>(null)
@@ -94,6 +97,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [tourOpen, setTourOpen] = useState(false)
   const [pendingStarter, setPendingStarter] = useState<string | null>(null)
+  const [openSite, setOpenSite] = useState<{ name: string; tab?: string } | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   const notify = useCallback((t: Toast) => {
@@ -212,9 +216,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       tourOpen,
       setTourOpen,
       pendingStarter,
-      setPendingStarter
+      setPendingStarter,
+      openSite,
+      showSite: (name: string | null, tab?: string) => {
+        setOpenSite(name ? { name, tab } : null)
+        if (name) setPage('sites')
+      }
     }),
-    [tourOpen, pendingStarter, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [tourOpen, pendingStarter, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

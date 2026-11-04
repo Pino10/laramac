@@ -18,6 +18,7 @@ export default function Php(): React.JSX.Element {
   } = useApp();
   const api = window.laramac;
   const [extsFor, setExtsFor] = useState<PhpVersionInfo | null>(null);
+  const [extQ, setExtQ] = useState('')
   const installing = jobs.some(
     (j) => j.status === "running" && j.label.includes("PHP"),
   );
@@ -335,8 +336,10 @@ export default function Php(): React.JSX.Element {
             <p className="hint" style={{ margin: "4px 0 12px" }}>
               All built in and ready. No extension= lines needed.
             </p>
+            <input className="input" placeholder="Is it there? Type an extension, such as gd or redis" value={extQ} onChange={(e) => setExtQ(e.target.value)} style={{ marginBottom: 10 }} aria-label="Find an extension" />
+            {extQ && !extsFor.extensions.some((e) => e.toLowerCase().includes(extQ.toLowerCase())) && <p className="hint">Not in this build. Add an older or custom PHP with Add a version, or ask for it on GitHub.</p>}
             <div className="ext-list" style={{ maxHeight: 320 }}>
-              {extsFor.extensions.map((e) => (
+              {extsFor.extensions.filter((e) => e.toLowerCase().includes(extQ.toLowerCase())).map((e) => (
                 <span key={e} className="tag">
                   {e}
                 </span>

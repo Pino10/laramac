@@ -1,0 +1,18 @@
+{
+    "installed": [
+        {
+            "name": "psr/log",
+            "direct-dependency": true,
+            "homepage": "https://github.com/php-fig/log",
+            "source": "https://github.com/php-fig/log/tree/master",
+            "version": "1.1.0",
+            "release-age": "7 years old",
+            "release-date": "2018-11-20T15:27:04+00:00",
+            "latest": "3.0.2",
+            "latest-status": "update-possible",
+            "latest-release-date": "2024-09-11T13:17:53+00:00",
+            "description": "Common interface for logging libraries",
+            "abandoned": false
+        }
+    ]
+}

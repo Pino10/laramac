@@ -490,3 +490,9 @@ export function pushableFiles(root: string): Promise<string[]> {
     })
   })
 }
+
+/** Saves a review's details (what you decided about each finding, for example). */
+export function saveReviewInfo(info: ReviewInfo): void {
+  if (!/^[a-z0-9-]+$/.test(info.id)) throw new Error('Unknown review.')
+  writeFileSync(join(reviewsDir(), `${info.id}.json`), JSON.stringify(info))
+}

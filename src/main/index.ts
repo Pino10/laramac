@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
 import { runtimesFor } from './importsetup'
 import { expandCommand } from './starterrun'
-import { ensureRuntimes } from './runtimes'
+import { ensureRuntimes, locate } from './runtimes'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
 import { cleanRemotePath, deploy } from './deploy'
@@ -31,6 +31,7 @@ import * as models from './models'
 import * as mailrelay from './mailrelay'
 import * as review from './review'
 import * as recon from './recon'
+import * as hub from './hub'
 import { installForClaude, installedForClaude, removeFromClaude, SKILLS } from './seckit/skills'
 import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath } from './desktop'
 import * as scan from './scan'
@@ -50,7 +51,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -85,7 +86,7 @@ import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, openTermin
 import { assistantChat } from './ai'
 import { processEvents, tailFile } from './process'
 import { phpmyadminInstalled } from './webconf'
-import { macMajor } from './platform'
+import { findOnPath, macMajor } from './platform'
 import { assertMinor, isWebUrl, sanitizeSettingsPatch, ValidationError } from './validate'
 
 let mainWindow: BrowserWindow | null = null
@@ -991,6 +992,123 @@ function registerIpc(): void {
     await jobs.run('Installing subfinder', (u) => recon.installSubfinder(u))
     return { subfinder: recon.hasSubfinder() }
   })
+  // ---- Doctor: what is wrong right now, and fixing it
+  let nodeMajor: string | null | undefined
+  const health = async (): Promise<HealthIssue[]> => {
+    const st = getSettings()
+    const sites = listSites()
+    const svcs = services.list()
+    const webUp = svcs.some((s) => (s.id === 'apache' || s.id === 'nginx') && s.status === 'running')
+    const probes: Record<string, number | null> = {}
+    if (webUp) await Promise.all(sites.slice(0, 40).map(async (s) => (probes[s.name] = await hub.probeSite(st.httpPort, s.domain))))
+    if (nodeMajor === undefined) {
+      const n = locate('node')
+      nodeMajor = n ? await new Promise<string | null>((r) => execFile(n.path, ['--version'], { timeout: 5000 }, (_e, out) => r(/v(\d+)/.exec(String(out))?.[1] ?? null))) : null
+    }
+    return hub.healthIssues({ services: svcs, sites, dnsReady: (await toolsStatus()).dnsReady, httpPort: st.httpPort, nodeMajor, probes })
+  }
+  handle('health:check', () => health())
+  handle('health:fix', async (id) => {
+    const fix = String(id)
+    if (fix === 'start-web') await prepareWeb()
+    else if (fix === 'setup-dns') await jobs.run(`Setting up .${getSettings().tld} addresses`, async () => {
+      await installResolver(getSettings().tld)
+      await startDnsServer(() => getSettings().tld)
+    })
+    else if (fix.startsWith('restart:')) {
+      const svc = fix.slice(8) as ServiceId
+      if (!services.list().some((s) => s.id === svc)) throw new ValidationError('Unknown service.')
+      await services.start(svc)
+    } else if (fix.startsWith('start-dev:')) {
+      const site = siteByName(fix.slice(10))
+      const cfg = getSettings().siteConfig[site.name]?.dev
+      if (cfg) await startDev(site, cfg)
+    } else throw new ValidationError('Laramac cannot fix that by itself.')
+    notifySitesChanged()
+    return health()
+  })
+
+  // ---- The site page
+  handle('site:facts', async (name) => {
+    const site = siteByName(name)
+    const db = snapshots.detectSiteDatabase(site.path)
+    const webUp = services.list().some((s) => (s.id === 'apache' || s.id === 'nginx') && s.status === 'running')
+    return {
+      database: db ? { engine: db.engine, name: db.name } : null,
+      node: hub.wantedNode(site.path),
+      git: existsSync(join(site.path, '.git')),
+      envFiles: hub.envFiles(site),
+      reviews: review.listReviews().filter((r) => r.folder === site.path),
+      answers: webUp ? await hub.probeSite(getSettings().httpPort, site.domain) : null
+    }
+  })
+  handle('site:env-read', (name, file) => hub.readEnv(siteByName(name), String(file)))
+  handle('site:env-write', (name, file, text) => {
+    if (typeof text !== 'string') throw new ValidationError('Nothing to save.')
+    hub.writeEnvFile(siteByName(name), String(file), text)
+    activity.push('info', `Saved ${file} for ${name}`)
+  })
+  handle('site:outdated', async (name) => {
+    const site = siteByName(name)
+    const minor = defaultMinor()
+    const composer = minor && existsSync(composerPhar()) ? [phpBinary(minor), composerPhar()] : findOnPath('composer') ? [findOnPath('composer')!] : null
+    return jobs.run(`Checking ${site.name}'s packages`, () => hub.outdated(site, composer))
+  })
+  handle('db:tables', async (engine, name) => {
+    const r = await dbadmin.readOnlyQuery(dbTarget(dbEngine(engine)), dbadmin.checkName(String(name)), `SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema = '${dbadmin.checkName(String(name))}' ORDER BY table_name`, 500)
+    return r.rows.map((x) => ({ name: x[0], rows: x[1] }))
+  })
+  handle('db:query', (engine, name, sql) => {
+    if (typeof sql !== 'string' || sql.length > 20000) throw new ValidationError('Write one query.')
+    return dbadmin.readOnlyQuery(dbTarget(dbEngine(engine)), dbadmin.checkName(String(name)), sql, 500).catch((e) => {
+      throw new ValidationError((e as Error).message)
+    })
+  })
+
+  // ---- Review findings you can act on one by one
+  const reviewInfo = (id: string): ReviewInfo => {
+    const r = review.listReviews().find((x) => x.id === id)
+    if (!r) throw new ValidationError('That review is gone.')
+    return r
+  }
+  const findingsOf = (id: string): ReviewFinding[] => {
+    const info = reviewInfo(id)
+    return hub.reviewFindings(review.readReview(id)).map((f) => ({ ...f, triage: info.triage?.[f.index] }))
+  }
+  handle('review:findings', (id) => findingsOf(String(id)))
+  handle('review:triage', (id, index, t) => {
+    const info = reviewInfo(String(id))
+    const triage = { ...(info.triage ?? {}) }
+    if (t === 'fixed' || t === 'accepted' || t === 'not-a-problem') triage[Number(index)] = t
+    else delete triage[Number(index)]
+    review.saveReviewInfo({ ...info, triage })
+    return findingsOf(String(id))
+  })
+  handle('review:fix-one', async (id, index) => {
+    const info = reviewInfo(String(id))
+    const f = hub.reviewFindings(review.readReview(info.id)).find((x) => x.index === Number(index))
+    if (!f) throw new ValidationError('That finding is not in the review.')
+    if (!info.folder || !existsSync(info.folder)) throw new ValidationError('The code for this review is no longer on this Mac.')
+    const ask = `Fix this ${f.severity} finding from a security review, then explain the change: ${f.title}.${f.file ? ` It is in ${f.file}${f.line ? ` around line ${f.line}` : ''}.` : ''} ${f.what ?? ''} Suggested fix: ${f.fix ?? 'your judgement'}.`
+    await openTerminal(info.folder, `claude ${shellQuote(ask.replace(/\s+/g, ' ').slice(0, 2000))}`)
+  })
+
+  // ---- Recon: compare and export
+  handle('recon:diff', (id) => {
+    const d = recon.reconDetail(String(id))
+    const prev = recon.listRecon().find((r) => r.domain === d.domain && r.id !== d.id && r.createdAt < d.createdAt && r.status === 'done')
+    return hub.reconDiff(d, prev ? recon.reconDetail(prev.id) : null, prev?.createdAt)
+  })
+  handle('recon:export', async (id, kind) => {
+    const d = recon.reconDetail(String(id))
+    const ext = kind === 'csv' ? 'csv' : kind === 'urls' ? 'txt' : 'md'
+    const r = await dialog.showSaveDialog(mainWindow!, { title: 'Export the recon', defaultPath: join(app.getPath('downloads'), `recon-${d.domain}${kind === 'urls' ? '-urls' : ''}.${ext}`) })
+    if (r.canceled || !r.filePath) return null
+    writeFileSync(r.filePath, kind === 'csv' ? hub.reconCsv(d) : kind === 'urls' ? hub.reconUrls(d) : (d.report ?? `# Recon of ${d.domain}\n\n${d.findings.map((f) => `- [${f.severity}] ${f.title}${f.url ? ` (${f.url})` : ''}`).join('\n')}\n`))
+    shell.showItemInFolder(r.filePath)
+    return r.filePath
+  })
+
   handle('skills:status', () => skillsStatus())
   handle('skills:install', (on) => {
     if (on === true) installForClaude('laramac')

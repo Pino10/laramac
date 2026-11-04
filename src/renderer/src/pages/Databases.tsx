@@ -1,5 +1,6 @@
+import DbBrowser from '../components/DbBrowser'
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowUpRight, Download, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowUpRight, Download, Plus, Trash2, Upload, Copy } from 'lucide-react'
 import type { DatabaseInfo } from '@shared/types'
 import { useApp } from '../store'
 import { CopyField, formatBytes, PageHead } from '../ui'
@@ -11,6 +12,7 @@ const ENGINE_NAME: Record<Engine, string> = { mysql: 'MySQL', mariadb: 'MariaDB'
 
 export default function Databases(): React.JSX.Element {
   const { services, tools, settings, act, busy, setTools, setImportOpen, notify } = useApp()
+  const [browse, setBrowse] = useState<string | null>(null)
   const api = window.laramac
   const tld = settings?.tld ?? 'test'
   const [dbs, setDbs] = useState<DatabaseInfo[] | null>(null)
@@ -126,8 +128,11 @@ export default function Databases(): React.JSX.Element {
                       <span />
                     </div>
                     {list.map((d) => (
-                      <div key={d.name} className="db-row">
-                        <span className="db-name">{d.name}</span>
+                      <div key={d.name}>
+                      <div className="db-row">
+                        <button className="db-name link-title" title="Browse its tables" onClick={() => setBrowse(browse === `${d.engine}/${d.name}` ? null : `${d.engine}/${d.name}`)}>
+                          {d.name}
+                        </button>
                         <span className="num">{d.tables}</span>
                         <span className="num">{d.rows.toLocaleString()}</span>
                         <span className="num">{formatBytes(d.bytes)}</span>
@@ -141,10 +146,19 @@ export default function Databases(): React.JSX.Element {
                           <button className="icon-btn" data-tip="Back up" aria-label={`Back up ${d.name}`} onClick={() => backup(d)} disabled={busy.has(`db-export-${d.name}`)}>
                             <Download />
                           </button>
+                          <button className="icon-btn" data-tip="Copy connection string" aria-label={`Copy the connection string for ${d.name}`} onClick={() => void api.invoke('clipboard:write', `mysql://root@127.0.0.1:${d.engine === 'mariadb' ? 3307 : 3306}/${d.name}`).then(() => notify({ kind: 'info', text: 'Copied. Add the password if you set one.' }))}>
+                            <Copy />
+                          </button>
                           <button className="icon-btn danger-text" data-tip="Delete" aria-label={`Delete ${d.name}`} onClick={() => remove(d)}>
                             <Trash2 />
                           </button>
                         </span>
+                      </div>
+                      {browse === `${d.engine}/${d.name}` && (
+                        <div className="db-browse">
+                          <DbBrowser engine={d.engine as 'mysql' | 'mariadb'} name={d.name} />
+                        </div>
+                      )}
                       </div>
                     ))}
                   </>

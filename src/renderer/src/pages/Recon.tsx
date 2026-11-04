@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, CheckCircle2, ChevronRight, Circle, CircleSlash, Download, ExternalLink, Loader2, Radar, Square, Trash2, XCircle } from 'lucide-react'
-import type { ReconDepth, ReconDetail, ReconInfo, ReconSeverity, ReviewerKind, ReviewerOption } from '@shared/types'
+import type { ReconDiff, ReconDepth, ReconDetail, ReconInfo, ReconSeverity, ReviewerKind, ReviewerOption } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 
@@ -159,11 +159,13 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
   const [d, setD] = useState<ReconDetail | null>(null)
   const [tab, setTab] = useState<'findings' | 'hosts' | 'js' | 'endpoints' | 'report'>('findings')
   const [lines, setLines] = useState<string[]>([])
+  const [diff, setDiff] = useState<ReconDiff | null>(null)
   const [now, setNow] = useState(Date.now())
   const box = useRef<HTMLPreElement>(null)
   const stamp = `${info?.status}|${info?.steps.map((s) => s.status).join(',')}`
   useEffect(() => {
     void api.invoke('recon:get', id).then(setD)
+    void api.invoke('recon:diff', id).then(setDiff).catch(() => undefined)
   }, [api, id, stamp])
   useEffect(() => api.on('recon:line', (l) => l.id === id && setLines((x) => [...x.slice(-299), l.text])), [api, id])
   const running = (info ?? d)?.status === 'running'
@@ -192,6 +194,12 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
             <Square size={13} /> Stop
           </button>
         ) : (
+          <>
+            {(['urls', 'csv', 'markdown'] as const).map((k) => (
+              <button key={k} className="btn btn-sm" title={k === 'urls' ? 'Every URL found, one per line: paste it into Burp Suite’s target list' : undefined} onClick={() => void act(`rc-exp-${k}`, () => api.invoke('recon:export', id, k))}>
+                <Download size={12} /> {k === 'urls' ? 'URLs for Burp' : k === 'csv' ? 'CSV' : 'Report'}
+              </button>
+            ))}
           <button
             className="icon-btn danger-text"
             aria-label="Delete"
@@ -202,8 +210,11 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
           >
             <Trash2 />
           </button>
+          </>
         )}
       </PageHead>
+
+      {!running && diff && !diff.first && <Changes d={diff} />}
 
       {running && (
         <div className="liverun glass">
@@ -359,5 +370,39 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
         </div>
       )}
     </>
+  )
+}
+
+/** What changed since the last recon of the same domain. */
+function Changes({ d }: { d: ReconDiff }): React.JSX.Element {
+  const items: [string, string[]][] = [
+    ['New hosts', d.newHosts],
+    ['Gone', d.goneHosts],
+    ['New source maps', d.newSourceMaps],
+    ['New findings', d.newFindings.map((f) => `[${f.severity}] ${f.title}`)],
+    ['No longer found', d.fixedFindings.map((f) => `[${f.severity}] ${f.title}`)],
+    ['New endpoints', d.newEndpoints]
+  ]
+  const any = items.some(([, v]) => v.length)
+  return (
+    <div className="panel pad" style={{ marginBottom: 14 }}>
+      <div className="row-title">Since the last recon{d.since ? ` (${new Date(d.since).toLocaleDateString('en-GB', { dateStyle: 'medium' })})` : ''}</div>
+      {!any && <div className="hint">Nothing changed.</div>}
+      <div className="changes">
+        {items
+          .filter(([, v]) => v.length)
+          .map(([k, v]) => (
+            <div key={k}>
+              <b>
+                {v.length} {k.toLowerCase()}
+              </b>
+              <div className="hint mono" style={{ wordBreak: 'break-all' }}>
+                {v.slice(0, 6).join(', ')}
+                {v.length > 6 ? ` and ${v.length - 6} more` : ''}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
   )
 }

@@ -2,6 +2,8 @@ import { ArrowUpRight, Database, Mail, Plus, Upload } from 'lucide-react'
 import type { ServiceGroup } from '@shared/types'
 import { useApp } from '../store'
 import StackMap from '../components/StackMap'
+import Doctor from '../components/Doctor'
+import { Monogram } from '../ui'
 import ServiceRow from '../components/ServiceRow'
 
 const groups: { id: ServiceGroup; title: string }[] = [
@@ -107,6 +109,9 @@ export default function Dashboard(): React.JSX.Element {
           <button className="btn btn-primary btn-lg" disabled={busy.has('setup') || installing} onClick={runSetup}>
             {busy.has('setup') ? 'Setting up…' : 'Set up my stack'}
           </button>
+          <button className="btn btn-lg" onClick={() => setPage('starters')}>
+            Or start a project: Laramac sets up what it needs
+          </button>
           <span className="hint">
             {tools && !tools.homebrew ? (
               <>
@@ -166,6 +171,9 @@ export default function Dashboard(): React.JSX.Element {
           </button>
         </div>
       </div>
+
+      <Doctor quietWhenFine />
+      <YourSites />
 
       {setup.map((step) => (
         <div key={step.key} className="callout">
@@ -244,5 +252,50 @@ export default function Dashboard(): React.JSX.Element {
         </aside>
       </div>
     </>
+  )
+}
+
+/** Your sites at a glance: open one, or start its dev server. */
+function YourSites(): React.JSX.Element | null {
+  const { sites, showSite, act, setSites, setPage } = useApp()
+  if (!sites.length) return null
+  const list = [...sites].sort((a, b) => Number(!!b.dev?.running) - Number(!!a.dev?.running)).slice(0, 8)
+  return (
+    <div className="your-sites">
+      <div className="section-head">
+        <h2 className="section-title">Your sites</h2>
+        <button className="link" onClick={() => setPage('sites')}>
+          All {sites.length} <ArrowUpRight size={12} />
+        </button>
+      </div>
+      <div className="ys-grid">
+        {list.map((s) => (
+          <div key={s.name} className="ys-card glass" role="button" tabIndex={0} onClick={() => showSite(s.name)} onKeyDown={(e) => e.key === 'Enter' && showSite(s.name)}>
+            <Monogram id={s.kind} />
+            <div className="row-main">
+              <div className="row-title">{s.name}</div>
+              <div className="row-sub">{s.domain}</div>
+            </div>
+            {s.dev ? (
+              <button
+                className={s.dev.running ? 'pill-live' : 'btn btn-sm'}
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  const r = await act(`dev-${s.name}`, () => window.laramac.invoke(s.dev!.running ? 'dev:stop' : 'dev:start', s.name))
+                  if (r) setSites(r)
+                }}
+              >
+                {s.dev.running ? 'Live' : 'Start'}
+              </button>
+            ) : (
+              <span className="pill-live">Live</span>
+            )}
+          </div>
+        ))}
+        <button className="ys-card ys-new glass" onClick={() => setPage('starters')}>
+          <Plus size={18} /> New project
+        </button>
+      </div>
+    </div>
   )
 }

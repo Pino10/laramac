@@ -92,9 +92,15 @@ After this, updates install from inside the app and never touch your projects, d
 
 Your whole stack at a glance. The **live map** shows every site, the web server that serves it, the PHP version it runs on and the services behind it; connections pulse when both ends are running, and clicking any box takes you to it. Below it, every service has a switch, its port and its status, with the reason shown in place if one fails to start. **Start all** and **Stop all** do what they say. Shortcuts open phpMyAdmin, the mail inbox, a new project or an import.
 
+At the top, the **Doctor** checks everything on its own every 30 seconds (web server, .test addresses, services, dev servers, and whether each site answers without errors) and gives every problem a **Fix** button. **Your sites** shows your projects with Live or Start.
+
 ### Sites
 
 <img src="docs/screenshots/sites.png" alt="Sites with round action buttons" width="820">
+
+Click a site's name to open **its own page**: overview, live logs, its database (read-only queries), .env files (secrets hidden until you show them), outdated packages, security findings you can fix or mark, and shipping.
+
+<img src="docs/screenshots/site.png" alt="A site's own page" width="820">
 
 Every folder in your projects folder is a site. Laramac recognises **Laravel, WordPress, Symfony, plain PHP and static sites** and serves the right folder (for example `public/` for Laravel). For each site you can:
 

@@ -1,0 +1,51 @@
+{
+  "@types/node": {
+    "current": "20.19.43",
+    "wanted": "20.19.43",
+    "latest": "26.6.6",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/@types/node"
+  },
+  "eslint": {
+    "current": "9.39.5",
+    "wanted": "9.39.5",
+    "latest": "10.14.0",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/eslint"
+  },
+  "eslint-config-next": {
+    "current": "16.4.4",
+    "wanted": "16.4.4",
+    "latest": "16.4.5",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/eslint-config-next"
+  },
+  "next": {
+    "current": "16.4.4",
+    "wanted": "16.4.4",
+    "latest": "16.4.5",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/next"
+  },
+  "react": {
+    "current": "19.3.0",
+    "wanted": "19.3.0",
+    "latest": "19.3.1",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/react"
+  },
+  "react-dom": {
+    "current": "19.3.0",
+    "wanted": "19.3.0",
+    "latest": "19.3.1",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/react-dom"
+  },
+  "typescript": {
+    "current": "5.9.3",
+    "wanted": "5.9.3",
+    "latest": "7.0.2",
+    "dependent": "myapp",
+    "location": "/tmp/lm/myapp/node_modules/typescript"
+  }
+}
