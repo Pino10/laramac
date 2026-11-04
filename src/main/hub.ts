@@ -15,6 +15,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import type { HealthIssue, OutdatedPackage, ReconDiff, ReviewFinding, ServiceInfo, SiteInfo } from '../shared/types'
 import { runtimeEnv } from './runtimes'
+import { siteRuntimeEnv } from './nodeversions'
 
 // ---------------------------------------------------------------- Health
 
@@ -58,6 +59,8 @@ export interface HealthInput {
   dnsReady: boolean
   httpPort: number
   nodeMajor: string | null
+  /** What each site needs and whether it is installed (from nodeversions.siteNodeChoice). */
+  nodeFor?: Record<string, { want: string | null; source: string; installed: boolean }>
   /** Status code per site name, from probeSite; null when nothing answered. */
   probes: Record<string, number | null>
 }
@@ -89,11 +92,16 @@ export function healthIssues(h: HealthInput): HealthIssue[] {
       else if (code >= 500) out.push({ id: `5xx-${s.name}`, level: 'error', site: s.name, title: `${s.name} shows an error (${code})`, detail: 'The site answers with a server error. Its logs say why.', fix: `logs:${s.name}`, fixLabel: 'Open its logs' })
     }
   }
-  if (h.nodeMajor) {
-    for (const s of h.sites) {
-      const want = wantedNode(s.path)
-      if (want && want !== h.nodeMajor && Number(want) > 0) out.push({ id: `node-${s.name}`, level: 'info', site: s.name, title: `${s.name} asks for Node ${want}`, detail: `Laramac runs Node ${h.nodeMajor}. Most projects still work; if this one does not, install Node ${want} on the Languages page.` })
+  for (const s of h.sites) {
+    // With the Node each site needs known, only a missing version is a problem.
+    const n = h.nodeFor?.[s.name]
+    if (n) {
+      if (n.want && !n.installed) out.push({ id: `node-${s.name}`, level: 'warn', site: s.name, title: `${s.name} needs Node ${n.want}`, detail: `It asks for Node ${n.want} (${n.source}). Laramac can install it just for this project; other sites keep theirs.`, fix: `node-install:${n.want}`, fixLabel: `Install Node ${n.want}` })
+      continue
     }
+    if (!h.nodeMajor) continue
+    const want = wantedNode(s.path)
+    if (want && want !== h.nodeMajor && Number(want) > 0) out.push({ id: `node-${s.name}`, level: 'info', site: s.name, title: `${s.name} asks for Node ${want}`, detail: `Laramac runs Node ${h.nodeMajor}. Install Node ${want} and this site uses it on its own.`, fix: `node-install:${want}`, fixLabel: `Install Node ${want}` })
   }
   return out
 }
@@ -128,7 +136,7 @@ export function writeEnvFile(site: SiteInfo, file: string, text: string): void {
 
 function sh(cmd: string, args: string[], cwd: string): Promise<string> {
   // Both tools exit 1 when something is outdated; the output is what matters.
-  return new Promise((done) => execFile(cmd, args, { cwd, env: runtimeEnv(), timeout: 120000, maxBuffer: 20 * 1024 * 1024 }, (_e, out) => done(String(out))))
+  return new Promise((done) => execFile(cmd, args, { cwd, env: siteRuntimeEnv(cwd), timeout: 120000, maxBuffer: 20 * 1024 * 1024 }, (_e, out) => done(String(out))))
 }
 
 export function parseNpmOutdated(json: string): OutdatedPackage[] {
@@ -222,4 +230,25 @@ export function reconUrls(r: { hosts: { live?: { url: string } }[]; js: { url: s
   const abs = r.endpoints.filter((e) => /^https?:\/\//.test(e))
   const rel = base[0] ? r.endpoints.filter((e) => e.startsWith('/')).map((e) => new URL(e, base[0]).href) : []
   return [...new Set([...base, ...r.js.map((j) => j.url), ...abs, ...rel])].join('\n') + '\n'
+}
+
+// ---------------------------------------------------------------- API client: site environments
+
+const SECRETISH = /(KEY|SECRET|TOKEN|PASSWORD|PASS|PRIVATE|CREDENTIAL|DSN|SALT|AUTH)/i
+
+/** Variables for a site's API environment: its address, plus the non-secret URLs in its .env. */
+export function siteApiVars(site: SiteInfo, envText: string): { key: string; value: string; enabled: boolean }[] {
+  const base = (site.secure && site.httpsUrl ? site.httpsUrl : site.url).replace(/\/+$/, '')
+  const vars = [
+    { key: 'base', value: base, enabled: true },
+    { key: 'host', value: site.domain, enabled: true }
+  ]
+  if (site.kind === 'laravel') vars.push({ key: 'api', value: `${base}/api`, enabled: true })
+  for (const line of envText.split('\n')) {
+    const m = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/.exec(line)
+    if (!m || SECRETISH.test(m[1]) || !/_URL$|^APP_URL$/.test(m[1])) continue
+    const value = m[2].trim().replace(/^['"]|['"]$/g, '')
+    if (/^https?:\/\//.test(value) && !/@/.test(value)) vars.push({ key: m[1], value, enabled: true })
+  }
+  return vars
 }

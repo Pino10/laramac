@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { FolderOpen, RotateCcw } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FolderOpen, RotateCcw, Search, X } from 'lucide-react'
+import { SETTINGS_INDEX } from '../settingsIndex'
 import type { AppSettings, ResetOptions } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
@@ -76,6 +77,55 @@ export default function Settings(): React.JSX.Element {
   const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify, setTourOpen } = useApp()
   const api = window.laramac
   const [resetOpen, setResetOpen] = useState(false)
+  const [q, setQ] = useState(() => {
+    try {
+      const v = sessionStorage.getItem('laramac.settingsQuery') ?? ''
+      sessionStorage.removeItem('laramac.settingsQuery')
+      return v
+    } catch {
+      return ''
+    }
+  })
+  const [hits, setHits] = useState<number | null>(null)
+  const body = useRef<HTMLDivElement>(null)
+  // Shows only the settings that match, and the sections they are in.
+  useEffect(() => {
+    const root = body.current
+    if (!root) return
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const rows = [...root.querySelectorAll<HTMLElement>('.row, .alias-site')]
+    let n = 0
+    for (const r of rows) {
+      const title = r.querySelector('.row-title')?.textContent?.trim() ?? ''
+      const extra = SETTINGS_INDEX.find((x) => title.startsWith(x.title))
+      const hay = `${r.textContent ?? ''} ${extra?.words ?? ''} ${extra?.section ?? ''}`.toLowerCase()
+      const show = words.every((w) => hay.includes(w))
+      r.style.display = show ? '' : 'none'
+      r.classList.toggle('search-hit', show && words.length > 0)
+      if (show) n++
+    }
+    // A section stays when one of its settings matches or its own title does.
+    let title: HTMLElement | null = null
+    let blocks: HTMLElement[] = []
+    const settle = (): void => {
+      if (!title) return
+      const own = words.every((w) => (title!.textContent ?? '').toLowerCase().includes(w))
+      const any = blocks.some((b) => !b.querySelector('.row, .alias-site') || [...b.querySelectorAll<HTMLElement>('.row, .alias-site')].some((r) => r.style.display !== 'none'))
+      const keep = !words.length || own || (any && blocks.some((b) => [...b.querySelectorAll<HTMLElement>('.row, .alias-site')].some((r) => r.style.display !== 'none')))
+      if (own && words.length) for (const b of blocks) for (const r of b.querySelectorAll<HTMLElement>('.row, .alias-site')) r.style.display = ''
+      title.style.display = keep ? '' : 'none'
+      for (const b of blocks) b.style.display = keep ? '' : 'none'
+    }
+    for (const el of [...root.children] as HTMLElement[]) {
+      if (el.matches('h2.section-title')) {
+        settle()
+        title = el
+        blocks = []
+      } else blocks.push(el)
+    }
+    settle()
+    setHits(words.length ? n : null)
+  }, [q, settings])
   if (!settings) return <></>
   const other = settings.primaryServer === 'apache' ? 'Nginx' : 'Apache'
   const main = settings.primaryServer === 'apache' ? 'Apache' : 'Nginx'
@@ -83,7 +133,17 @@ export default function Settings(): React.JSX.Element {
   return (
     <>
       <PageHead title="Settings" desc="Everything here is saved outside the app, so updates keep it." />
-      <nav className="settings-jump" aria-label="Sections">
+      <div className="settings-search searchbox glass">
+        <Search size={14} />
+        <input placeholder="Search settings: port, theme, .test, PHP, updates…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search settings" autoFocus={!!q} />
+        {q && (
+          <button className="icon-btn" aria-label="Clear search" onClick={() => setQ('')}>
+            <X />
+          </button>
+        )}
+      </div>
+      {hits === 0 && <div className="panel pad hint">No setting matches “{q}”. Try another word, or look under Tools and Languages.</div>}
+      <nav className="settings-jump" aria-label="Sections" style={{ display: q ? 'none' : undefined }}>
         {['Sites', 'Addresses', 'Web servers', 'Downloads', 'Connections', 'Appearance and alerts', 'Updates', 'Start over'].map((t) => (
           <button
             key={t}
@@ -94,6 +154,7 @@ export default function Settings(): React.JSX.Element {
           </button>
         ))}
       </nav>
+      <div ref={body} className="settings-body">
 
       <h2 className="section-title" style={{ marginTop: 0 }}>
         Sites
@@ -331,6 +392,7 @@ export default function Settings(): React.JSX.Element {
         </div>
       </div>
 
+      </div>
       {resetOpen && <ResetDialog onClose={() => setResetOpen(false)} />}
     </>
   )

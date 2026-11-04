@@ -3,6 +3,7 @@
  * Bitbucket) is read by Claude Code or by your chosen model, which writes a report of security
  * problems and bugs with the file, line and fix. A built-in check also looks for leaked keys.
  */
+import { ensureLmContext } from './seckit/lmstudio'
 import { execFile, spawn } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { dirname, extname, join, relative, sep } from 'path'
@@ -331,13 +332,21 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
     if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed. ${reviewerOptions(o.modelName).find((r) => r.id === id)?.note ?? ''}`.trim())
     const plugins = id === 'claude' || id === 'claude-local' ? ensurePlugins() : []
     // Claude Code loads the skills itself; the others get the method in the prompt.
-    const method = id === 'claude' ? '' : `\n\nFollow this method:\n\n${skillText(['security-code-review', ...(id === 'claude-local' ? ['local-model-review'] : []), 'secrets-triage', 'security-report'], [join(mySkillsDir(), 'skills')])}`
+    // Claude Code loads skills itself. Big-context reviewers get every vector; a local model gets the plan and the core method.
+    const vectorSkills = ['api-security-review', 'auth-session-review', 'injection-catalog', 'client-side-review', 'business-logic-review', 'infra-config-review', 'supply-chain-review', 'cloud-baas-review', 'ai-app-review', 'electron-review', 'privacy-data-review']
+    const method = id === 'claude' ? '' : `\n\nFollow this method:\n\n${skillText(['review-vectors', 'security-code-review', ...(id === 'claude-local' ? ['local-model-review'] : vectorSkills), 'secrets-triage', 'security-report'], [join(mySkillsDir(), 'skills')])}`
     const brief = scanned.length ? `\n\nScanners already ran. Check each against the code, say which are real, and add what they missed:\n${scanned.map((s) => `- ${s}`).join('\n')}` : ''
-    const prompt = `${reviewPrompt(o.focus, o.name)}${id === 'claude' || id === 'claude-local' ? '\n\nUse the laramac-security skills (security-code-review, secrets-triage, dependency-triage, security-report) and any of your own.' : ''}${brief}${method}`
+    const prompt = `${reviewPrompt(o.focus, o.name)}${id === 'claude' || id === 'claude-local' ? '\n\nUse the laramac-security skills: start with review-vectors to plan which areas apply to this stack, then security-code-review and every vector skill that applies (api-security-review, auth-session-review, injection-catalog, client-side-review, business-logic-review, infra-config-review, supply-chain-review, cloud-baas-review, ai-app-review, electron-review, privacy-data-review), then secrets-triage, dependency-triage and security-report. Use any of your own skills too. Say which areas were not applicable.' : ''}${brief}${method}`
     const outFile = join(reviewsDir(), `codex-${randomBytes(4).toString('hex')}.md`)
     mkdirSync(reviewsDir(), { recursive: true })
     const run = reviewerRun(id, bin, prompt, { plugins, name: `Laramac review: ${o.name}`, local: o.local, outFile, cwd: o.root })
     session = run.session
+    if (id === 'claude-local' && o.local) {
+      update(25, 'Checking the model has enough context for Claude Code')
+      const ctx = await ensureLmContext(o.local.baseUrl, o.local.model, o.local.token)
+      if (!ctx.ok) throw new Error(ctx.note)
+      if (ctx.note) update(28, ctx.note)
+    }
     update(30, `${REVIEWER_NAMES[id]} is reading the code`)
     try {
       const text = await runAgent(run.bin, run.args, run.env, o.root, (l) => update(null, `${REVIEWER_NAMES[id]}: ${l}`), (id === 'claude-local' ? 60 : 30) * 60_000)

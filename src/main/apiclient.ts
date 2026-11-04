@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { Agent, fetch as ufetch, FormData } from 'undici'
-import type { ApiAssertion, ApiCollection, ApiEnvironment, ApiExtract, ApiImportResult, ApiRequest, ApiResponse, ApiStore, ApiTestResult, HttpMethod, KV } from '../shared/types'
+import type { ApiCodeLang, ApiAssertion, ApiCollection, ApiEnvironment, ApiExtract, ApiImportResult, ApiRequest, ApiResponse, ApiStore, ApiTestResult, HttpMethod, KV } from '../shared/types'
 import { dirs } from './paths'
 
 /**
@@ -73,22 +73,110 @@ const isLocal = (host: string): boolean => /^(localhost|127\.0\.0\.1|\[::1\])$/.
 const localAgent = new Agent({ connect: { rejectUnauthorized: false } })
 const agent = new Agent()
 
-export async function sendRequest(req: ApiRequest, vars: KV[]): Promise<ApiResponse> {
+// ------------------------------------------------------------------ auth, cookies, GraphQL
+
+/** OAuth 2 tokens from the client-credentials flow, kept in memory until they expire. */
+const oauthCache = new Map<string, { token: string; until: number }>()
+
+export async function oauthToken(a: ApiRequest['auth'], vars: KV[], f: typeof ufetch = ufetch): Promise<string> {
+  const tokenUrl = fillVars(a.tokenUrl ?? '', vars).trim()
+  if (!/^https?:\/\//i.test(tokenUrl)) throw new Error('Enter the token address (Token URL) for OAuth 2.')
+  const id = fillVars(a.clientId ?? '', vars)
+  const secret = fillVars(a.clientSecret ?? '', vars)
+  const scope = fillVars(a.scope ?? '', vars)
+  const key = `${tokenUrl}|${id}|${scope}`
+  const hit = oauthCache.get(key)
+  if (hit && hit.until > Date.now() + 10_000) return hit.token
+  const form = new URLSearchParams({ grant_type: 'client_credentials', ...(scope ? { scope } : {}) })
+  const res = await f(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', Authorization: `Basic ${Buffer.from(`${encodeURIComponent(id)}:${encodeURIComponent(secret)}`).toString('base64')}` },
+    body: form.toString(),
+    signal: AbortSignal.timeout(30_000),
+    dispatcher: isLocal(new URL(tokenUrl).hostname) ? localAgent : agent
+  })
+  const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string; error?: string }
+  if (!res.ok || !data.access_token) throw new Error(`The token address answered ${res.status}${data.error_description || data.error ? `: ${data.error_description ?? data.error}` : ''}.`)
+  oauthCache.set(key, { token: data.access_token, until: Date.now() + (data.expires_in ?? 3600) * 1000 })
+  return data.access_token
+}
+
+/** Adds the request's authentication to its headers or address. */
+export async function applyAuth(req: ApiRequest, vars: KV[], url: URL, headers: Record<string, string>): Promise<void> {
+  const a = req.auth
+  if (a.type === 'bearer' && a.token) headers['Authorization'] = `Bearer ${fillVars(a.token, vars)}`
+  if (a.type === 'basic') headers['Authorization'] = `Basic ${Buffer.from(`${fillVars(a.user, vars)}:${fillVars(a.pass, vars)}`).toString('base64')}`
+  if (a.type === 'apikey' && a.keyName?.trim()) {
+    const name = fillVars(a.keyName.trim(), vars)
+    if (a.keyIn === 'query') url.searchParams.set(name, fillVars(a.token, vars))
+    else headers[name] = fillVars(a.token, vars)
+  }
+  if (a.type === 'oauth2') headers['Authorization'] = `Bearer ${await oauthToken(a, vars)}`
+}
+
+/** The JSON a GraphQL server expects: the query, and the variables when there are any. */
+export function graphqlBody(query: string, variables: string | undefined): string {
+  let v: unknown = undefined
+  if (variables?.trim()) {
+    try {
+      v = JSON.parse(variables)
+    } catch {
+      throw new Error('The GraphQL variables are not valid JSON.')
+    }
+  }
+  return JSON.stringify(v === undefined ? { query } : { query, variables: v })
+}
+
+/** A simple cookie jar per host, for this session only (like a private browser window). */
+const jar = new Map<string, Map<string, string>>()
+
+export function rememberCookies(host: string, setCookies: string[]): void {
+  if (!setCookies.length) return
+  const m = jar.get(host) ?? new Map<string, string>()
+  for (const c of setCookies) {
+    const [pair, ...attrs] = c.split(';')
+    const i = pair.indexOf('=')
+    if (i < 1) continue
+    const name = pair.slice(0, i).trim()
+    const value = pair.slice(i + 1).trim()
+    const expired = attrs.some((x) => /^\s*max-age\s*=\s*(0|-\d+)\s*$/i.test(x)) || attrs.some((x) => /^\s*expires\s*=/i.test(x) && Date.parse(x.split('=').slice(1).join('=')) < Date.now())
+    if (expired || value === '') m.delete(name)
+    else m.set(name, value)
+  }
+  jar.set(host, m)
+}
+
+export function cookieHeader(host: string): string | null {
+  const m = jar.get(host)
+  return m && m.size ? [...m].map(([k, v]) => `${k}=${v}`).join('; ') : null
+}
+
+export const cookieList = (): { host: string; names: string[] }[] => [...jar].filter(([, m]) => m.size).map(([host, m]) => ({ host, names: [...m.keys()] }))
+export const clearCookies = (): void => jar.clear()
+
+export async function sendRequest(req: ApiRequest, vars: KV[], opts: { cookies?: boolean } = {}): Promise<ApiResponse> {
   if (!METHODS.includes(req.method)) throw new Error('Unknown method.')
-  const url = buildUrl(req, vars)
+  const target = new URL(buildUrl(req, vars))
   const headers: Record<string, string> = {}
   for (const h of req.headers) if (h.enabled && h.key.trim()) headers[fillVars(h.key.trim(), vars)] = fillVars(h.value, vars)
-  if (req.auth.type === 'bearer' && req.auth.token) headers['Authorization'] = `Bearer ${fillVars(req.auth.token, vars)}`
-  if (req.auth.type === 'basic') {
-    headers['Authorization'] = `Basic ${Buffer.from(`${fillVars(req.auth.user, vars)}:${fillVars(req.auth.pass, vars)}`).toString('base64')}`
-  }
+  await applyAuth(req, vars, target, headers)
+  const url = target.toString()
   const has = (name: string): boolean => Object.keys(headers).some((k) => k.toLowerCase() === name)
+  const useJar = opts.cookies !== false
+  if (useJar && !has('cookie')) {
+    const c = cookieHeader(target.host)
+    if (c) headers['Cookie'] = c
+  }
 
   let body: string | FormData | undefined
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     if (req.body.type === 'json') {
       body = fillVars(req.body.text, vars)
       if (!has('content-type')) headers['Content-Type'] = 'application/json'
+    } else if (req.body.type === 'graphql') {
+      body = graphqlBody(fillVars(req.body.text, vars), req.body.variables ? fillVars(req.body.variables, vars) : undefined)
+      if (!has('content-type')) headers['Content-Type'] = 'application/json'
+      if (!has('accept')) headers['Accept'] = 'application/graphql-response+json, application/json'
     } else if (req.body.type === 'text') {
       body = fillVars(req.body.text, vars)
       if (!has('content-type')) headers['Content-Type'] = 'text/plain'
@@ -117,6 +205,7 @@ export async function sendRequest(req: ApiRequest, vars: KV[]): Promise<ApiRespo
     const why = err.cause?.message ?? err.message
     throw new Error(/ENOTFOUND/.test(why) ? `${new URL(url).hostname} could not be found.` : /ECONNREFUSED/.test(why) ? `Nothing is answering at ${new URL(url).host}.` : /aborted|timeout/i.test(why) ? 'The request took longer than 60 seconds.' : why)
   })
+  if (useJar) rememberCookies(target.host, res.headers.getSetCookie?.() ?? [])
   const buf = Buffer.from(await res.arrayBuffer())
   const ms = Math.round(performance.now() - started)
   const text = buf.subarray(0, MAX_BODY).toString('utf8')
@@ -251,27 +340,44 @@ export function applySaved(env: ApiEnvironment, saved: { key: string; value: str
 
 // ------------------------------------------------------------------ code
 
-export function toCode(req: ApiRequest, vars: KV[], lang: 'curl' | 'fetch' | 'php' | 'python'): string {
+export function toCode(req: ApiRequest, vars: KV[], lang: ApiCodeLang): string {
   if (lang === 'curl') return toCurl(req, vars)
-  const url = buildUrl(req, vars)
+  const target = new URL(buildUrl(req, vars))
   const headers: Record<string, string> = {}
   for (const h of req.headers) if (h.enabled && h.key) headers[fillVars(h.key, vars)] = fillVars(h.value, vars)
-  if (req.auth.type === 'bearer' && req.auth.token) headers['Authorization'] = `Bearer ${fillVars(req.auth.token, vars)}`
-  if (req.auth.type === 'basic') headers['Authorization'] = `Basic ${Buffer.from(`${fillVars(req.auth.user, vars)}:${fillVars(req.auth.pass, vars)}`).toString('base64')}`
+  const a = req.auth
+  if (a.type === 'bearer' && a.token) headers['Authorization'] = `Bearer ${fillVars(a.token, vars)}`
+  if (a.type === 'basic') headers['Authorization'] = `Basic ${Buffer.from(`${fillVars(a.user, vars)}:${fillVars(a.pass, vars)}`).toString('base64')}`
+  if (a.type === 'apikey' && a.keyName) {
+    if (a.keyIn === 'query') target.searchParams.set(fillVars(a.keyName, vars), fillVars(a.token, vars))
+    else headers[fillVars(a.keyName, vars)] = fillVars(a.token, vars)
+  }
+  if (a.type === 'oauth2') headers['Authorization'] = 'Bearer <token from the OAuth 2 token address>'
+  const url = target.toString()
   let body: string | null = null
   if (req.body.type === 'json' || req.body.type === 'text') {
     body = fillVars(req.body.text, vars)
     if (req.body.type === 'json') headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
+  } else if (req.body.type === 'graphql') {
+    body = graphqlBody(fillVars(req.body.text, vars), req.body.variables ? fillVars(req.body.variables, vars) : undefined)
+    headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
   } else if (req.body.type === 'urlencoded' || req.body.type === 'form') {
     body = new URLSearchParams(req.body.form.filter((f) => f.enabled).map((f) => [fillVars(f.key, vars), fillVars(f.value, vars)])).toString()
     headers['Content-Type'] = headers['Content-Type'] ?? 'application/x-www-form-urlencoded'
   }
   const hasBody = body !== null && req.method !== 'GET' && req.method !== 'HEAD'
+  const isJson = /json/i.test(headers['Content-Type'] ?? '')
   if (lang === 'fetch') {
     const opts = [`  method: '${req.method}'`]
     if (Object.keys(headers).length) opts.push(`  headers: ${JSON.stringify(headers, null, 2).replace(/\n/g, '\n  ')}`)
     if (hasBody) opts.push(`  body: ${JSON.stringify(body)}`)
     return `const res = await fetch(${JSON.stringify(url)}, {\n${opts.join(',\n')}\n})\nconst data = await res.json()\nconsole.log(res.status, data)`
+  }
+  if (lang === 'axios') {
+    const opts = [`  method: '${req.method.toLowerCase()}'`, `  url: ${JSON.stringify(url)}`]
+    if (Object.keys(headers).length) opts.push(`  headers: ${JSON.stringify(headers, null, 2).replace(/\n/g, '\n  ')}`)
+    if (hasBody) opts.push(`  data: ${isJson ? body : JSON.stringify(body)}`)
+    return `import axios from 'axios'\n\nconst res = await axios({\n${opts.join(',\n')}\n})\nconsole.log(res.status, res.data)`
   }
   if (lang === 'python') {
     const lines = ['import requests', '', `response = requests.request(`, `    ${JSON.stringify(req.method)},`, `    ${JSON.stringify(url)},`]
@@ -280,7 +386,33 @@ export function toCode(req: ApiRequest, vars: KV[], lang: 'curl' | 'fetch' | 'ph
     lines.push(')', 'print(response.status_code, response.text)')
     return lines.join('\n')
   }
+  if (lang === 'go') {
+    const lines = ['package main', '', 'import (', '\t"fmt"', '\t"io"', '\t"net/http"', ...(hasBody ? ['\t"strings"'] : []), ')', '', 'func main() {']
+    lines.push(`\treq, _ := http.NewRequest(${JSON.stringify(req.method)}, ${JSON.stringify(url)}, ${hasBody ? `strings.NewReader(${JSON.stringify(body)})` : 'nil'})`)
+    for (const [k, v] of Object.entries(headers)) lines.push(`\treq.Header.Set(${JSON.stringify(k)}, ${JSON.stringify(v)})`)
+    lines.push('\tres, err := http.DefaultClient.Do(req)', '\tif err != nil {', '\t\tpanic(err)', '\t}', '\tdefer res.Body.Close()', '\tb, _ := io.ReadAll(res.Body)', '\tfmt.Println(res.StatusCode, string(b))', '}')
+    return lines.join('\n')
+  }
+  if (lang === 'httpie') {
+    const q = (t: string): string => `'${t.replace(/'/g, `'\\''`)}'`
+    const parts = [`http ${req.method} ${q(url)}`]
+    for (const [k, v] of Object.entries(headers)) parts.push(q(`${k}:${v}`))
+    if (hasBody) return `${parts.join(' \\\n  ')} \\\n  --raw ${q(body!)}`
+    return parts.join(' \\\n  ')
+  }
   const q = (t: string): string => `'${t.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  if (lang === 'laravel') {
+    const chain = ['$response = Http::']
+    const parts: string[] = []
+    const plain = Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'content-type')
+    if (plain.length) parts.push(`withHeaders([${plain.map(([k, v]) => `${q(k)} => ${q(v)}`).join(', ')}])`)
+    const m = req.method.toLowerCase()
+    const verb = ['get', 'post', 'put', 'patch', 'delete', 'head'].includes(m) ? m : null
+    if (hasBody && isJson) parts.push(verb ? `${verb}(${q(url)}, json_decode(${q(body!)}, true))` : `send(${q(req.method)}, ${q(url)}, ['json' => json_decode(${q(body!)}, true)])`)
+    else if (hasBody) parts.push(`withBody(${q(body!)}, ${q(headers['Content-Type'] ?? 'text/plain')})`, verb ? `${verb}(${q(url)})` : `send(${q(req.method)}, ${q(url)})`)
+    else parts.push(verb ? `${verb}(${q(url)})` : `send(${q(req.method)}, ${q(url)})`)
+    return `use Illuminate\\Support\\Facades\\Http;\n\n${chain[0]}${parts.join('\n    ->')};\n\n$response->status();\n$response->json();`
+  }
   const lines = ['<?php', '$ch = curl_init();', 'curl_setopt_array($ch, [', `    CURLOPT_URL => ${q(url)},`, '    CURLOPT_RETURNTRANSFER => true,', `    CURLOPT_CUSTOMREQUEST => ${q(req.method)},`]
   if (Object.keys(headers).length) lines.push(`    CURLOPT_HTTPHEADER => [${Object.entries(headers).map(([k, v]) => q(`${k}: ${v}`)).join(', ')}],`)
   if (hasBody) lines.push(`    CURLOPT_POSTFIELDS => ${q(body!)},`)
@@ -294,7 +426,10 @@ export function toCurl(req: ApiRequest, vars: KV[]): string {
   for (const h of req.headers) if (h.enabled && h.key) parts.push(`-H ${q(`${fillVars(h.key, vars)}: ${fillVars(h.value, vars)}`)}`)
   if (req.auth.type === 'bearer' && req.auth.token) parts.push(`-H ${q(`Authorization: Bearer ${fillVars(req.auth.token, vars)}`)}`)
   if (req.auth.type === 'basic') parts.push(`-u ${q(`${fillVars(req.auth.user, vars)}:${fillVars(req.auth.pass, vars)}`)}`)
+  if (req.auth.type === 'apikey' && req.auth.keyName && req.auth.keyIn !== 'query') parts.push(`-H ${q(`${fillVars(req.auth.keyName, vars)}: ${fillVars(req.auth.token, vars)}`)}`)
+  if (req.auth.type === 'oauth2') parts.push(`-H 'Authorization: Bearer <token from the OAuth 2 token address>'`)
   if (req.body.type === 'json') parts.push(`-H 'Content-Type: application/json' --data ${q(fillVars(req.body.text, vars))}`)
+  if (req.body.type === 'graphql') parts.push(`-H 'Content-Type: application/json' --data ${q(graphqlBody(fillVars(req.body.text, vars), req.body.variables))}`)
   if (req.body.type === 'text') parts.push(`--data ${q(fillVars(req.body.text, vars))}`)
   if (req.body.type === 'urlencoded') for (const f of req.body.form) if (f.enabled) parts.push(`--data-urlencode ${q(`${f.key}=${f.value}`)}`)
   if (req.body.type === 'form') for (const f of req.body.form) if (f.enabled) parts.push(`-F ${q(`${f.key}=${f.value}`)}`)

@@ -60,7 +60,7 @@ export const GROUPS: Group[] = [
     label: 'Build and ship',
     items: [
       { id: 'api', label: 'API client', icon: <Send size={I} /> },
-      { id: 'github', label: 'GitHub', icon: <FolderGit2 size={I} /> },
+      { id: 'github', label: 'GitHub and Azure', icon: <FolderGit2 size={I} /> },
       { id: 'packages', label: 'Packages', icon: <Package size={I} /> }
     ]
   },
@@ -101,7 +101,7 @@ function store(key: string, v: unknown): void {
 }
 
 export default function Sidebar(): React.JSX.Element {
-  const { page, setPage, services, sites, update } = useApp()
+  const { page, setPage, services, sites, update, updates } = useApp()
   const [slim, setSlim] = useState<boolean>(() => stored('sidebar-slim', false))
   const [folded, setFolded] = useState<string[]>(() => stored('sidebar-folded', []))
   const installed = services.filter((s) => s.status !== 'not-installed')
@@ -205,7 +205,7 @@ export default function Sidebar(): React.JSX.Element {
               onClick={() => setPage(it.id)}
             >
               {it.icon}
-              {it.id === 'updates' && update && <span className="nav-dot" aria-label="Update available" />}
+              {it.id === 'updates' && (update || !!updates?.items.length) && <span className="nav-dot" aria-label="Updates available" />}
             </button>
           ))}
         </div>

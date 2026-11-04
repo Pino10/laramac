@@ -3,6 +3,7 @@
  * ~/.laramac/recon/<id> with its hosts, scripts, findings and the AI's write-up, so you can come
  * back to it. Read-only, and anything that is not on this Mac needs your confirmation.
  */
+import { ensureLmContext } from './seckit/lmstudio'
 import { spawn } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -242,6 +243,10 @@ async function aiReport(result: ReconResult, reviewer: ReconRequest['reviewer'],
   if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed.`)
   const st = getSettings()
   const method = id === 'claude' ? '' : `\n\nMethod:\n${skillText(['recon-methodology', 'js-recon', 'attack-surface-report'], [join(mySkillsDir(), 'skills')])}`
+  if (id === 'claude-local') {
+    const ctx = await ensureLmContext(st.llm.baseUrl, st.llm.model)
+    if (!ctx.ok) throw new Error(ctx.note)
+  }
   const run = reviewerRun(id, bin, prompt + method, { plugins: id === 'claude' || id === 'claude-local' ? ensurePlugins() : [], name: `Laramac recon: ${result.domain}`, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, outFile: join(cwd, 'codex.md') })
   onLine(`${REVIEWER_NAMES[id]} is reading the recon`)
   return new Promise((resolve, reject) => {

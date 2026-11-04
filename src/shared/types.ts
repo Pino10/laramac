@@ -116,6 +116,8 @@ export interface SiteConfig {
   backend?: BackendConfig
   /** Fingerprint of the laramac.yml last applied. */
   projectHash?: string
+  /** Node.js major version for this site, like "20". Unset: what the project asks for, else the main one. */
+  node?: string
 }
 
 export interface SiteInfo {
@@ -275,12 +277,47 @@ export interface GitHubAccount {
   scopes?: string[] | null
 }
 
+export interface AzureAccount {
+  org: string
+  name: string
+  email: string | null
+}
+
+export interface AzureProject {
+  id: string
+  name: string
+  description: string | null
+}
+
+export interface AzureRepo {
+  id: string
+  name: string
+  project: string
+  projectId: string
+  defaultBranch: string
+  cloneUrl: string
+  url: string
+  size: number
+  disabled: boolean
+  /** No commits yet. */
+  empty: boolean
+}
+
+export interface AzureRepoDetails {
+  branches: string[]
+  commits: { sha: string; message: string; author: string; date: string; url: string }[]
+  pulls: { id: number; title: string; author: string; from: string; to: string; draft: boolean }[]
+  builds: { id: number; name: string; number: string; status: string; result: string | null; branch: string; finished: string | null; url: string | null }[]
+}
+
 export interface GitHubRepoDetails {
   branches: { name: string; protected: boolean }[]
   releases: { tag: string; name: string; date: string; url: string; prerelease: boolean }[]
   commits: { sha: string; message: string; author: string; date: string; url: string }[]
   pulls: { number: number; title: string; url: string; author: string }[]
   issues: { number: number; title: string; url: string }[]
+  /** GitHub Actions runs, newest first. */
+  runs?: { id: number; name: string; status: string; conclusion: string | null; branch: string; url: string; date: string }[]
 }
 
 export interface GitHubRepo {
@@ -374,8 +411,21 @@ export interface ApiRequest {
   url: string
   query: KV[]
   headers: KV[]
-  body: { type: 'none' | 'json' | 'text' | 'form' | 'urlencoded'; text: string; form: KV[] }
-  auth: { type: 'none' | 'bearer' | 'basic'; token: string; user: string; pass: string }
+  body: { type: 'none' | 'json' | 'text' | 'form' | 'urlencoded' | 'graphql'; text: string; form: KV[]; /** GraphQL variables, as JSON. */ variables?: string }
+  auth: {
+    type: 'none' | 'bearer' | 'basic' | 'apikey' | 'oauth2'
+    token: string
+    user: string
+    pass: string
+    /** API key: the header or query name, such as X-API-Key. */
+    keyName?: string
+    keyIn?: 'header' | 'query'
+    /** OAuth 2 client credentials. */
+    tokenUrl?: string
+    clientId?: string
+    clientSecret?: string
+    scope?: string
+  }
 }
 
 export interface ApiCollection {
@@ -398,6 +448,8 @@ export interface ApiHistoryItem {
   url: string
   status: number
   ms: number
+  /** The request as it was sent, so it can be opened again. */
+  request?: ApiRequest
 }
 
 export interface ApiStore {
@@ -405,6 +457,10 @@ export interface ApiStore {
   environments: ApiEnvironment[]
   activeEnv: string | null
   history: ApiHistoryItem[]
+  /** Keep cookies between requests, like a browser (on unless turned off). */
+  cookies?: boolean
+  /** Values saved from responses into a site's environment. */
+  siteVars?: Record<string, KV[]>
 }
 
 export interface ApiResponse {
@@ -422,6 +478,8 @@ export interface ApiResponse {
   /** Variables saved from this response into the active environment. */
   saved: { key: string; value: string }[]
 }
+
+export type ApiCodeLang = 'curl' | 'fetch' | 'axios' | 'php' | 'laravel' | 'python' | 'go' | 'httpie'
 
 export interface ApiImportResult {
   collection?: ApiCollection
@@ -449,6 +507,22 @@ export interface DeployTarget {
   remotePath: string
   /** Extra names or paths to leave out, like uploads or *.sql. */
   excludes?: string[]
+}
+
+export interface ClaudeSetupStatus {
+  claudeCode: boolean
+  /** Laramac's tools in Claude Code (claude and claude-lm). */
+  mcpClaudeCode: McpStatus['claude']
+  desktopApp: boolean
+  desktopConnected: boolean
+  skills: boolean
+  claudeLm: { installed: boolean; model: string | null }
+  /** The model chosen in the Assistant, used by claude-lm and local reviews. */
+  model: string | null
+  inPath: boolean
+  /** The model's context in LM Studio, when it was checked. */
+  context: { ok: boolean; after: number | null; max: number | null; note: string } | null
+  notes: string[]
 }
 
 export interface McpStatus {
@@ -899,6 +973,18 @@ export interface Channels {
   'health:check': { args: []; result: HealthIssue[] }
   'health:fix': { args: [string]; result: HealthIssue[] }
   'site:facts': { args: [string]; result: SiteFacts }
+  'site:node': { args: [string, string | null]; result: SiteNodeInfo }
+  'node:versions': { args: []; result: NodeVersionsInfo }
+  'claude:status': { args: []; result: ClaudeSetupStatus }
+  'claude:setup': { args: [{ lmToken?: string }]; result: ClaudeSetupStatus }
+  'claude:lm-context': { args: []; result: ClaudeSetupStatus }
+  'claude:open-lm': { args: [string | null]; result: void }
+  'updates:check': { args: [boolean]; result: UpdatesReport }
+  'updates:last': { args: []; result: UpdatesReport | null }
+  'updates:apply': { args: [string[], boolean]; result: UpdatesApplied }
+  'site:update-packages': { args: [string, { names?: string[]; latest?: boolean }]; result: OutdatedPackage[] }
+  'node:install': { args: [string]; result: NodeVersionsInfo }
+  'node:remove': { args: [string]; result: NodeVersionsInfo }
   'site:env-read': { args: [string, string]; result: string }
   'site:env-write': { args: [string, string, string]; result: void }
   'site:outdated': { args: [string]; result: OutdatedPackage[] }
@@ -976,8 +1062,22 @@ export interface Channels {
   'api:import': { args: [string]; result: ApiImportResult }
   'api:import-file': { args: []; result: ApiImportResult | null }
   'api:export': { args: [string]; result: string | null }
-  'api:code': { args: [ApiRequest, string | null, string | null, 'curl' | 'fetch' | 'php' | 'python']; result: string }
+  'api:code': { args: [ApiRequest, string | null, string | null, ApiCodeLang]; result: string }
+  'api:site-envs': { args: []; result: ApiEnvironment[] }
+  'api:from-site': { args: [string]; result: ApiCollection }
+  'api:cookies': { args: []; result: { host: string; names: string[] }[] }
+  'api:clear-cookies': { args: []; result: void }
   'github:account': { args: []; result: { account: GitHubAccount | null; cli: boolean } }
+  'azure:account': { args: []; result: AzureAccount | null }
+  'azure:sign-in': { args: [string, string]; result: AzureAccount }
+  'azure:sign-out': { args: []; result: void }
+  'azure:projects': { args: []; result: AzureProject[] }
+  'azure:repos': { args: []; result: AzureRepo[] }
+  'azure:details': { args: [string, string]; result: AzureRepoDetails }
+  'azure:create': { args: [{ projectId: string; name: string; clone: boolean }]; result: { repo: AzureRepo; sites: SiteInfo[] | null } }
+  'azure:clone': { args: [string]; result: SiteInfo[] }
+  'azure:pull-request': { args: [string, { from: string; to: string; title: string; description: string }]; result: { id: number; url: string } }
+  'azure:push': { args: [string, GitPushOptions & { azureRepo?: string; azureCreate?: { projectId: string; name: string } }]; result: GitPushResult }
   'github:sign-in': { args: [string]; result: GitHubAccount }
   'github:sign-in-cli': { args: []; result: GitHubAccount }
   'github:sign-out': { args: []; result: void }
@@ -1018,6 +1118,7 @@ export interface Events {
   'services:changed': ServiceInfo[]
   'jobs:changed': JobInfo[]
   'sites:changed': SiteInfo[]
+  'updates:changed': UpdatesReport
   'activity:changed': ActivityItem[]
   'update:available': UpdateInfo
   'shell:data': { session: string; data: string }
@@ -1076,9 +1177,55 @@ export interface ReconDiff {
   newEndpoints: string[]
 }
 
+export interface UpdateItem {
+  /** laramac, php:8.4, node:main, node:20, runtime:go, tool:composer, brew:httpd or site:shop. */
+  id: string
+  group: 'laramac' | 'php' | 'node' | 'runtime' | 'service' | 'tool' | 'site'
+  name: string
+  current: string | null
+  latest: string
+  detail: string
+  jump?: 'major' | 'minor' | 'patch'
+  /** Updating runs the project's own install scripts, so it needs the person's consent. */
+  runsProjectCode?: boolean
+  site?: string
+}
+
+export interface UpdatesReport {
+  items: UpdateItem[]
+  checkedAt: number
+  /** Things that could not be checked, in words. */
+  notes: string[]
+}
+
+export interface UpdatesApplied {
+  done: string[]
+  failed: { id: string; error: string }[]
+  report: UpdatesReport
+}
+
+export interface SiteNodeInfo {
+  /** The major version this site wants, or null when any works. */
+  want: string | null
+  /** Where that came from: .nvmrc, engines in package.json, chosen on its page... */
+  source: string
+  installed: boolean
+  /** The site's own choice, when there is one. */
+  chosen: string | null
+  /** Major of the main Node. */
+  main: string | null
+}
+
+export interface NodeVersionsInfo {
+  installed: { major: string; version: string; main: boolean }[]
+  /** Newest release of each major line, from nodejs.org; empty when offline. */
+  available: { major: string; version: string; lts: string | false }[]
+}
+
 export interface SiteFacts {
   database: { engine: string; name: string } | null
   node: string | null
+  nodeInfo: SiteNodeInfo
   git: boolean
   envFiles: { file: string; exists: boolean }[]
   reviews: ReviewInfo[]

@@ -72,6 +72,12 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 | Folder | What is there |
 | --- | --- |
 | `src/main/` | Everything that touches the Mac: servers, PHP, databases, downloads, imports, security tools. Runs in Electron's main process. |
+| `src/main/nodeversions.ts` | Node.js per project: what a project asks for, installing other major versions, the node/npm/npx commands that switch by folder. |
+| `src/main/updates.ts` | Helpers for the Updates page: version jumps, Homebrew and tool version parsing. The collecting and applying is in `index.ts`. |
+| `src/main/claudesetup.ts` | The claude-lm command and "Set up Claude everywhere". |
+| `src/main/azure.ts` | Azure DevOps: repositories, pipelines, pull requests, clone and push. |
+| `src/main/apiroutes.ts` | The API client's "requests from a site's code": route readers per framework. |
+| `src/main/seckit/lmstudio.ts` | Shared with MacSec: makes sure an LM Studio model has enough context for Claude Code. |
 | `src/main/hub.ts` | The site page and the Doctor: health checks and their fixes, .env files, outdated packages, review findings, recon compare and export. |
 | `src/main/svc/` | One file per service (MySQL, Redis, Mailpit…): install, start, stop. |
 | `src/renderer/` | The interface (React). Pages in `pages/`, dialogs and panels in `components/`, all styles in `theme.css`. |

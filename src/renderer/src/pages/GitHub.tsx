@@ -4,6 +4,7 @@ import type { GitHubAccount, GitHubRepo, GitHubRepoDetails, SiteInfo } from '@sh
 import { useAsk } from '../components/Ask'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
+import Azure from './Azure'
 
 const ago = (iso: string): string => {
   const d = (Date.now() - new Date(iso).getTime()) / 1000
@@ -13,7 +14,39 @@ const ago = (iso: string): string => {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
-export default function GitHub(): React.JSX.Element {
+/** GitHub and Azure DevOps, one tab each. */
+export default function Repositories(): React.JSX.Element {
+  const [host, setHost] = useState<'github' | 'azure'>(() => {
+    try {
+      return localStorage.getItem('laramac.repoHost') === 'azure' ? 'azure' : 'github'
+    } catch {
+      return 'github'
+    }
+  })
+  const pick = (h: 'github' | 'azure'): void => {
+    setHost(h)
+    try {
+      localStorage.setItem('laramac.repoHost', h)
+    } catch {
+      // Remembering the tab is only a convenience.
+    }
+  }
+  return (
+    <>
+      <div className="seg-tabs host-tabs" role="tablist" aria-label="Where your code lives">
+        <button role="tab" aria-selected={host === 'github'} onClick={() => pick('github')}>
+          GitHub
+        </button>
+        <button role="tab" aria-selected={host === 'azure'} onClick={() => pick('azure')}>
+          Azure DevOps
+        </button>
+      </div>
+      {host === 'github' ? <GitHub /> : <Azure />}
+    </>
+  )
+}
+
+function GitHub(): React.JSX.Element {
   const { act, busy, notify, sites, setSites } = useApp()
   const api = window.laramac
   const [acc, setAcc] = useState<{ account: GitHubAccount | null; cli: boolean } | null>(null)
@@ -475,6 +508,19 @@ function RepoDetails({ repo, onClose, onDeleted }: { repo: GitHubRepo; onClose: 
                 </button>
               ))}
             </section>
+            {(d.runs?.length ?? 0) > 0 && (
+              <section>
+                <h3>
+                  Actions <small>latest runs</small>
+                </h3>
+                {d.runs!.map((r) => (
+                  <button key={r.id} className="repo-line link-row" onClick={() => open(r.url)}>
+                    <span className="run-dot" data-state={r.status !== 'completed' ? 'running' : r.conclusion === 'success' ? 'ok' : r.conclusion === 'skipped' || r.conclusion === 'cancelled' ? 'skip' : 'bad'} />
+                    <span className="grow">{r.name}</span> <span className="hint">{r.branch} · {r.status !== 'completed' ? 'running' : r.conclusion}</span>
+                  </button>
+                ))}
+              </section>
+            )}
             <section>
               <h3>
                 Pull requests <small>{d.pulls.length} open</small>

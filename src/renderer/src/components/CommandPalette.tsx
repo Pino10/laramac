@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
+import { SETTINGS_INDEX } from '../settingsIndex'
 import { useApp, type Page } from '../store'
 import { NAV } from './Sidebar'
 import { STARTERS } from '@shared/starters'
@@ -46,6 +47,22 @@ export default function CommandPalette(): React.JSX.Element | null {
     list.push({ id: 'www', group: 'Open', label: 'Projects folder', keywords: 'www finder', run: () => api.invoke('www:reveal') })
     for (const st of STARTERS) list.push({ id: `starter-${st.id}`, group: 'Create', label: `New ${st.name} project`, keywords: `${st.category} starter create new ${st.description}`, run: () => { setPendingStarter(st.id); setPage('starters') } })
     for (const site of sites.filter((x) => x.dev)) list.push({ id: `dev-${site.name}`, group: 'Dev servers', label: `${site.dev!.running ? 'Stop' : 'Start'} ${site.name} dev server`, hint: `:${site.dev!.port}`, keywords: 'dev server run vite npm', run: () => act(`dev-${site.name}`, () => api.invoke(site.dev!.running ? 'dev:stop' : 'dev:start', site.name).then(setSites)) })
+    for (const st of SETTINGS_INDEX)
+      list.push({
+        id: `setting-${st.title}`,
+        group: 'Settings',
+        label: st.title,
+        hint: st.section,
+        keywords: `setting preference ${st.words}`,
+        run: () => {
+          try {
+            sessionStorage.setItem('laramac.settingsQuery', st.title)
+          } catch {
+            // Opens Settings without the search.
+          }
+          setPage('settings')
+        }
+      })
     list.push({ id: 'tour', group: 'Help', label: 'Take the tour', keywords: 'help guide onboarding walkthrough', run: () => setTourOpen(true) })
     list.push({ id: 'new', group: 'Create', label: 'New project', hint: '⌘N', keywords: 'wordpress laravel site', run: () => setNewProject(true) })
     list.push({ id: 'import', group: 'Create', label: 'Import a project or database', hint: '⌘I', keywords: 'laragon zip tar sql dump restore backup migrate', run: () => setImportOpen(true) })

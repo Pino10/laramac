@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Download, RefreshCw } from 'lucide-react'
 import type { RuntimeId, RuntimeInfo } from '@shared/types'
+import { NodeVersionsPanel } from '../components/NodeVersions'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 
@@ -61,6 +62,8 @@ export default function Languages(): React.JSX.Element {
             Laramac keeps its own copies in its folder, so nothing else on your Mac changes. Copies you installed yourself (with Homebrew, say) are used when present.
           </div>
         </div>
+        <h2 className="section-title">Node.js versions</h2>
+        <NodeVersionsPanel />
     </>
   )
 }

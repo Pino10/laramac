@@ -4,9 +4,11 @@ import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@share
 import { useApp } from '../store'
 import { Monogram } from '../ui'
 import Doctor from '../components/Doctor'
+import { NodeChooser } from '../components/NodeVersions'
 import DbBrowser from '../components/DbBrowser'
 import { BackendRow, DeployDialog, kindLabel, PushDialog, SiteDoctor, SnapshotsDialog } from './Sites'
 import { FindingsList } from './Security'
+import { AzurePushDialog } from './Azure'
 
 type Tab = 'overview' | 'logs' | 'database' | 'env' | 'packages' | 'security' | 'deploy'
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -25,7 +27,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
   const api = window.laramac
   const [tab, setTab] = useState<Tab>((TABS.find((t) => t.id === first)?.id as Tab) ?? 'overview')
   const [facts, setFacts] = useState<SiteFacts | null>(null)
-  const [dialog, setDialog] = useState<'snap' | 'deploy' | 'push' | 'doctor' | null>(null)
+  const [dialog, setDialog] = useState<'snap' | 'deploy' | 'push' | 'azure' | 'doctor' | null>(null)
   const url = site.secure ? site.httpsUrl : site.url
   const stamp = `${site.dev?.running}|${site.backend?.running}`
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
             </span>
             <span className="tag">{kindLabel[site.kind]}</span>
             {site.php && <span className="tag">PHP {site.php}</span>}
-            {facts?.node && <span className="tag">Node {facts.node}</span>}
+            {facts?.nodeInfo && (facts.nodeInfo.chosen || facts.nodeInfo.want || facts.nodeInfo.main) && (site.kind === 'node' || facts.nodeInfo.want) && <span className="tag">Node {facts.nodeInfo.chosen ?? (facts.nodeInfo.installed ? (facts.nodeInfo.want ?? facts.nodeInfo.main) : facts.nodeInfo.main)}</span>}
             {facts?.database && <span className="tag">{facts.database.engine} · {facts.database.name}</span>}
             {site.backend && <span className="tag">{site.backend.kind === 'supabase' ? 'Supabase' : 'Firebase'}</span>}
             {facts?.git && <span className="tag">Git</span>}
@@ -79,6 +81,9 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           <button className="btn" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={14} /> Claude Code
           </button>
+          <button className="icon-btn" aria-label="Claude Code on your model (claude-lm)" data-tip="claude-lm: on your model" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
+            <Bot />
+          </button>
           <button className="icon-btn" aria-label="Show folder" data-tip="Show folder" onClick={() => api.invoke('sites:open-folder', site.path)}>
             <FolderOpen />
           </button>
@@ -96,6 +101,11 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
       {tab === 'overview' && (
         <div className="site-grid">
           <Doctor site={site.name} />
+          {facts && (site.kind === 'node' || facts.nodeInfo.want || /^(npm|npx|pnpm|yarn|node|bun)\b/.test(site.dev?.command ?? '')) && (
+            <div className="panel">
+              <NodeChooser site={site} info={facts.nodeInfo} onChange={(nodeInfo) => setFacts({ ...facts, nodeInfo })} />
+            </div>
+          )}
           {site.dev && (
             <div className="panel pad">
               <div className="row-title">Dev server</div>
@@ -109,7 +119,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
             <Quick icon={<Stethoscope size={18} />} title="Ask the Site Doctor" text="Reads the logs and explains what is wrong." onClick={() => setDialog('doctor')} />
             <Quick icon={<Camera size={18} />} title="Snapshots" text="Save the files and database, and go back." onClick={() => setDialog('snap')} />
             <Quick icon={<ShieldCheck size={18} />} title="Security review" text={facts?.reviews.length ? `Last: ${new Date(facts.reviews[0].at).toLocaleDateString('en-GB')}` : 'Not reviewed yet.'} onClick={() => setTab('security')} />
-            <Quick icon={<Rocket size={18} />} title="Ship it" text="Push to GitHub, share a public link, or deploy." onClick={() => setTab('deploy')} />
+            <Quick icon={<Rocket size={18} />} title="Ship it" text="Push to GitHub or Azure DevOps, share a public link, or deploy." onClick={() => setTab('deploy')} />
           </div>
         </div>
       )}
@@ -143,6 +153,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
       {tab === 'deploy' && (
         <div className="quick-grid">
           <Quick icon={<GitBranch size={18} />} title={facts?.git ? 'Push to GitHub' : 'Put it on GitHub'} text={facts?.git ? 'Commit and push your changes.' : 'Make a repository and push the first commit.'} onClick={() => setDialog('push')} />
+          <Quick icon={<GitBranch size={18} />} title="Push to Azure DevOps" text="Azure Repos: main, a branch or a version tag." onClick={() => setDialog('azure')} />
           <Quick icon={<Rocket size={18} />} title="Deploy" text="Send it to your server over SSH." onClick={() => setDialog('deploy')} />
           <Quick
             icon={<Share2 size={18} />}
@@ -160,6 +171,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
       {dialog === 'snap' && <SnapshotsDialog site={site} onClose={() => setDialog(null)} />}
       {dialog === 'deploy' && <DeployDialog site={site} onClose={() => setDialog(null)} />}
       {dialog === 'push' && <PushDialog site={site} onClose={() => setDialog(null)} />}
+      {dialog === 'azure' && <AzurePushDialog site={site} onClose={() => setDialog(null)} />}
       {dialog === 'doctor' && <SiteDoctor site={site} aiName="AI" onClose={() => setDialog(null)} />}
     </>
   )
@@ -282,33 +294,56 @@ function EnvEditor({ site, files }: { site: SiteInfo; files: { file: string; exi
 function Packages({ site }: { site: SiteInfo }): React.JSX.Element {
   const { act, busy } = useApp()
   const [list, setList] = useState<OutdatedPackage[] | null>(null)
+  const [consent, setConsent] = useState(false)
+  const safe = list?.filter((p) => !p.major && p.wanted && p.wanted !== p.current) ?? []
+  const update = async (o: { names?: string[]; latest?: boolean }, key: string): Promise<void> => {
+    const r = await act(key, () => window.laramac.invoke('site:update-packages', site.name, o))
+    if (r) setList(r)
+  }
+  const working = [...busy].some((b) => b.startsWith(`pkg-${site.name}`))
   return (
-    <div className="panel">
-      <div className="rt-row">
-        <Package size={16} />
-        <div className="row-main">
-          <div className="row-title">Outdated packages</div>
-          <div className="row-sub">From npm and Composer’s own reports. Nothing in the project runs.</div>
-        </div>
-        <button className="btn btn-primary btn-sm" disabled={busy.has('outdated')} onClick={async () => setList((await act('outdated', () => window.laramac.invoke('site:outdated', site.name))) ?? null)}>
-          {busy.has('outdated') ? 'Checking…' : list ? 'Check again' : 'Check now'}
-        </button>
-      </div>
-      {list?.length === 0 && <div className="empty dim">Everything is up to date (or the packages are not installed yet).</div>}
-      {list?.map((p) => (
-        <div key={`${p.manager}-${p.name}`} className="rt-row">
-          <span className="tag">{p.manager}</span>
+    <div className="site-grid">
+      <div className="panel">
+        <div className="rt-row">
+          <Package size={16} />
           <div className="row-main">
-            <div className="row-title mono">{p.name}</div>
-            <div className="row-sub">
-              {p.current} → {p.latest}
-              {p.major ? ' · new major version: read its changes first' : p.wanted && p.wanted !== p.current ? ` · ${p.wanted} is a safe update` : ''}
-              {p.abandoned ? ' · abandoned' : ''}
-            </div>
+            <div className="row-title">Outdated packages</div>
+            <div className="row-sub">From npm and Composer’s own reports. Checking runs nothing in the project.</div>
           </div>
-          {p.major && <span className="sev" data-sev="medium">major</span>}
+          {safe.length > 0 && (
+            <button className="btn btn-sm" disabled={!consent || working} onClick={() => update({}, `pkg-${site.name}-safe`)}>
+              {busy.has(`pkg-${site.name}-safe`) ? 'Updating…' : `Update ${safe.length} safe ${safe.length === 1 ? 'one' : 'ones'}`}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" disabled={busy.has('outdated')} onClick={async () => setList((await act('outdated', () => window.laramac.invoke('site:outdated', site.name))) ?? null)}>
+            {busy.has('outdated') ? 'Checking…' : list ? 'Check again' : 'Check now'}
+          </button>
         </div>
-      ))}
+        {list?.length === 0 && <div className="empty dim">Everything is up to date (or the packages are not installed yet).</div>}
+        {list?.map((p) => (
+          <div key={`${p.manager}-${p.name}`} className="rt-row">
+            <span className="tag">{p.manager}</span>
+            <div className="row-main">
+              <div className="row-title mono">{p.name}</div>
+              <div className="row-sub">
+                {p.current} → {p.latest}
+                {p.major ? ' · new major version: read its changes first' : p.wanted && p.wanted !== p.current ? ` · ${p.wanted} is a safe update` : ''}
+                {p.abandoned ? ' · abandoned' : ''}
+              </div>
+            </div>
+            {p.major && <span className="sev" data-sev="medium">major</span>}
+            <button className="btn btn-sm" disabled={!consent || working} onClick={() => update({ names: [p.name], latest: true }, `pkg-${site.name}-${p.name}`)}>
+              {busy.has(`pkg-${site.name}-${p.name}`) ? 'Updating…' : `Update to ${p.latest}`}
+            </button>
+          </div>
+        ))}
+      </div>
+      {list && list.length > 0 && (
+        <label className="panel pad upd-consent">
+          <input type="checkbox" checked={consent} onChange={() => setConsent(!consent)} />
+          <span>Updating runs this project’s own install scripts (npm and Composer do this). Laramac saves a snapshot first, so you can go back under Snapshots. Then run your tests.</span>
+        </label>
+      )}
     </div>
   )
 }

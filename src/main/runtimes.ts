@@ -11,6 +11,7 @@ import { dirs } from './paths'
 import { downloadFile, extract, makeExecutable, removeQuarantine, sha256File, USER_AGENT } from './download'
 import { jobs } from './jobs'
 import { brewPrefix, findOnPath, isMac } from './platform'
+import { nodeShim } from './nodeversions'
 import { defaultMinor, installMinor, installedPatch, listVersions, phpBinary } from './php'
 
 type Update = (p: number | null, label?: string) => void
@@ -402,6 +403,11 @@ export function refreshRuntimeShims(): void {
       const real = dir ? join(dir, tool) : ''
       if (!dir || !existsSync(real)) {
         // Only remove scripts Laramac wrote, never something else's file.
+        continue
+      }
+      if (id === 'node') {
+        writeFileSync(file, nodeShim(tool, dir))
+        chmodSync(file, 0o755)
         continue
       }
       const vars = id === 'dotnet' ? `DOTNET_ROOT="${extra.DOTNET_ROOT}" ` : id === 'rust' ? `CARGO_HOME="${extra.CARGO_HOME}" RUSTUP_HOME="${extra.RUSTUP_HOME}" ` : ''

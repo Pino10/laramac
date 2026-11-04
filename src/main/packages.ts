@@ -18,7 +18,7 @@ interface Entry extends PackageInfo {
   remove?: () => Promise<void>
 }
 
-const BREW: { formula: string; name: string; service: ServiceId }[] = [
+export const BREW: { formula: string; name: string; service: ServiceId }[] = [
   { formula: 'httpd', name: 'Apache', service: 'apache' },
   { formula: 'nginx', name: 'Nginx', service: 'nginx' },
   { formula: 'mariadb', name: 'MariaDB', service: 'mariadb' },

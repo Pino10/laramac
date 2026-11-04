@@ -23,14 +23,20 @@ function read(): Config {
   }
 }
 
-export function desktopEntry(url: string, token: string): { command: string; args: string[]; env: Record<string, string> } {
+/**
+ * The Claude app starts servers with a short PATH that usually has no Node, so the entry names
+ * npx by its full path and gives it Node's folder. `nodeBin` is the folder holding node and npx.
+ */
+export function desktopEntry(url: string, token: string, nodeBin?: string): { command: string; args: string[]; env: Record<string, string> } {
   // The header is passed through an environment variable, so the token never appears in a process list.
-  return { command: 'npx', args: ['-y', 'mcp-remote', url, '--header', 'Authorization:${LARAMAC_AUTH}'], env: { LARAMAC_AUTH: `Bearer ${token}` } }
+  const env: Record<string, string> = { LARAMAC_AUTH: `Bearer ${token}` }
+  if (nodeBin) env.PATH = `${nodeBin}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`
+  return { command: nodeBin ? join(nodeBin, 'npx') : 'npx', args: ['-y', 'mcp-remote', url, '--header', 'Authorization:${LARAMAC_AUTH}'], env }
 }
 
-export function connectClaudeDesktop(url: string, token: string): { connected: boolean; path: string } {
+export function connectClaudeDesktop(url: string, token: string, nodeBin?: string): { connected: boolean; path: string } {
   const cfg = read()
-  cfg.mcpServers = { ...(cfg.mcpServers ?? {}), laramac: desktopEntry(url, token) }
+  cfg.mcpServers = { ...(cfg.mcpServers ?? {}), laramac: desktopEntry(url, token, nodeBin) }
   mkdirSync(dirname(desktopConfigPath()), { recursive: true })
   writeFileSync(desktopConfigPath(), JSON.stringify(cfg, null, 2) + '\n')
   chmodSync(desktopConfigPath(), 0o600)

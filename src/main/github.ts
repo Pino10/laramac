@@ -155,19 +155,21 @@ export async function deleteRepo(tok: string, fullName: string): Promise<void> {
 export async function repoDetails(tok: string, fullName: string): Promise<GitHubRepoDetails> {
   if (!REPO.test(fullName)) throw new Error('Unknown repository.')
   const base = `/repos/${fullName}`
-  const [branches, releases, commits, pulls, issues] = await Promise.all([
+  const [branches, releases, commits, pulls, issues, runs] = await Promise.all([
     gh<{ name: string; protected: boolean }[]>(tok, `${base}/branches?per_page=50`).catch(() => []),
     gh<{ tag_name: string; name: string | null; published_at: string; html_url: string; prerelease: boolean }[]>(tok, `${base}/releases?per_page=10`).catch(() => []),
     gh<{ sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } }[]>(tok, `${base}/commits?per_page=10`).catch(() => []),
     gh<{ number: number; title: string; html_url: string; user: { login: string } }[]>(tok, `${base}/pulls?state=open&per_page=20`).catch(() => []),
-    gh<{ number: number; title: string; html_url: string; pull_request?: unknown }[]>(tok, `${base}/issues?state=open&per_page=30`).catch(() => [])
+    gh<{ number: number; title: string; html_url: string; pull_request?: unknown }[]>(tok, `${base}/issues?state=open&per_page=30`).catch(() => []),
+    gh<{ workflow_runs: { id: number; name: string; status: string; conclusion: string | null; head_branch: string; html_url: string; updated_at: string }[] }>(tok, `${base}/actions/runs?per_page=6`).catch(() => ({ workflow_runs: [] }))
   ])
   return {
     branches: branches.map((b) => ({ name: b.name, protected: b.protected })),
     releases: releases.map((r) => ({ tag: r.tag_name, name: r.name ?? r.tag_name, date: r.published_at, url: r.html_url, prerelease: r.prerelease })),
     commits: commits.map((c) => ({ sha: c.sha.slice(0, 7), message: c.commit.message.split('\n')[0], author: c.commit.author.name, date: c.commit.author.date, url: c.html_url })),
     pulls: pulls.map((p) => ({ number: p.number, title: p.title, url: p.html_url, author: p.user.login })),
-    issues: issues.filter((i) => !i.pull_request).map((i) => ({ number: i.number, title: i.title, url: i.html_url }))
+    issues: issues.filter((i) => !i.pull_request).map((i) => ({ number: i.number, title: i.title, url: i.html_url })),
+    runs: runs.workflow_runs.map((r) => ({ id: r.id, name: r.name, status: r.status, conclusion: r.conclusion, branch: r.head_branch, url: r.html_url, date: r.updated_at }))
   }
 }
 
@@ -241,7 +243,7 @@ const TAG = /^[A-Za-z0-9._/-]{1,100}$/
  * Commits everything and pushes it the way you chose. `remote` is a full URL,
  * so tests can point it at a local bare repository.
  */
-export async function publish(path: string, remote: string, o: GitPushOptions, auth: GitAuth): Promise<GitPushResult> {
+export async function publish(path: string, remote: string, o: GitPushOptions, auth: GitAuth, host = 'GitHub'): Promise<GitPushResult> {
   const message = o.message.trim() || 'Update from Laramac'
   const who = ['-c', `user.name=${auth.user.name}`, '-c', `user.email=${auth.user.email}`]
   if (!existsSync(join(path, '.git'))) {
@@ -283,7 +285,7 @@ export async function publish(path: string, remote: string, o: GitPushOptions, a
     await git(path, pushArgs, net)
   } catch (err) {
     if (/rejected|non-fast-forward|fetch first/i.test((err as Error).message)) {
-      throw new Error(`GitHub has changes on ${base} that are not on this Mac. Turn on "Replace what is on GitHub" to overwrite them, or push to a new branch.`)
+      throw new Error(`${host} has changes on ${base} that are not on this Mac. Turn on "Replace what is on ${host}" to overwrite them, or push to a new branch.`)
     }
     throw err
   }
@@ -310,7 +312,7 @@ export async function pull(path: string, auth: GitAuth): Promise<string> {
 }
 
 export async function cloneRepo(cloneUrl: string, into: string, auth: GitAuth): Promise<void> {
-  if (!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\.git$/.test(cloneUrl)) throw new Error('Unknown repository address.')
+  if (!/^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+\.git$/.test(cloneUrl) && !/^https:\/\/dev\.azure\.com\/[A-Za-z0-9-]+\/[^/\s]+\/_git\/[^/\s]+$/.test(cloneUrl)) throw new Error('Unknown repository address.')
   if (existsSync(into)) throw new Error('A project with that name is already in your projects folder.')
   await git(dirs.root(), ['clone', '--', cloneUrl, into], auth.config)
 }

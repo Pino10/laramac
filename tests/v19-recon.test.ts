@@ -116,6 +116,6 @@ describe('skills', () => {
     }
     expect(JSON.parse(readFileSync(join(dir, '.claude-plugin', 'plugin.json'), 'utf8')).name).toBe('laramac-security')
     expect(skillText(['js-recon'])).toContain('Source maps')
-    expect(Object.keys(SKILLS)).toHaveLength(8)
+    expect(Object.keys(SKILLS)).toHaveLength(20)
   })
 })

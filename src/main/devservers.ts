@@ -9,7 +9,7 @@ import { fillPort } from '../shared/starters'
 import { dirs } from './paths'
 import { getSettings } from './settings'
 import { ManagedProcess, isPortOpen, tailFile } from './process'
-import { runtimeEnv } from './runtimes'
+import { siteRuntimeEnv } from './nodeversions'
 
 const procs = new Map<string, ManagedProcess>()
 
@@ -68,7 +68,7 @@ export async function startDev(site: SiteInfo, dev: DevConfig): Promise<void> {
   const log = devLogFile(site.name)
   writeFileSync(log, '')
   const [command, ...args] = fillPort(dev.command, dev.port)
-  const env = { ...runtimeEnv(), ...fillPort(dev.env ?? {}, dev.port), FORCE_COLOR: '0', BROWSER: 'none' }
+  const env = { ...siteRuntimeEnv(site.path, getSettings().siteConfig[site.name]?.node), ...fillPort(dev.env ?? {}, dev.port), FORCE_COLOR: '0', BROWSER: 'none' }
   // Wait for the port only when something is listening for it; desktop apps have none.
   await proc.start({ command, args, cwd: site.path, env, logFile: log, group: true }, dev.proxy ? dev.port : undefined, 180000)
 }

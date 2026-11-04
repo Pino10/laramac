@@ -3,6 +3,7 @@ import { Cloud, Copy, Sparkles, Code, ExternalLink, Mail, Package, TerminalSquar
 import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
 import ModelServers from '../components/ModelServers'
+import ClaudeSetup from '../components/ClaudeSetup'
 import MailDelivery, { relaySummary } from '../components/MailDelivery'
 import type { MailRelay } from '@shared/types'
 import { CopyField, PageHead, Switch } from '../ui'
@@ -66,6 +67,8 @@ export default function Tools(): React.JSX.Element {
   return (
     <>
       <PageHead title="Tools" desc="Coding agents and local models, mail, public links and Composer. Installers run in Terminal so you can see every step." />
+
+      <ClaudeSetup />
 
       <div className="mcp-card glass">
         <span className="mcp-mark" aria-hidden>

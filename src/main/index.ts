@@ -12,7 +12,14 @@ import * as api from './apiclient'
 import * as github from './github'
 import { setDownloadToken } from './distribution'
 import { readFileSync } from 'fs'
-import { listPackages, removePackage } from './packages'
+import { BREW, listPackages, removePackage } from './packages'
+import { brew } from './brew'
+import * as upd from './updates'
+import * as azure from './azure'
+import * as apiRoutes from './apiroutes'
+import { claudeLmConfigFor, claudeLmInstalled, installClaudeLm, storeLmToken } from './claudesetup'
+import { ensureLmContext } from './seckit/lmstudio'
+import { brewPrefix } from './platform'
 import * as snapshots from './snapshots'
 import { MCP_PORT, mcpToken, mcpUrl, startMcpServer, type McpTool } from './mcp'
 import { findCli } from './aitools'
@@ -24,7 +31,8 @@ import { checkForUpdate, installUpdate, releaseNotes } from './updater'
 import { installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
 import { createFromStarter, prepareWeb, starterReadiness } from './starterrun'
 import { backendStatus, setupFirebase, setupSupabase, startBackend, stopAllBackends, stopBackend } from './backends'
-import { devFromScript, devLogFile, devLogs, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
+import { devFromScript, devLogFile, devLogs, isDevRunning, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
+import * as nodes from './nodeversions'
 import { STARTERS, starterById } from '../shared/starters'
 import { collectSiteLogs, explainSite } from './sitedoctor'
 import * as models from './models'
@@ -51,13 +59,13 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
 import type { ImportAnswers } from '../shared/types'
 import { watch, type FSWatcher } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { pathToFileURL } from 'url'
 import type { ChannelName, Channels, ChatMessage, Events, Material, ProjectKind, SiteConfig, SiteInfo } from '../shared/types'
 import { ensureDirs } from './paths'
@@ -76,6 +84,7 @@ import {
   installComposer,
   installNgrok,
   installPhpMyAdmin,
+  cloudflaredBinary,
   refreshShims,
   toolsStatus,
   writePmaConfig
@@ -140,8 +149,24 @@ function listSites(): SiteInfo[] {
 
 let reloadTimer: NodeJS.Timeout | null = null
 /** Tells the UI the site list changed and rebuilds web server configs (debounced). */
+/** Tells the node, npm and npx commands in Terminal which version each site uses. */
+function syncNodeMap(): void {
+  try {
+    const cfg = getSettings().siteConfig
+    const entries: { path: string; major: string }[] = []
+    for (const s of listSites()) {
+      const c = nodes.siteNodeChoice(s.path, cfg[s.name]?.node)
+      if (c.bin && c.want) entries.push({ path: s.path, major: c.want })
+    }
+    nodes.writeNodeMap(entries)
+  } catch {
+    // Terminal falls back to .nvmrc and the main Node.
+  }
+}
+
 function notifySitesChanged(): void {
   send('sites:changed', listSites())
+  setTimeout(syncNodeMap, 0)
   if (reloadTimer) clearTimeout(reloadTimer)
   reloadTimer = setTimeout(() => void services.reloadWeb(), 500)
 }
@@ -447,6 +472,11 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
+    // claude-lm follows the model chosen in the Assistant.
+    if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
+      const claude = findCli(['claude'])
+      if (claude && next.llm.model) installClaudeLm(claudeLmConfigFor({ claude, baseUrl: next.llm.baseUrl, model: next.llm.model, plugins: review.ensurePlugins() }), process.execPath, true)
+    }
     if (
       next.allowLan !== before.allowLan ||
       next.httpPort !== before.httpPort ||
@@ -733,7 +763,7 @@ function registerIpc(): void {
             if (!existsSync(composerPhar())) await installComposer()
             php = { bin: phpBinary(minor), ini: phpIniPath(minor), composer: composerPhar() }
           }
-          await runQuiet(expandCommand(argv, php), dir, { ...runtimeEnv(), COMPOSER_HOME: join(app.getPath('home'), '.laramac', 'composer') }, onLine)
+          await runQuiet(expandCommand(argv, php), dir, { ...nodes.siteRuntimeEnv(dir), COMPOSER_HOME: join(app.getPath('home'), '.laramac', 'composer') }, onLine)
         }
       })
     )
@@ -1005,7 +1035,9 @@ function registerIpc(): void {
       const n = locate('node')
       nodeMajor = n ? await new Promise<string | null>((r) => execFile(n.path, ['--version'], { timeout: 5000 }, (_e, out) => r(/v(\d+)/.exec(String(out))?.[1] ?? null))) : null
     }
-    return hub.healthIssues({ services: svcs, sites, dnsReady: (await toolsStatus()).dnsReady, httpPort: st.httpPort, nodeMajor, probes })
+    const nodeFor: Record<string, { want: string | null; source: string; installed: boolean }> = {}
+    for (const s of sites) if (['node'].includes(s.kind) || existsSync(join(s.path, 'package.json'))) nodeFor[s.name] = nodes.siteNodeChoice(s.path, st.siteConfig[s.name]?.node)
+    return hub.healthIssues({ services: svcs, sites, dnsReady: (await toolsStatus()).dnsReady, httpPort: st.httpPort, nodeMajor, probes, nodeFor })
   }
   handle('health:check', () => health())
   handle('health:fix', async (id) => {
@@ -1023,12 +1055,63 @@ function registerIpc(): void {
       const site = siteByName(fix.slice(10))
       const cfg = getSettings().siteConfig[site.name]?.dev
       if (cfg) await startDev(site, cfg)
+    } else if (fix.startsWith('node-install:')) {
+      const major = fix.slice(13)
+      if (!/^\d{1,3}$/.test(major)) throw new ValidationError('That is not a Node.js version.')
+      await jobs.run(`Installing Node.js ${major}`, (u) => nodes.installNodeMajor(major, u))
+      refreshRuntimeShims()
+      activity.push('success', `Node.js ${major} is installed`, 'Projects that ask for it use it on their own.')
     } else throw new ValidationError('Laramac cannot fix that by itself.')
     notifySitesChanged()
     return health()
   })
 
   // ---- The site page
+  const siteNodeInfo = (site: SiteInfo): SiteNodeInfo => {
+    const chosen = getSettings().siteConfig[site.name]?.node ?? null
+    const c = nodes.siteNodeChoice(site.path, chosen ?? undefined)
+    return { want: c.want, source: c.source, installed: c.installed, chosen, main: nodes.mainNodeVersion()?.split('.')[0] ?? null }
+  }
+  const nodeVersions = async (): Promise<NodeVersionsInfo> => ({
+    installed: nodes.installedNodes().map(({ major, version, main }) => ({ major, version, main })),
+    available: await nodes.availableNodes().catch(() => [])
+  })
+  handle('node:versions', () => nodeVersions())
+  handle('node:install', async (major) => {
+    if (typeof major !== 'string' || !/^\d{1,3}$/.test(major)) throw new ValidationError('That is not a Node.js version.')
+    await jobs.run(`Installing Node.js ${major}`, (u) => nodes.installNodeMajor(major, u))
+    refreshRuntimeShims()
+    syncNodeMap()
+    activity.push('success', `Node.js ${major} is installed`, 'Choose it on a site\'s page, or projects that ask for it use it on their own.')
+    return nodeVersions()
+  })
+  handle('node:remove', async (major) => {
+    if (typeof major !== 'string' || !/^\d{1,3}$/.test(major)) throw new ValidationError('That is not a Node.js version.')
+    const using = Object.entries(getSettings().siteConfig).filter(([, c]) => c.node === major).map(([n]) => n)
+    if (using.length) throw new ValidationError(`${using.join(', ')} ${using.length === 1 ? 'uses' : 'use'} Node ${major}. Choose another version for ${using.length === 1 ? 'it' : 'them'} first.`)
+    nodes.removeNodeMajor(major)
+    return nodeVersions()
+  })
+  handle('site:node', async (name, major) => {
+    const site = siteByName(name)
+    if (major !== null && (typeof major !== 'string' || !/^\d{1,3}$/.test(major))) throw new ValidationError('That is not a Node.js version.')
+    const main = nodes.mainNodeVersion()?.split('.')[0]
+    if (major && major !== main && !nodes.nodeBinFor(major)) {
+      await jobs.run(`Installing Node.js ${major}`, (u) => nodes.installNodeMajor(major, u))
+      refreshRuntimeShims()
+    }
+    setSiteConfig(site.name, { node: major ?? undefined })
+    syncNodeMap()
+    const running = isDevRunning(site.name)
+    const cfg = getSettings().siteConfig[site.name]?.dev
+    if (running && cfg) {
+      await stopDev(site.name)
+      await startDev(site, cfg)
+    }
+    activity.push('info', `${site.name} uses Node ${major ?? 'as the project asks'}`, running ? 'Its dev server restarted with it.' : 'Its dev server and Terminal use it from now on.')
+    notifySitesChanged()
+    return siteNodeInfo(site)
+  })
   handle('site:facts', async (name) => {
     const site = siteByName(name)
     const db = snapshots.detectSiteDatabase(site.path)
@@ -1036,6 +1119,7 @@ function registerIpc(): void {
     return {
       database: db ? { engine: db.engine, name: db.name } : null,
       node: hub.wantedNode(site.path),
+      nodeInfo: siteNodeInfo(site),
       git: existsSync(join(site.path, '.git')),
       envFiles: hub.envFiles(site),
       reviews: review.listReviews().filter((r) => r.folder === site.path),
@@ -1053,6 +1137,236 @@ function registerIpc(): void {
     const minor = defaultMinor()
     const composer = minor && existsSync(composerPhar()) ? [phpBinary(minor), composerPhar()] : findOnPath('composer') ? [findOnPath('composer')!] : null
     return jobs.run(`Checking ${site.name}'s packages`, () => hub.outdated(site, composer))
+  })
+  // ---- Updates for everything
+  const composerCmd = (): string[] | null => {
+    const minor = defaultMinor()
+    return minor && existsSync(composerPhar()) ? [phpBinary(minor), composerPhar()] : findOnPath('composer') ? [findOnPath('composer')!] : null
+  }
+  let lastReport: UpdatesReport | null = null
+  const collectUpdates = async (deep: boolean): Promise<UpdatesReport> => {
+    const items: UpdateItem[] = []
+    const notes: string[] = []
+    const env = runtimeEnv()
+    const tasks: Promise<void>[] = []
+    // Laramac itself
+    tasks.push(
+      checkForUpdate()
+        .then((u) => {
+          if (u) items.push({ id: 'laramac', group: 'laramac', name: 'Laramac', current: app.getVersion(), latest: u.version, detail: 'The app itself. It restarts to finish.', jump: upd.jumpOf(app.getVersion(), u.version) })
+        })
+        .catch(() => void notes.push('Laramac could not check for its own update.'))
+    )
+    // PHP
+    tasks.push(
+      listVersions()
+        .then((list) => {
+          for (const v of list) if (v.installed && v.updateAvailable) items.push({ id: `php:${v.minor}`, group: 'php', name: `PHP ${v.minor}`, current: v.installed, latest: v.latest, detail: 'Security and bug fixes. Sites on this version restart with it.', jump: 'patch' })
+        })
+        .catch(() => void notes.push('PHP versions could not be checked.'))
+    )
+    // Node.js lines
+    tasks.push(
+      nodes
+        .availableNodes()
+        .then((avail) => {
+          for (const n of nodes.installedNodes()) {
+            const a = avail.find((x) => x.major === n.major)
+            if (!a || !upd.isNewer(n.version, a.version)) continue
+            if (n.main && !nodes.mainNodeManaged()) continue
+            items.push({ id: n.main ? 'node:main' : `node:${n.major}`, group: 'node', name: `Node.js ${n.major}${n.main ? ' (main)' : ''}`, current: n.version, latest: a.version, detail: 'Newest release of the same line, so projects keep working.', jump: upd.jumpOf(n.version, a.version) })
+          }
+        })
+        .catch(() => void notes.push('Node.js releases could not be checked.'))
+    )
+    // Other languages Laramac installed
+    tasks.push(
+      Promise.all([listRuntimes(), latestVersions()])
+        .then(([rts, latest]) => {
+          for (const r of rts) {
+            if (!r.managed || !r.version || ['php', 'node', 'python', 'swift'].includes(r.id)) continue
+            const l = latest[r.id]
+            if (upd.isNewer(r.version, l)) items.push({ id: `runtime:${r.id}`, group: 'runtime', name: r.name, current: r.version, latest: l!, detail: 'Laramac\'s own copy. Projects use it the next time they start.', jump: upd.jumpOf(r.version, l!) })
+          }
+        })
+        .catch(() => void notes.push('Languages could not be checked.'))
+    )
+    // Composer
+    const comp = composerCmd()
+    if (comp && existsSync(composerPhar())) {
+      tasks.push(
+        Promise.all([upd.run(comp[0], [...comp.slice(1), '--version', '--no-ansi'], { env }), upd.getJson<{ stable?: { version: string }[] }>('https://getcomposer.org/versions')]).then(([out, v]) => {
+          const cur = upd.parseComposerVersion(out)
+          const l = v?.stable?.[0]?.version
+          if (cur && upd.isNewer(cur, l)) items.push({ id: 'tool:composer', group: 'tool', name: 'Composer', current: cur, latest: l!, detail: 'PHP package manager, checked against its published checksum.', jump: upd.jumpOf(cur, l!) })
+        })
+      )
+    }
+    // phpMyAdmin
+    if (existsSync(dirs.phpmyadmin())) {
+      tasks.push(
+        upd.getJson<{ version?: string }>('https://www.phpmyadmin.net/home_page/version.json').then((v) => {
+          let cur: string | null = null
+          try {
+            cur = readdirSync(dirs.phpmyadmin()).map((f) => /^RELEASE-DATE-(\d+\.\d+\.\d+)/.exec(f)?.[1]).find(Boolean) ?? null
+          } catch {
+            cur = null
+          }
+          if (cur && upd.isNewer(cur, v?.version)) items.push({ id: 'tool:phpmyadmin', group: 'tool', name: 'phpMyAdmin', current: cur, latest: v!.version!, detail: 'Database manager in your browser.', jump: upd.jumpOf(cur, v!.version!) })
+        })
+      )
+    }
+    // Cloudflare Tunnel
+    if (existsSync(cloudflaredBinary())) {
+      tasks.push(
+        Promise.all([upd.run(cloudflaredBinary(), ['--version']), upd.getJson<{ tag_name?: string }>('https://api.github.com/repos/cloudflare/cloudflared/releases/latest')]).then(([out, rel]) => {
+          const cur = upd.parseCloudflaredVersion(out)
+          const l = rel?.tag_name?.replace(/^v/, '')
+          if (cur && upd.isNewer(cur, l)) items.push({ id: 'tool:cloudflared', group: 'tool', name: 'Cloudflare Tunnel', current: cur, latest: l!, detail: 'Public links for your sites.', jump: upd.jumpOf(cur, l!) })
+        })
+      )
+    }
+    // Claude Code
+    const claude = findCli(['claude'])
+    if (claude) {
+      tasks.push(
+        Promise.all([upd.run(claude, ['--version'], { env }), upd.getJson<{ version?: string }>('https://registry.npmjs.org/@anthropic-ai/claude-code/latest')]).then(([out, v]) => {
+          const cur = upd.parseClaudeVersion(out)
+          if (cur && upd.isNewer(cur, v?.version)) items.push({ id: 'tool:claude', group: 'tool', name: 'Claude Code', current: cur, latest: v!.version!, detail: 'Updated with its own updater (claude update).', jump: upd.jumpOf(cur, v!.version!) })
+        })
+      )
+    }
+    // Homebrew services Laramac set up
+    const prefix = brewPrefix()
+    if (prefix) {
+      tasks.push(
+        (async () => {
+          const bin = join(prefix, 'bin', 'brew')
+          const benv = { ...process.env, HOMEBREW_NO_AUTO_UPDATE: deep ? '' : '1', HOMEBREW_NO_ENV_HINTS: '1' }
+          if (deep) await upd.run(bin, ['update', '--quiet'], { env: benv, timeout: 180000 })
+          const out = await upd.run(bin, ['outdated', '--json=v2'], { env: { ...benv, HOMEBREW_NO_AUTO_UPDATE: '1' }, timeout: 60000 })
+          for (const o of upd.parseBrewOutdated(out.slice(out.indexOf('{')), BREW.map((b) => b.formula))) {
+            const b = BREW.find((x) => x.formula === o.formula)!
+            items.push({ id: `brew:${o.formula}`, group: 'service', name: b.name, current: o.current, latest: o.latest, detail: 'From Homebrew. Laramac restarts it if it was running.', jump: upd.jumpOf(o.current, o.latest) })
+          }
+        })().catch(() => void notes.push('Homebrew could not be checked.'))
+      )
+    }
+    // Each site's packages
+    tasks.push(
+      (async () => {
+        const sites = listSites().filter((x) => (existsSync(join(x.path, 'package.json')) && existsSync(join(x.path, 'node_modules'))) || (existsSync(join(x.path, 'composer.json')) && existsSync(join(x.path, 'vendor'))))
+        const comp2 = composerCmd()
+        for (let i = 0; i < sites.length; i += 3) {
+          await Promise.all(
+            sites.slice(i, i + 3).map(async (site) => {
+              const item = upd.siteItem(site.name, await hub.outdated(site, comp2).catch(() => []))
+              if (item) items.push(item)
+            })
+          )
+        }
+      })()
+    )
+    await Promise.all(tasks)
+    lastReport = { items: upd.sortItems(items), checkedAt: Date.now(), notes }
+    send('updates:changed', lastReport)
+    return lastReport
+  }
+  const updateSitePackages = async (site: SiteInfo, o: { names?: string[]; latest?: boolean }, update: (p: number | null, l?: string) => void): Promise<void> => {
+    const env = nodes.siteRuntimeEnv(site.path, getSettings().siteConfig[site.name]?.node)
+    const names = (o.names ?? []).filter((n) => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(n) || /^[a-z0-9._-]+\/[a-z0-9._-]+$/i.test(n)).slice(0, 200)
+    update(null, `Saving a snapshot of ${site.name} first`)
+    await snapshots.createSnapshot(site.path, 'Before updating packages', snapDeps)
+    const pkgs = await hub.outdated(site, composerCmd())
+    const npmNames = names.length ? names.filter((n) => pkgs.some((p) => p.name === n && p.manager === 'npm')) : []
+    const compNames = names.length ? names.filter((n) => pkgs.some((p) => p.name === n && p.manager === 'composer')) : []
+    const line = (l: string): void => update(null, `${site.name}: ${l.slice(0, 70)}`)
+    if (existsSync(join(site.path, 'package.json')) && (!names.length || npmNames.length)) {
+      if (o.latest && npmNames.length) await runQuiet(['npm', 'install', ...npmNames.map((n) => `${n}@latest`)], site.path, env, line, 15 * 60_000)
+      else await runQuiet(['npm', 'update', ...npmNames], site.path, env, line, 15 * 60_000)
+    }
+    const comp = composerCmd()
+    if (comp && existsSync(join(site.path, 'composer.json')) && (!names.length || compNames.length)) {
+      const args = o.latest && compNames.length ? ['require', ...compNames.map((n) => `${n}:^${(pkgs.find((p) => p.name === n)?.latest ?? '').replace(/^v/, '')}`), '--update-with-dependencies'] : ['update', ...compNames, '--with-dependencies']
+      await runQuiet([...comp, ...args, '--no-interaction', '--no-progress'], site.path, env, line, 15 * 60_000)
+    }
+  }
+  const applyOne = async (id: string, consent: boolean, update: (p: number | null, l?: string) => void): Promise<void> => {
+    if (id.startsWith('php:')) {
+      await installMinor(assertMinor(id.slice(4)))
+      refreshShims()
+    } else if (id === 'node:main') {
+      await nodes.updateMainNode(update)
+      refreshRuntimeShims()
+    } else if (id.startsWith('node:')) {
+      const m = id.slice(5)
+      if (!/^\d{1,3}$/.test(m)) throw new ValidationError('That is not a Node.js version.')
+      await nodes.installNodeMajor(m, update)
+      refreshRuntimeShims()
+    } else if (id.startsWith('runtime:')) {
+      const r = id.slice(8) as RuntimeId
+      if (!RUNTIME_IDS.includes(r)) throw new ValidationError('Unknown language.')
+      await installRuntime(r)
+    } else if (id === 'tool:composer') await installComposer()
+    else if (id === 'tool:phpmyadmin') {
+      await installPhpMyAdmin()
+      writePmaConfig()
+    } else if (id === 'tool:cloudflared') await installCloudflared()
+    else if (id === 'tool:claude') {
+      const claude = findCli(['claude'])
+      if (!claude) throw new ValidationError('Claude Code is not installed.')
+      await runQuiet([claude, 'update'], dirs.root(), runtimeEnv(), (l) => update(null, `Claude Code: ${l.slice(0, 60)}`), 5 * 60_000)
+    } else if (id.startsWith('brew:')) {
+      const b = BREW.find((x) => x.formula === id.slice(5))
+      if (!b) throw new ValidationError('Unknown service.')
+      const wasRunning = services.list().find((x) => x.id === b.service)?.status === 'running'
+      await brew(['upgrade', b.formula], (l) => update(null, `${b.name}: ${l.slice(0, 60)}`))
+      if (wasRunning) {
+        await services.stop(b.service)
+        await services.start(b.service)
+      }
+    } else if (id.startsWith('site:')) {
+      if (!consent) throw new ValidationError('Updating a site\'s packages runs its own install scripts. Agree to that first.')
+      await updateSitePackages(siteByName(id.slice(5)), {}, update)
+    } else throw new ValidationError('Laramac cannot update that by itself.')
+  }
+  handle('updates:last', () => lastReport)
+  // A quiet look once a day, so the Updates page and the sidebar know before you open them.
+  const quietCheck = (): void => {
+    if (getSettings().autoUpdateCheck) void collectUpdates(false).catch(() => undefined)
+  }
+  setTimeout(quietCheck, 90_000)
+  setInterval(quietCheck, 24 * 3600_000)
+  handle('updates:check', (deep) => jobs.run('Checking for updates', () => collectUpdates(deep === true)))
+  handle('updates:apply', async (ids, consent) => {
+    if (!Array.isArray(ids) || ids.length > 200 || ids.some((i) => typeof i !== 'string')) throw new ValidationError('Choose what to update.')
+    const done: string[] = []
+    const failed: { id: string; error: string }[] = []
+    const list = ids.filter((i) => i !== 'laramac')
+    await jobs.run(`Updating ${list.length} ${list.length === 1 ? 'thing' : 'things'}`, async (update) => {
+      for (const [n, id] of list.entries()) {
+        update(Math.round((n / list.length) * 100), `Updating ${lastReport?.items.find((x) => x.id === id)?.name ?? id}`)
+        try {
+          await applyOne(id, consent === true, update)
+          done.push(id)
+        } catch (e) {
+          failed.push({ id, error: (e as Error).message })
+        }
+      }
+    })
+    if (done.length) activity.push('success', `Updated ${done.length} ${done.length === 1 ? 'thing' : 'things'}`, failed.length ? `${failed.length} could not be updated.` : 'Everything you chose is up to date.')
+    if (failed.length) activity.push('error', `${failed.length} ${failed.length === 1 ? 'update' : 'updates'} failed`, failed.map((f) => `${f.id}: ${f.error}`).join('\n').slice(0, 400))
+    notifySitesChanged()
+    const report = await collectUpdates(false)
+    return { done, failed, report }
+  })
+  handle('site:update-packages', async (name, o) => {
+    const site = siteByName(name)
+    const opts = (o ?? {}) as { names?: unknown; latest?: unknown }
+    if (opts.names !== undefined && (!Array.isArray(opts.names) || opts.names.some((n) => typeof n !== 'string'))) throw new ValidationError('Choose packages by name.')
+    await jobs.run(`Updating ${site.name}'s packages`, (u) => updateSitePackages(site, { names: opts.names as string[] | undefined, latest: opts.latest === true }, u))
+    activity.push('success', `Updated ${site.name}'s packages`, 'A snapshot was saved first, on its page under Snapshots.')
+    return hub.outdated(site, composerCmd())
   })
   handle('db:tables', async (engine, name) => {
     const r = await dbadmin.readOnlyQuery(dbTarget(dbEngine(engine)), dbadmin.checkName(String(name)), `SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema = '${dbadmin.checkName(String(name))}' ORDER BY table_name`, 500)
@@ -1120,7 +1434,7 @@ function registerIpc(): void {
   handle('desktop:connect', () => {
     setSettings({ mcpEnabled: true })
     void startMcp()
-    const r = connectClaudeDesktop(mcpUrl(), mcpToken())
+    const r = connectClaudeDesktop(mcpUrl(), mcpToken(), nodeBinDir())
     activity.push('success', 'Claude desktop is connected to Laramac', 'Restart the Claude app, then ask it to review a site or run recon.')
     return r
   })
@@ -1191,7 +1505,7 @@ function registerIpc(): void {
       if (runSetup) {
         for (const [i, cmd] of (f.setup ?? []).entries()) {
           update(Math.round((i / (f.setup!.length || 1)) * 100), cmd)
-          await runQuiet(['/bin/sh', '-c', cmd], site.path, runtimeEnv(), (l) => update(null, `${cmd}: ${l.slice(0, 60)}`))
+          await runQuiet(['/bin/sh', '-c', cmd], site.path, nodes.siteRuntimeEnv(site.path, getSettings().siteConfig[site.name]?.node), (l) => update(null, `${cmd}: ${l.slice(0, 60)}`))
         }
       }
       setSiteConfig(site.name, { projectHash: read.hash })
@@ -1468,6 +1782,92 @@ function registerIpc(): void {
     const st = await github.siteStatus(sitePath(path))
     return { ...st, next: github.nextVersion(st.lastTag) }
   })
+  // ---- Azure DevOps
+  const azTok = (): string => azure.token(keychain)
+  const azAcc = (): AzureAccount => {
+    const a = azure.account()
+    if (!a) throw new ValidationError('Connect Azure DevOps first.')
+    return a
+  }
+  const azRepoById = async (id: string): Promise<AzureRepo> => {
+    if (!azure.GUID.test(String(id))) throw new ValidationError('Unknown repository.')
+    const r = (await azure.listRepos(azAcc().org, azTok())).find((x) => x.id === id)
+    if (!r) throw new ValidationError('That repository is gone.')
+    return r
+  }
+  const azFolder = (name: string): string => {
+    const f = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
+    if (!f) throw new ValidationError('That repository name cannot be a folder name.')
+    return f
+  }
+  handle('azure:account', () => azure.account())
+  handle('azure:sign-in', async (org, pat) => {
+    if (typeof org !== 'string' || typeof pat !== 'string') throw new ValidationError('Enter your organization and a token.')
+    try {
+      const a = await azure.signIn(org, pat, keychain)
+      activity.push('success', `Connected to Azure DevOps as ${a.name}`, a.org)
+      return a
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+  })
+  handle('azure:sign-out', () => azure.signOut())
+  handle('azure:projects', () => azure.listProjects(azAcc().org, azTok()))
+  handle('azure:repos', () => azure.listRepos(azAcc().org, azTok()))
+  handle('azure:details', async (projectId, repoId) => azure.repoDetails(azAcc().org, azTok(), String(projectId), String(repoId)))
+  handle('azure:clone', async (id) => {
+    const r = await azRepoById(String(id))
+    if (r.empty) throw new ValidationError('This repository is empty. Push a site to it first.')
+    const folder = azFolder(r.name)
+    await jobs.run(`Cloning ${r.name}`, async (update) => {
+      update(null, `Cloning ${r.project}/${r.name}`)
+      await github.cloneRepo(r.cloneUrl, join(ensureWww(), folder), azure.authFor(azTok(), azAcc()))
+    })
+    activity.push('success', `Cloned ${r.name} from Azure DevOps`, `It is in your projects folder as ${folder}.`)
+    notifySitesChanged()
+    return listSites()
+  })
+  handle('azure:create', async (input) => {
+    const i = (input ?? {}) as Record<string, unknown>
+    const acc = azAcc()
+    const repo = await azure.createRepo(acc.org, azTok(), String(i.projectId ?? ''), String(i.name ?? '')).catch((e) => {
+      throw new ValidationError((e as Error).message)
+    })
+    activity.push('success', `Created ${repo.name} in ${repo.project} on Azure DevOps`)
+    return { repo, sites: null }
+  })
+  handle('azure:pull-request', async (id, o) => {
+    const r = await azRepoById(String(id))
+    const x = (o ?? {}) as { from?: unknown; to?: unknown; title?: unknown; description?: unknown }
+    const pr = await azure.createPullRequest(azAcc().org, azTok(), r.projectId, r.id, { from: String(x.from ?? ''), to: String(x.to ?? r.defaultBranch), title: String(x.title ?? ''), description: String(x.description ?? '') }).catch((e) => {
+      throw new ValidationError((e as Error).message)
+    })
+    activity.push('success', `Opened pull request ${pr.id} in ${r.name}`)
+    return pr
+  })
+  handle('azure:push', async (path, opts) => {
+    const p = sitePath(path)
+    const o = opts as GitPushOptions & { azureRepo?: string; azureCreate?: { projectId: string; name: string } }
+    if (!['main', 'branch', 'tag'].includes(o?.mode)) throw new ValidationError('Choose how to push: main, a branch or a version tag.')
+    const acc = azAcc()
+    const tok = azTok()
+    let repo: AzureRepo | null = null
+    if (o.azureRepo) repo = await azRepoById(o.azureRepo)
+    else if (o.azureCreate) repo = await azure.createRepo(acc.org, tok, o.azureCreate.projectId, o.azureCreate.name)
+    else {
+      const st = await github.siteStatus(p)
+      if (st.remote && azure.isAzureRemote(st.remote)) repo = (await azure.listRepos(acc.org, tok)).find((r) => r.cloneUrl === st.remote) ?? null
+    }
+    if (!repo) throw new ValidationError('Choose a repository or create a new one.')
+    const name = p.split('/').pop()
+    const r = await jobs.run(`Pushing ${name} to Azure DevOps`, async (update) => {
+      update(null, `Pushing ${name} to ${repo!.project}/${repo!.name}`)
+      return github.publish(p, repo!.cloneUrl, { ...o, base: o.base || repo!.empty ? o.base || 'main' : repo!.defaultBranch }, azure.authFor(tok, acc), 'Azure DevOps')
+    })
+    r.url = o.mode === 'branch' ? `${repo.url}?version=GB${encodeURIComponent(r.ref)}` : o.mode === 'tag' ? `${repo.url}?version=GT${encodeURIComponent(r.ref)}` : `${repo.url}?version=GB${encodeURIComponent(r.ref)}`
+    activity.push('success', `${name} pushed to Azure DevOps`, `${repo.project}/${repo.name} ${r.ref}`)
+    return r
+  })
   handle('github:push', async (path, opts) => {
     const p = sitePath(path)
     const o = opts as GitPushOptions
@@ -1497,19 +1897,37 @@ function registerIpc(): void {
   // ---- API client
   handle('api:load', () => api.loadStore())
   handle('api:save', (store) => api.saveStore(store as ApiStore))
-  const apiVars = (store: ApiStore, envId: unknown, colId: unknown): KV[] =>
-    api.mergeVars(store.collections.find((c) => c.id === colId)?.variables, store.environments.find((e) => e.id === envId)?.vars)
+  /** Each site is an environment of its own, made from its address and .env, named site:<name>. */
+  const siteEnv = (site: SiteInfo, store: ApiStore): ApiEnvironment => {
+    const base = hub.siteApiVars(site, hub.readEnv(site, '.env'))
+    const own = store.siteVars?.[site.name] ?? []
+    return { id: `site:${site.name}`, name: site.name, vars: [...base.filter((b) => !own.some((o) => o.key === b.key)), ...own] }
+  }
+  const envFor = (store: ApiStore, envId: unknown): ApiEnvironment | undefined => {
+    if (typeof envId === 'string' && envId.startsWith('site:')) {
+      const site = listSites().find((x) => x.name === envId.slice(5))
+      return site ? siteEnv(site, store) : undefined
+    }
+    return store.environments.find((e) => e.id === envId)
+  }
+  const apiVars = (store: ApiStore, envId: unknown, colId: unknown): KV[] => api.mergeVars(store.collections.find((c) => c.id === colId)?.variables, envFor(store, envId)?.vars)
   /** Saved values from a response go into the active environment. */
   const keepSaved = (store: ApiStore, envId: unknown, saved: { key: string; value: string }[]): void => {
     if (!saved.length) return
+    if (typeof envId === 'string' && envId.startsWith('site:')) {
+      const name = envId.slice(5)
+      const cur = { id: envId, name, vars: store.siteVars?.[name] ?? [] }
+      store.siteVars = { ...(store.siteVars ?? {}), [name]: api.applySaved(cur, saved).vars }
+      return
+    }
     const env = store.environments.find((e) => e.id === envId)
     if (env) store.environments = store.environments.map((e) => (e.id === env.id ? api.applySaved(e, saved) : e))
   }
   handle('api:send', async (req, envId, colId) => {
     const store = api.loadStore()
-    const res = await api.sendRequest(req as ApiRequest, apiVars(store, envId, colId))
+    const res = await api.sendRequest(req as ApiRequest, apiVars(store, envId, colId), { cookies: store.cookies !== false })
     keepSaved(store, envId, res.saved)
-    store.history = [{ at: Date.now(), method: (req as ApiRequest).method, url: res.url, status: res.status, ms: res.ms }, ...store.history].slice(0, 50)
+    store.history = [{ at: Date.now(), method: (req as ApiRequest).method, url: res.url, status: res.status, ms: res.ms, request: req as ApiRequest }, ...store.history].slice(0, 50)
     api.saveStore(store)
     return res
   })
@@ -1546,8 +1964,27 @@ function registerIpc(): void {
     writeFileSync(res.filePath, JSON.stringify(api.toPostman(col), null, 2))
     return res.filePath
   })
+  handle('api:site-envs', () => {
+    const store = api.loadStore()
+    return listSites().map((x) => siteEnv(x, store))
+  })
+  handle('api:from-site', (name) => {
+    const site = siteByName(name)
+    const routes = apiRoutes.findRoutes(site.path)
+    const fromSpec = apiRoutes.openApiInProject(site.path)
+    if (!routes.length && !fromSpec) throw new ValidationError(`No routes were found in ${site.name}'s code. Laramac reads Laravel, Next.js, Express, Fastify, Hono, NestJS, FastAPI and Flask routes, and OpenAPI files.`)
+    const col = fromSpec && fromSpec.requests.length >= routes.length ? { ...fromSpec, name: `${site.name} (OpenAPI)` } : apiRoutes.collectionFromRoutes(`${site.name} routes`, routes)
+    const store = api.loadStore()
+    store.collections = [...store.collections, col]
+    store.activeEnv = `site:${site.name}`
+    api.saveStore(store)
+    activity.push('success', `Made ${col.name}`, `${col.requests.length} requests from the code. Its environment is ${site.name}.`)
+    return col
+  })
+  handle('api:cookies', () => api.cookieList())
+  handle('api:clear-cookies', () => api.clearCookies())
   handle('api:code', (req, envId, colId, lang) => {
-    if (!['curl', 'fetch', 'php', 'python'].includes(String(lang))) throw new ValidationError('Unknown language.')
+    if (!['curl', 'fetch', 'axios', 'php', 'laravel', 'python', 'go', 'httpie'].includes(String(lang))) throw new ValidationError('Unknown language.')
     return api.toCode(req as ApiRequest, apiVars(api.loadStore(), envId, colId), lang as 'curl')
   })
   handle('api:import', (text) => {
@@ -1850,6 +2287,84 @@ function registerIpc(): void {
     return mcpStatus()
   })
 
+  // ---- Claude everywhere: Claude Code, claude-lm, the Claude app, skills
+  const nodeBinDir = (): string | undefined => {
+    const n = locate('node')
+    return n ? dirname(n.path) : undefined
+  }
+  let lastContext: ClaudeSetupStatus['context'] = null
+  const claudeStatus = async (notes: string[] = []): Promise<ClaudeSetupStatus> => ({
+    claudeCode: !!findCli(['claude']),
+    mcpClaudeCode: await claudeMcp(),
+    desktopApp: desktopAppInstalled(),
+    desktopConnected: desktopConnected(),
+    skills: installedForClaude('laramac'),
+    claudeLm: claudeLmInstalled(),
+    model: getSettings().llm.model || null,
+    inPath: cli.cliInPath(),
+    context: lastContext,
+    notes
+  })
+  const writeClaudeLm = (): boolean => {
+    const st = getSettings()
+    const claude = findCli(['claude'])
+    if (!claude || !st.llm.model || !st.llm.baseUrl) return false
+    installClaudeLm(claudeLmConfigFor({ claude, baseUrl: st.llm.baseUrl, model: st.llm.model, plugins: review.ensurePlugins() }), process.execPath, true)
+    return true
+  }
+  const checkContext = async (): Promise<void> => {
+    const st = getSettings()
+    if (!st.llm.model || !st.llm.baseUrl) return
+    const r = await ensureLmContext(st.llm.baseUrl, st.llm.model)
+    lastContext = { ok: r.ok, after: r.after, max: r.max, note: r.note }
+  }
+  handle('claude:status', () => claudeStatus())
+  handle('claude:lm-context', async () => {
+    await jobs.run('Checking the model in LM Studio', () => checkContext())
+    return claudeStatus()
+  })
+  handle('claude:setup', async (o) => {
+    const notes: string[] = []
+    const opts = (o ?? {}) as { lmToken?: unknown }
+    await jobs.run('Setting up Claude everywhere', async (update) => {
+      if (!findCli(['claude'])) {
+        update(5, 'Installing Claude Code')
+        await installClaudeCode()
+        await refreshLoginShellPaths(true)
+      }
+      const claude = findCli(['claude'])
+      if (!claude) throw new Error('Claude Code could not be installed. Install it from claude.com/claude-code, then try again.')
+      update(20, 'Letting Claude use Laramac')
+      setSettings({ mcpEnabled: true })
+      await startMcp()
+      const run = (args: string[]): Promise<void> =>
+        new Promise((resolve, reject) => execFile(claude, args, { timeout: 20000, env: { ...process.env, ...runtimeEnv() } }, (err, _o, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve())))
+      await run(['mcp', 'remove', 'laramac', '--scope', 'user']).catch(() => undefined)
+      await run(['mcp', 'add', '--transport', 'http', '--scope', 'user', 'laramac', mcpUrl(), '--header', `Authorization: Bearer ${mcpToken()}`]).catch((e) => void notes.push(`Claude Code: ${(e as Error).message}`))
+      update(40, 'Installing the security skills')
+      installForClaude('laramac')
+      if (desktopAppInstalled()) {
+        update(55, 'Connecting the Claude app')
+        connectClaudeDesktop(mcpUrl(), mcpToken(), nodeBinDir())
+        if (!nodeBinDir()) notes.push('The Claude app needs Node.js to reach Laramac. Install Node.js on the Languages page, then run this again.')
+      } else notes.push('The Claude desktop app is not installed, so it was skipped. Get it at claude.ai/download.')
+      update(70, 'Adding the commands to Terminal')
+      cli.installCli(process.execPath)
+      cli.addToPath()
+      if (typeof opts.lmToken === 'string') await storeLmToken(opts.lmToken.trim())
+      if (writeClaudeLm()) {
+        update(85, 'Checking the model in LM Studio')
+        await checkContext().catch(() => undefined)
+      } else notes.push('claude-lm needs a model: choose one from LM Studio in the Assistant, then run this again.')
+    })
+    activity.push('success', 'Claude is set up everywhere', 'claude, claude-lm and the Claude app can use Laramac and its skills. Restart the Claude app to see it.')
+    return claudeStatus(notes)
+  })
+  handle('claude:open-lm', async (name) => {
+    if (!claudeLmInstalled().installed) throw new ValidationError('Set up Claude everywhere first, in Tools.')
+    const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
+    await openTerminal(dir, 'claude-lm')
+  })
   // ---- Snapshots
   const snapDeps: snapshots.SnapshotDeps = {
     target: (engine) => {

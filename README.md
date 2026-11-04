@@ -145,6 +145,14 @@ Every push asks how it should go up:
 
 If GitHub has commits your Mac does not, the push stops and explains; tick **Replace what is on GitHub** only when you mean to overwrite them. A site that is not on GitHub yet gets a new repository (private by default) and a `.gitignore` that keeps secrets out.
 
+### Node.js per project
+
+Each site runs on the Node.js version it asks for (.nvmrc, .node-version, .tool-versions, Volta or engines), or the one you pick on its page. Laramac installs that version for the project only. In Terminal, node, npm and npx switch on their own inside a project.
+
+### Claude everywhere
+
+**Tools, Set up Claude everywhere** connects Claude Code and the Claude desktop app to Laramac, installs the security skills, and adds two Terminal commands: `claude` (your normal Claude Code) and `claude-lm` (Claude Code on your model in LM Studio, with its context made big enough first). `claude-lm --resume` and every other option work as with claude.
+
 ### Starters
 
 <img src="docs/screenshots/starters.png" alt="Starters: pick a framework" width="820">
@@ -271,6 +279,8 @@ Save your VPS, staging box or shared hosting account. SSH servers can sign in wi
 
 ### API client
 
+Each site is an environment of its own ({{base}} and the URLs from its .env). **Requests from a site's code** reads Laravel, Next.js, Express, Fastify, Hono, NestJS, FastAPI and Flask routes and makes a collection. GraphQL, API keys, OAuth 2 client credentials, a cookie jar, and code in cURL, HTTPie, fetch, axios, PHP, Laravel, Python and Go.
+
 <img src="docs/screenshots/api.png" alt="API client" width="820">
 
 Build, save and test API requests without Postman or Insomnia:
@@ -287,7 +297,10 @@ Build, save and test API requests without Postman or Insomnia:
 
 Requests are sent by Laramac itself, so the browser's cross-site limits do not apply and your local `.test` sites work over HTTPS.
 
-### GitHub
+### GitHub and Azure DevOps
+
+Azure DevOps has its own tab: repositories by project, pipelines, pull requests and commits, create, clone, and push a site from its page.
+
 
 <img src="docs/screenshots/github.png" alt="GitHub repositories" width="820">
 
@@ -336,6 +349,8 @@ Everything Laramac has installed, with its size: PHP versions, database servers,
 
 ### Settings
 
+Search any setting by what it does ("port", "theme", ".test"); settings also come up in ⌘K.
+
 <img src="docs/screenshots/settings.png" alt="Settings: addresses" width="820">
 
 - **Projects folder.** Defaults to `~/Laramac/www`, kept out of Documents so iCloud does not sync it.
@@ -350,6 +365,9 @@ Everything Laramac has installed, with its size: PHP versions, database servers,
 - **Reset.** Clears software, data, settings or system changes without uninstalling. Your projects are never touched.
 
 ### Updates
+
+One page for every update: Laramac, PHP, Node.js, languages, Homebrew services, Composer, phpMyAdmin, Cloudflare Tunnel, Claude Code and your sites' packages (those only with your consent, after a snapshot).
+
 
 <img src="docs/screenshots/updates.png" alt="Updates and changelog" width="820">
 

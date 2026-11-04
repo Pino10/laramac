@@ -9,7 +9,7 @@ import type {
   ServiceInfo,
   SiteInfo,
   ToolsStatus,
-  UpdateInfo
+  UpdateInfo, UpdatesReport
 } from '@shared/types'
 
 export interface Toast {
@@ -32,6 +32,8 @@ interface AppCtx {
   clearActivity: () => void
   appInfo: AppInfo | null
   update: UpdateInfo | null
+  updates: UpdatesReport | null
+  setUpdates: (u: UpdatesReport | null) => void
   setUpdate: (u: UpdateInfo | null) => void
   services: ServiceInfo[]
   sites: SiteInfo[]
@@ -86,6 +88,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
+  const [updates, setUpdates] = useState<UpdatesReport | null>(null)
   const [services, setServices] = useState<ServiceInfo[]>([])
   const [sites, setSites] = useState<SiteInfo[]>([])
   const [jobs, setJobs] = useState<JobInfo[]>([])
@@ -155,6 +158,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     api().invoke('jobs:list').then(setJobs)
     api().invoke('activity:list').then(setActivity)
     api().invoke('app:check-update').then(setUpdate).catch(() => undefined)
+    api().invoke('updates:last').then(setUpdates).catch(() => undefined)
     refreshAll()
     const offs = [
       api().on('services:changed', setServices),
@@ -162,6 +166,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       api().on('sites:changed', setSites),
       api().on('activity:changed', setActivity),
       api().on('update:available', setUpdate),
+      api().on('updates:changed', setUpdates),
       api().on('app:navigate', (p) => setPage(p as Page))
     ]
     window.addEventListener('focus', refreshAll)
@@ -195,6 +200,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       appInfo,
       update,
       setUpdate,
+      updates,
+      setUpdates,
       services,
       sites,
       jobs,
@@ -223,7 +230,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         if (name) setPage('sites')
       }
     }),
-    [tourOpen, pendingStarter, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [tourOpen, pendingStarter, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, updates, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

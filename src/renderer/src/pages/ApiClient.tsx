@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Code2,
+  Cookie,
   Copy,
   Download,
   FileUp,
@@ -28,8 +29,7 @@ import type {
   ApiRunResult,
   ApiStore,
   HttpMethod,
-  KV
-} from '@shared/types'
+  KV, ApiCodeLang } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes } from '../ui'
 import { useAsk } from '../components/Ask'
@@ -222,9 +222,13 @@ function PrettyJson({ text }: { text: string }): React.JSX.Element {
 type Tab = 'params' | 'headers' | 'body' | 'auth' | 'tests' | 'save'
 
 export default function ApiClient(): React.JSX.Element {
-  const { act, busy, notify } = useApp()
+  const { act, busy, notify, sites } = useApp()
   const api = window.laramac
   const [store, setStore] = useState<ApiStore | null>(null)
+  const [siteEnvList, setSiteEnvList] = useState<ApiEnvironment[]>([])
+  useEffect(() => {
+    void api.invoke('api:site-envs').then(setSiteEnvList).catch(() => undefined)
+  }, [api, sites])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('params')
   const [respTab, setRespTab] = useState<'body' | 'headers' | 'tests'>('body')
@@ -262,6 +266,15 @@ export default function ApiClient(): React.JSX.Element {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     if (latest.current) await api.invoke('api:save', latest.current)
   }
+  const fromSite = async (name: string): Promise<void> => {
+    await flush()
+    const col = await act('api-from-site', () => api.invoke('api:from-site', name))
+    if (col) {
+      await reload()
+      setActiveId(col.requests[0]?.id ?? null)
+      notify({ kind: 'info', text: `${col.requests.length} requests from ${name}'s code. The ${name} environment fills in {{base}}.` })
+    }
+  }
   const reload = async (): Promise<void> => {
     const s = await api.invoke('api:load')
     latest.current = s
@@ -269,6 +282,7 @@ export default function ApiClient(): React.JSX.Element {
   }
 
   if (!store) return <></>
+  const siteEnvs = siteEnvList
   const all = store.collections.flatMap((c) => c.requests.map((r) => ({ c, r })))
   const found = all.find((x) => x.r.id === activeId)
   const active = found?.r ?? null
@@ -347,11 +361,22 @@ export default function ApiClient(): React.JSX.Element {
         <div className="apic-env">
           <select className="input" value={store.activeEnv ?? ''} onChange={(e) => update((s) => ({ ...s, activeEnv: e.target.value || null }))} aria-label="Environment">
             <option value="">No environment</option>
-            {store.environments.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
+            <optgroup label="Yours">
+              {store.environments.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </optgroup>
+            {siteEnvs.length > 0 && (
+              <optgroup label="Your sites">
+                {siteEnvs.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} ({e.vars.find((v) => v.key === 'base')?.value.replace(/^https?:\/\//, '')})
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <button className="icon-btn" data-tip="Environments and variables" aria-label="Environments" onClick={() => setDialog({ kind: 'env' })}>
             <Variable />
@@ -377,7 +402,35 @@ export default function ApiClient(): React.JSX.Element {
           <button className="icon-btn" data-tip="Paste cURL or JSON" aria-label="Paste" onClick={() => setDialog({ kind: 'paste' })}>
             <Copy />
           </button>
+          <button
+            className="icon-btn"
+            data-tip={store.cookies === false ? 'Cookies off: each request starts clean' : 'Cookies kept between requests, like a browser. Click to turn off'}
+            aria-label="Keep cookies"
+            aria-pressed={store.cookies !== false}
+            onClick={async () => {
+              if (store.cookies !== false) await api.invoke('api:clear-cookies')
+              update((s) => ({ ...s, cookies: s.cookies === false }))
+            }}
+          >
+            <Cookie style={{ opacity: store.cookies === false ? 0.4 : 1 }} />
+          </button>
         </div>
+        {sites.length > 0 && (
+          <select
+            className="input apic-fromsite"
+            value=""
+            disabled={busy.has('api-from-site')}
+            onChange={(e) => e.target.value && void fromSite(e.target.value)}
+            aria-label="Make requests from a site's code"
+          >
+            <option value="">{busy.has('api-from-site') ? 'Reading the code…' : 'Requests from a site’s code…'}</option>
+            {sites.map((x) => (
+              <option key={x.name} value={x.name}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+        )}
 
         <div className="apic-tree">
           {store.collections.map((c) => (
@@ -467,7 +520,22 @@ export default function ApiClient(): React.JSX.Element {
                 </button>
               </div>
               {store.history.slice(0, 10).map((h, i) => (
-                <div key={i} className="apic-hist" title={h.url}>
+                <div
+                  key={i}
+                  className="apic-hist"
+                  title={h.request ? `${h.url}\nClick to open it again` : h.url}
+                  role={h.request ? 'button' : undefined}
+                  tabIndex={h.request ? 0 : undefined}
+                  style={{ cursor: h.request ? 'pointer' : undefined }}
+                  onClick={() => {
+                    if (!h.request) return
+                    const r = { ...h.request, id: id(), name: `${h.method} ${h.url.replace(/^https?:\/\/[^/]+/, '') || '/'}` }
+                    const colId = store.collections[0]?.id
+                    if (!colId) return
+                    update((s) => ({ ...s, collections: s.collections.map((c) => (c.id === colId ? { ...c, requests: [...c.requests, r] } : c)) }))
+                    setActiveId(r.id)
+                  }}
+                >
                   <span className="m-badge" data-m={h.method}>
                     {short(h.method)}
                   </span>
@@ -589,9 +657,9 @@ export default function ApiClient(): React.JSX.Element {
               {tab === 'body' && (
                 <>
                   <div className="seg" role="radiogroup" aria-label="Body type" style={{ marginBottom: 10 }}>
-                    {(['none', 'json', 'text', 'urlencoded', 'form'] as const).map((t) => (
+                    {(['none', 'json', 'graphql', 'text', 'urlencoded', 'form'] as const).map((t) => (
                       <button key={t} role="radio" aria-checked={active.body.type === t} onClick={() => patch({ body: { ...active.body, type: t } })}>
-                        {t === 'none' ? 'None' : t === 'json' ? 'JSON' : t === 'text' ? 'Text' : t === 'urlencoded' ? 'Form URL' : 'Multipart'}
+                        {t === 'none' ? 'None' : t === 'json' ? 'JSON' : t === 'graphql' ? 'GraphQL' : t === 'text' ? 'Text' : t === 'urlencoded' ? 'Form URL' : 'Multipart'}
                       </button>
                     ))}
                     {active.body.type === 'json' && (
@@ -620,15 +688,21 @@ export default function ApiClient(): React.JSX.Element {
                   {(active.body.type === 'urlencoded' || active.body.type === 'form') && (
                     <KvEditor rows={active.body.form} onChange={(form) => patch({ body: { ...active.body, form } })} keyLabel="Field" />
                   )}
+                  {active.body.type === 'graphql' && (
+                    <div className="apic-gql">
+                      <textarea className="input mono apic-body" spellCheck={false} placeholder={'query {\n  users { id name }\n}'} value={active.body.text} onChange={(e) => patch({ body: { ...active.body, text: e.target.value } })} aria-label="GraphQL query" />
+                      <textarea className="input mono apic-body" spellCheck={false} placeholder={'Variables (JSON)\n{ "id": 1 }'} value={active.body.variables ?? ''} onChange={(e) => patch({ body: { ...active.body, variables: e.target.value } })} aria-label="GraphQL variables" />
+                    </div>
+                  )}
                   {active.body.type === 'none' && <div className="hint">This request sends no body.</div>}
                 </>
               )}
               {tab === 'auth' && (
                 <>
                   <div className="seg" role="radiogroup" aria-label="Auth" style={{ marginBottom: 12 }}>
-                    {(['none', 'bearer', 'basic'] as const).map((t) => (
+                    {(['none', 'bearer', 'basic', 'apikey', 'oauth2'] as const).map((t) => (
                       <button key={t} role="radio" aria-checked={active.auth.type === t} onClick={() => patch({ auth: { ...active.auth, type: t } })}>
-                        {t === 'none' ? 'None' : t === 'bearer' ? 'Bearer token' : 'Basic'}
+                        {t === 'none' ? 'None' : t === 'bearer' ? 'Bearer token' : t === 'basic' ? 'Basic' : t === 'apikey' ? 'API key' : 'OAuth 2'}
                       </button>
                     ))}
                   </div>
@@ -639,6 +713,25 @@ export default function ApiClient(): React.JSX.Element {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <input className="input mono" placeholder="User" value={active.auth.user} onChange={(e) => patch({ auth: { ...active.auth, user: e.target.value } })} />
                       <input className="input mono" placeholder="Password" type="password" value={active.auth.pass} onChange={(e) => patch({ auth: { ...active.auth, pass: e.target.value } })} />
+                    </div>
+                  )}
+                  {active.auth.type === 'apikey' && (
+                    <div className="apic-auth-grid">
+                      <input className="input mono" placeholder="Name, like X-API-Key" value={active.auth.keyName ?? ''} onChange={(e) => patch({ auth: { ...active.auth, keyName: e.target.value } })} aria-label="Key name" />
+                      <input className="input mono" placeholder="Value or {{apiKey}}" value={active.auth.token} onChange={(e) => patch({ auth: { ...active.auth, token: e.target.value } })} aria-label="Key value" />
+                      <select className="input" value={active.auth.keyIn ?? 'header'} onChange={(e) => patch({ auth: { ...active.auth, keyIn: e.target.value as 'header' | 'query' } })} aria-label="Send it in">
+                        <option value="header">In a header</option>
+                        <option value="query">In the address</option>
+                      </select>
+                    </div>
+                  )}
+                  {active.auth.type === 'oauth2' && (
+                    <div className="apic-auth-grid">
+                      <input className="input mono" style={{ gridColumn: '1 / -1' }} placeholder="Token URL, like https://auth.example.com/oauth/token" value={active.auth.tokenUrl ?? ''} onChange={(e) => patch({ auth: { ...active.auth, tokenUrl: e.target.value } })} aria-label="Token URL" />
+                      <input className="input mono" placeholder="Client ID" value={active.auth.clientId ?? ''} onChange={(e) => patch({ auth: { ...active.auth, clientId: e.target.value } })} aria-label="Client ID" />
+                      <input className="input mono" type="password" placeholder="Client secret or {{secret}}" value={active.auth.clientSecret ?? ''} onChange={(e) => patch({ auth: { ...active.auth, clientSecret: e.target.value } })} aria-label="Client secret" />
+                      <input className="input mono" placeholder="Scope (optional)" value={active.auth.scope ?? ''} onChange={(e) => patch({ auth: { ...active.auth, scope: e.target.value } })} aria-label="Scope" />
+                      <div className="hint" style={{ gridColumn: '1 / -1' }}>Client credentials: Laramac gets a token before the request and keeps it until it expires.</div>
                     </div>
                   )}
                   {active.auth.type === 'none' && <div className="hint">No authentication is added. Headers you set still apply.</div>}
@@ -933,7 +1026,7 @@ function PasteDialog({ onImport, onClose }: { onImport: (text: string) => void; 
 }
 
 function CodeDialog({ req, envId, colId, onClose }: { req: ApiRequest; envId: string | null; colId: string | null; onClose: () => void }): React.JSX.Element {
-  const [lang, setLang] = useState<'curl' | 'fetch' | 'php' | 'python'>('curl')
+  const [lang, setLang] = useState<ApiCodeLang>('curl')
   const [code, setCode] = useState('')
   const { notify } = useApp()
   useEffect(() => {
@@ -945,9 +1038,13 @@ function CodeDialog({ req, envId, colId, onClose }: { req: ApiRequest; envId: st
         {(
           [
             ['curl', 'cURL'],
-            ['fetch', 'JavaScript'],
+            ['httpie', 'HTTPie'],
+            ['fetch', 'fetch'],
+            ['axios', 'axios'],
             ['php', 'PHP'],
-            ['python', 'Python']
+            ['laravel', 'Laravel'],
+            ['python', 'Python'],
+            ['go', 'Go']
           ] as const
         ).map(([k, l]) => (
           <button key={k} role="radio" aria-checked={lang === k} onClick={() => setLang(k)}>
