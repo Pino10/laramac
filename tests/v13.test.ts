@@ -35,8 +35,8 @@ describe('starter catalog', () => {
 
   it('only passes real choices to commands', () => {
     const react = starterById('react')!
-    expect(resolveOptions(react, { lang: 'js', compiler: 'on', evil: '; rm -rf /' })).toEqual({ lang: 'js', compiler: 'on' })
-    expect(resolveOptions(react, { lang: '--template=../../x' })).toEqual({ lang: 'ts', compiler: 'off' })
+    expect(resolveOptions(react, { lang: 'js', compiler: 'on', evil: '; rm -rf /' })).toEqual({ lang: 'js', compiler: 'on', data: 'none' })
+    expect(resolveOptions(react, { lang: '--template=../../x', data: '$(id)' })).toEqual({ lang: 'ts', compiler: 'off', data: 'none' })
     const run = react.steps(starterContext('a', 'test'), { lang: 'ts', compiler: 'off' })[0]
     expect('run' in run && run.run).toContain('react-ts')
   })

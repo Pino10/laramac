@@ -155,7 +155,10 @@ export async function createFromStarter(req: StarterRequest): Promise<{ target: 
 
   // Everything it needs, before touching the www folder: the language, a web server and .test addresses.
   await ensureRuntimes(starter.runtimes)
-  await prepareWeb(req.web)
+  // A web server that cannot be installed (no Homebrew, say) should not stop the project: say what is missing.
+  await prepareWeb(req.web).catch((e) => {
+    warning = `The project was made, but its address will not open yet: ${(e as Error).message}`
+  })
   let php: { bin: string; ini: string; composer: string } | null = null
   if (starter.runtimes.includes('php')) {
     const minor = defaultMinor()
