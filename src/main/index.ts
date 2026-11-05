@@ -1,5 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
-import { isAppBundle } from './seckit/editors'
+import * as phpdev from './phpdev'
+import { ideInstalled, ideLatest, ideLookChanged, ideNavigationAllowed, ideOpenWindow, ideStatus, ideVersion, installExtensions, installIde, isIdeContents, openInIde, stopIde } from './ide'
+import { isAppBundle, isEditorChoice } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
@@ -66,7 +68,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { FreeLlmInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -98,7 +100,7 @@ import {
 } from './tools'
 import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
-import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, openTerminal, shellQuote, testLlm } from './integrations'
+import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, openTerminal, projectRoots, shellQuote, testLlm } from './integrations'
 import { assistantChat } from './ai'
 import { processEvents, tailFile } from './process'
 import { phpmyadminInstalled } from './webconf'
@@ -267,11 +269,20 @@ function isAppUrl(url: string): boolean {
 function hardenWebContents(): void {
   app.on('web-contents-created', (_e, contents) => {
     contents.on('will-navigate', (event, url) => {
+      // Laramac Code's windows may only show its own local address; links go to the browser.
+      if (isIdeContents(contents)) {
+        if (!ideNavigationAllowed(url)) {
+          event.preventDefault()
+          if (isWebUrl(url)) void shell.openExternal(url)
+        }
+        return
+      }
       if (!isAppUrl(url)) event.preventDefault()
     })
     contents.on('will-attach-webview', (event) => event.preventDefault())
     contents.setWindowOpenHandler(({ url }) => {
-      if (isWebUrl(url)) void shell.openExternal(url)
+      if (isIdeContents(contents)) ideOpenWindow(url)
+      else if (isWebUrl(url)) void shell.openExternal(url)
       return { action: 'deny' }
     })
   })
@@ -354,7 +365,7 @@ function createTray(): void {
             sites: listSites(),
             tld: st.tld,
             phpmyadmin: phpmyadminInstalled(),
-            editor: st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : st.editor === 'auto' ? 'your editor' : st.editor,
+            editor: st.editor === 'auto' || st.editor === 'laramac' ? 'Laramac Code' : st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : st.editor === 'auto' ? 'your editor' : st.editor,
             aiName: AI_LABEL[st.aiTool] ?? 'AI tool'
           })
         )
@@ -479,6 +490,7 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
+    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize) void ideLookChanged(next.accent !== before.accent)
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
       const claude = findCli(['claude'])
@@ -628,6 +640,31 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle('sites:open-editor', (path) => openInEditor(getSettings().editor, sitePath(path)))
+  handle('sites:open-with', (path, editor) => {
+    if (typeof editor !== 'string' || !(isEditorChoice(editor) || editor === 'laramac')) throw new ValidationError('Choose an editor from the list.')
+    return openInEditor(editor, sitePath(path))
+  })
+  // ---- Laramac Code
+  handle('ide:status', () => ideStatus())
+  handle('ide:install', async () => {
+    await jobs.run(ideInstalled() ? 'Updating Laramac Code' : 'Installing Laramac Code', (u) => installIde(u))
+    activity.push('success', 'Laramac Code is ready', 'PHP Intelephense, PHP Debug, Blade, Prettier, ESLint and Tailwind are in.')
+    return ideStatus()
+  })
+  handle('ide:extensions', async () => {
+    if (!ideInstalled()) throw new ValidationError('Install Laramac Code first.')
+    await jobs.run('Adding extensions to Laramac Code', (u) => installExtensions(u))
+    return ideStatus()
+  })
+  handle('ide:open', async (path) => {
+    const target = typeof path === 'string' && path ? sitePath(path) : getSettings().wwwPath
+    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
+    await openInIde(target, undefined, projectRoots())
+  })
+  handle('ide:stop', async () => {
+    await stopIde()
+    return ideStatus()
+  })
   handle('editors:choose-app', async () => {
     if (!mainWindow) return null
     const r = await dialog.showOpenDialog(mainWindow, { title: 'Choose the app to open your code with', buttonLabel: 'Use this app', defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Apps', extensions: ['app'] }] })
@@ -988,7 +1025,8 @@ function registerIpc(): void {
       }
       const remote = src.kind !== 'site'
       try {
-        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: server, remote, scanners: req.scanners !== false }, update)
+        const skills = Array.isArray(req.skills) ? req.skills.filter((x): x is string => typeof x === 'string' && /^(own|mine|pack):[\w:.-]{1,120}$/.test(x)).slice(0, 200) : undefined
+        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: server, remote, scanners: req.scanners !== false, skills }, update)
       } finally {
         // The downloaded code exists only for this review: it vanishes as soon as the review ends.
         if (remote) review.endReviewSession(root)
@@ -1000,6 +1038,11 @@ function registerIpc(): void {
   const skillsStatus = (): { names: string[]; installed: boolean; desktop: boolean } => ({ names: review.skillList(), installed: installedForClaude('laramac'), desktop: desktopAppInstalled() })
   const desktopStatus = (): { app: boolean; connected: boolean; path: string } => ({ app: desktopAppInstalled(), connected: desktopConnected(), path: desktopConfigPath() })
   review.ensurePlugins()
+  handle('review:skill-plan', (site) => {
+    const root = typeof site === 'string' && site ? siteByName(site).path : null
+    const p = review.skillPlan(root)
+    return { stack: p.stack, recommended: p.recommended, files: p.files, items: p.items.map(({ id, name, source, about, guides }) => ({ id, name, source, about, guides })) }
+  })
   handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model, claudeFreeInstalled()))
   handle('review:continue', async (id, where) => {
     const info = review.listReviews().find((r) => r.id === id)
@@ -1250,6 +1293,17 @@ function registerIpc(): void {
         })
       )
     }
+    // Laramac Code
+    if (ideInstalled()) {
+      tasks.push(
+        ideLatest()
+          .then((l) => {
+            const cur = ideVersion()
+            if (cur && upd.isNewer(cur, l.version)) items.push({ id: 'tool:laramac-code', group: 'tool', name: 'Laramac Code', current: cur, latest: l.version, detail: 'The built-in editor (code-server). Your settings and extensions stay.', jump: upd.jumpOf(cur, l.version) })
+          })
+          .catch(() => undefined)
+      )
+    }
     // Claude Code
     const claude = findCli(['claude'])
     if (claude) {
@@ -1336,6 +1390,7 @@ function registerIpc(): void {
       await installPhpMyAdmin()
       writePmaConfig()
     } else if (id === 'tool:cloudflared') await installCloudflared()
+    else if (id === 'tool:laramac-code') await installIde(update)
     else if (id === 'tool:claude') {
       const claude = findCli(['claude'])
       if (!claude) throw new ValidationError('Claude Code is not installed.')
@@ -1447,13 +1502,18 @@ function registerIpc(): void {
     return r.filePath
   })
 
-  const packList = (): SkillPackInfo[] => SKILL_PACKS.map((p) => {
-    const st = packState(review.packsRoot(), p.id)
-    return { name: p.name, repo: p.repo, license: p.license, about: p.about, ...st, id: p.id }
-  })
+  const packList = (): SkillPackInfo[] => {
+    const items = review.skillPlan(null).items
+    return SKILL_PACKS.map((p) => {
+      const st = packState(review.packsRoot(), p.id)
+      const mine = items.filter((i) => i.id.startsWith(`pack:${p.id}:`))
+      return { name: p.name, repo: p.repo, license: p.license, about: p.about, ...st, id: p.id, guides: mine.reduce((n, i) => n + i.guides, 0) }
+    })
+  }
   handle('packs:list', () => packList())
   handle('packs:install', async (id) => {
     if (!SKILL_PACKS.some((p) => p.id === id)) throw new ValidationError('That skill pack is not on the list.')
+    setSettings({ packsDeclined: (getSettings().packsDeclined ?? []).filter((x) => x !== id) })
     const st = await jobs.run(`Getting the ${SKILL_PACKS.find((p) => p.id === id)!.name} skills`, () => installPack(review.packsRoot(), String(id)))
     if (installedForClaude('laramac')) installPackSkillsForClaude('laramac', packSkillFolders(review.packsRoot()))
     activity.push('success', `${st.loaded.length} skills from ${SKILL_PACKS.find((p) => p.id === id)!.name} are ready`, `Every Claude Code review loads them. Commit ${st.commit?.slice(0, 7)}.`)
@@ -1461,6 +1521,8 @@ function registerIpc(): void {
   })
   handle('packs:remove', (id) => {
     removePack(review.packsRoot(), String(id))
+    // Removed on purpose: it is not added back by itself.
+    setSettings({ packsDeclined: [...new Set([...(getSettings().packsDeclined ?? []), String(id)])] })
     if (installedForClaude('laramac')) {
       removePackSkillsFromClaude('laramac')
       installPackSkillsForClaude('laramac', packSkillFolders(review.packsRoot()))
@@ -2699,6 +2761,85 @@ function registerIpc(): void {
     for (const old of all.slice(0, Math.max(0, all.length - keep))) rmSync(join(dir, old), { force: true })
     return file
   }
+  // ---- For PHP developers: quick php.ini settings, global tools and Artisan
+  const quickNow = (): PhpQuick => {
+    const m = defaultMinor()
+    const text = m && existsSync(customIniPath(m)) ? readFileSync(customIniPath(m), 'utf8') : ''
+    const v = phpdev.readQuick(text)
+    return { settings: phpdev.QUICK_SETTINGS.map((q) => ({ key: q.key, label: q.label, hint: q.hint, options: q.options, fallback: q.fallback, value: v[q.key] })) }
+  }
+  handle('php:quick', () => quickNow())
+  handle('php:quick-set', async (key, value) => {
+    const q = phpdev.QUICK_SETTINGS.find((x) => x.key === key)
+    if (!q || typeof value !== 'string' || !q.options.some((o) => o.value === value)) throw new ValidationError('Choose one of the values on the list.')
+    // The same quick settings for every PHP version, so switching versions keeps them.
+    for (const m of installedMinors()) {
+      const file = ensureCustomIni(m)
+      const current = phpdev.readQuick(readFileSync(file, 'utf8'))
+      writeFileSync(file, phpdev.writeQuick(readFileSync(file, 'utf8'), { ...current, [key]: value }))
+    }
+    await restartPhp()
+    activity.push('info', `${q.label}: ${q.options.find((o) => o.value === value)!.label}`, 'PHP restarted with the new setting.')
+    return quickNow()
+  })
+  const composerHome = (): string => join(dirs.root(), 'composer')
+  const toolList = (): PhpToolInfo[] => {
+    const inst = phpdev.installedGlobals(composerHome())
+    return phpdev.PHP_TOOLS.map((t) => ({ id: t.id, name: t.name, command: t.command, about: t.about, version: inst[t.pkg] ?? null }))
+  }
+  const composerGlobal = async (args: string[], label: string): Promise<void> => {
+    const m = defaultMinor()
+    if (!m) throw new ValidationError('Install PHP first.')
+    if (!existsSync(composerPhar())) await installComposer()
+    await jobs.run(label, (u) => runQuiet([phpBinary(m), composerPhar(), 'global', ...args, '--no-interaction', '--no-progress'], dirs.root(), runtimeEnv(), (l) => u(null, `${label}: ${l.slice(0, 70)}`), 10 * 60_000))
+  }
+  handle('phptools:list', () => toolList())
+  handle('phptools:install', async (id) => {
+    const t = phpdev.PHP_TOOLS.find((x) => x.id === id)
+    if (!t) throw new ValidationError('That tool is not on the list.')
+    await composerGlobal(['require', t.pkg, '-W'], `Installing ${t.name}`)
+    activity.push('success', `${t.name} is ready`, `Type ${t.command} in Laramac Code’s terminal or a Terminal window Laramac opens.`)
+    return toolList()
+  })
+  handle('phptools:remove', async (id) => {
+    const t = phpdev.PHP_TOOLS.find((x) => x.id === id)
+    if (!t) throw new ValidationError('That tool is not on the list.')
+    await composerGlobal(['remove', t.pkg], `Removing ${t.name}`)
+    return toolList()
+  })
+  handle('site:artisan', async (name, action) => {
+    const site = siteByName(name)
+    if (!existsSync(join(site.path, 'artisan'))) throw new ValidationError('This site is not a Laravel project.')
+    const a = phpdev.ARTISAN.find((x) => x.id === action)
+    if (!a) throw new ValidationError('That command is not on the list.')
+    // Runs the project's own code: you pressed the button for exactly this command.
+    await openTerminal(site.path, ['php', 'artisan', ...a.args].map((x) => (/^[\w:.-]+$/.test(x) ? x : shellQuote(x))).join(' '))
+  })
+  handle('overview:pulse', async () => {
+    const logs = [join(dirs.logs(), 'nginx-access.log'), join(dirs.logs(), 'apache-access.log')]
+    const p = tools.pulseFrom(logs.filter((f) => existsSync(f)).map((f) => tailFile(f, 20000)).join('\n'), Date.now())
+    let mail: number | null = null
+    try {
+      const r = await fetch('http://127.0.0.1:8025/api/v1/messages?limit=1', { signal: AbortSignal.timeout(1200) })
+      if (r.ok) mail = Number(((await r.json()) as { total?: number }).total ?? 0)
+    } catch {
+      mail = null
+    }
+    let lastBackup: string | null = null
+    if (existsSync(backupsDir())) {
+      for (const d of readdirSync(backupsDir())) {
+        if (!/^(mysql|mariadb)-[A-Za-z0-9_]+$/.test(d)) continue
+        for (const f of readdirSync(join(backupsDir(), d))) {
+          if (!f.endsWith('.sql.gz')) continue
+          const at = statSync(join(backupsDir(), d, f)).mtime.toISOString()
+          if (!lastBackup || at > lastBackup) lastBackup = at
+        }
+      }
+    }
+    const r = review.listReviews()[0]
+    const c = (r?.counts ?? {}) as Record<string, number>
+    return { ...p, mail, lastBackup, review: r ? { title: r.title, at: r.at, critical: c.critical ?? 0, high: c.high ?? 0, medium: c.medium ?? 0, low: c.low ?? 0 } : null }
+  })
   handle('db:backups', () => {
     const out: { engine: string; name: string; files: { file: string; bytes: number; at: string }[] }[] = []
     if (!existsSync(backupsDir())) return { list: out, scheduled: getSettings().dbBackups ?? [] }
@@ -2981,6 +3122,16 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   ensureDirs()
+  // The security teams' skill packs are part of every review by default: fetched quietly once, kept up to date with each app version.
+  setTimeout(() => {
+    void (async () => {
+      const declined = new Set(getSettings().packsDeclined ?? [])
+      for (const p of SKILL_PACKS) {
+        if (declined.has(p.id) || packState(review.packsRoot(), p.id).installed) continue
+        await jobs.run(`Getting the ${p.name} skills`, () => installPack(review.packsRoot(), p.id)).catch(() => undefined)
+      }
+    })()
+  }, 25_000)
   // 0.23 brings the Studio look as the default; it reaches everyone once, and Settings, Look switches back.
   if ((getSettings().lookVersion ?? 0) < 23) setSettings({ glassStyle: 'studio', lookVersion: 23 })
   ensureWww()
@@ -3045,7 +3196,7 @@ app.on('before-quit', (event) => {
   quitting = true
   ssh.disconnectAll()
   dumps.stopDumpServer()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends(), stopIde()]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

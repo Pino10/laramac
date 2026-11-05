@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import OpenWith from './OpenWith'
 import { Bot, Code2, ExternalLink, FolderOpen, Network, ScrollText, Sparkles, X } from 'lucide-react'
 import type { SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
@@ -55,9 +56,7 @@ export default function SiteQuickView({ site, onClose }: { site: SiteInfo; onClo
           ))}
         </dl>
         <div className="end" style={{ flexWrap: 'wrap' }}>
-          <button className="btn btn-sm" onClick={() => api.invoke('sites:open-editor', site.path)}>
-            <Code2 size={13} /> Editor
-          </button>
+          <OpenWith path={site.path} compact />
           <button className="btn btn-sm" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={13} /> Claude Code
           </button>

@@ -24,7 +24,7 @@ export default function SkillPacks(): React.JSX.Element {
           <div className="row-main">
             <div className="row-title">
               {p.name} <span className="tag">{p.license}</span>
-              {p.installed && <span className="tag tag-ok">{p.loaded.length} skills</span>}
+              {p.installed && <span className="tag tag-ok">{p.loaded.length} {p.loaded.length === 1 ? 'skill' : 'skills'}{p.guides ? `, ${p.guides} guides` : ''}</span>}
             </div>
             <div className="row-sub" style={{ whiteSpace: 'normal' }}>
               {p.about}

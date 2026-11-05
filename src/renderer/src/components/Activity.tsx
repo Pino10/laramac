@@ -18,11 +18,45 @@ const startOfToday = (): number => {
   return d.getTime()
 }
 
-/** The bell: installs, crashes, shares and updates, mirrored from macOS notifications. */
+/** New events as small toasts under the bell: at most three, each gone after a few seconds. */
+function Toasts({ hidden }: { hidden: boolean }): React.JSX.Element | null {
+  const { activity } = useApp()
+  const [since] = useState(() => Date.now())
+  const [shown, setShown] = useState<ActivityItem[]>([])
+  const known = useRef(new Set<string>())
+  useEffect(() => {
+    const fresh = activity.filter((a) => a.at >= since && !known.current.has(a.id))
+    if (!fresh.length) return
+    for (const a of fresh) known.current.add(a.id)
+    setShown((s) => [...fresh.reverse(), ...s].slice(0, 3))
+    const ids = fresh.map((a) => a.id)
+    const t = setTimeout(() => setShown((s) => s.filter((x) => !ids.includes(x.id))), fresh.some((a) => a.kind === 'error') ? 8000 : 4500)
+    return () => clearTimeout(t)
+  }, [activity, since])
+  if (hidden || shown.length === 0) return null
+  return (
+    <div className="toasts" role="status" aria-live="polite">
+      {shown.map((a) => (
+        <button key={a.id} className="toast-mini glass" data-kind={a.kind} onClick={() => setShown((s) => s.filter((x) => x.id !== a.id))} title={a.body ?? undefined}>
+          <span className="event-icon" data-kind={a.kind}>
+            {a.kind === 'error' ? <CircleAlert size={14} /> : a.kind === 'success' ? <CircleCheck size={14} /> : <Sparkles size={14} />}
+          </span>
+          <span className="toast-text">
+            <strong>{a.title}</strong>
+            {a.body && <small>{a.body}</small>}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The bell: one quiet line per event, details on click. */
 export default function Activity(): React.JSX.Element {
   const { activity, clearActivity } = useApp()
   const [open, setOpen] = useState(false)
   const [seen, setSeen] = useState(0)
+  const [expanded, setExpanded] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const unseen = activity.filter((a) => a.at > seen)
@@ -51,6 +85,7 @@ export default function Activity(): React.JSX.Element {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
+      <Toasts hidden={open} />
       <button
         className="bell"
         data-new={unseen.length > 0 && !open}
@@ -66,7 +101,7 @@ export default function Activity(): React.JSX.Element {
         )}
       </button>
       {open && (
-        <div className="popover glass" role="dialog" aria-label="Activity" style={{ top: 44, right: 0 }}>
+        <div className="popover glass activity-pop" role="dialog" aria-label="Activity" style={{ top: 44, right: 0 }}>
           <div className="popover-head">
             Activity
             {activity.length > 0 && (
@@ -85,19 +120,17 @@ export default function Activity(): React.JSX.Element {
               items.length === 0 ? null : (
                 <div key={label}>
                   <div className="event-group">{label}</div>
-                  {items.map((a) => (
-                    <div key={a.id} className="event">
+                  {items.slice(0, 40).map((a) => (
+                    <button key={a.id} className="event event-line" data-open={expanded === a.id} onClick={() => setExpanded(expanded === a.id ? null : a.id)}>
                       <span className="event-icon" data-kind={a.kind}>
-                        {a.kind === 'error' ? <CircleAlert size={14} /> : a.kind === 'success' ? <CircleCheck size={14} /> : <Sparkles size={14} />}
+                        {a.kind === 'error' ? <CircleAlert size={13} /> : a.kind === 'success' ? <CircleCheck size={13} /> : <Sparkles size={13} />}
                       </span>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <span className="event-title">{a.title}</span>
-                          <span className="event-time">{ago(a.at, now)}</span>
-                        </div>
-                        {a.body && <div className="event-body">{a.body}</div>}
-                      </div>
-                    </div>
+                      <span className="event-main">
+                        <span className="event-title">{a.title}</span>
+                        {a.body && expanded === a.id && <span className="event-body">{a.body}</span>}
+                      </span>
+                      <span className="event-time">{ago(a.at, now)}</span>
+                    </button>
                   ))}
                 </div>
               )

@@ -72,6 +72,21 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'tourDone':
         out[key] = bool(value, key)
         break
+      case 'accent':
+        out.accent = oneOf(value, ['blue', 'violet', 'teal', 'amber', 'rose'] as const, 'The accent colour')
+        break
+      case 'uiFont':
+        out.uiFont = oneOf(value, ['system', 'poppins'] as const, 'The font')
+        break
+      case 'editorFont':
+        out.editorFont = oneOf(value, ['system', 'jetbrains', 'fira', 'cascadia', 'menlo'] as const, 'The editor font')
+        break
+      case 'editorFontSize': {
+        const n = Number(value)
+        if (!Number.isInteger(n) || n < 10 || n > 24) fail('The editor font size must be between 10 and 24.')
+        out.editorFontSize = n
+        break
+      }
       case 'glassStyle':
         out.glassStyle = oneOf(value, ['studio', 'smoke', 'frost', 'aurora', 'midnight'] as const, 'The look')
         break
@@ -106,7 +121,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.ngrokToken = typeof value === 'string' && /^[A-Za-z0-9_-]{0,200}$/.test(value) ? value : fail('That ngrok token has unexpected characters.')
         break
       case 'editor':
-        if (!isEditorChoice(value)) fail('Choose an editor from the list.')
+        if (!isEditorChoice(value) && value !== 'laramac') fail('Choose an editor from the list.')
         out.editor = value as string
         break
       case 'llm': {

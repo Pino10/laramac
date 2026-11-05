@@ -3,6 +3,7 @@ import { ArrowUpCircle, Bug, FileCog, FolderPlus, Puzzle } from "lucide-react";
 import type { PhpVersionInfo } from "@shared/types";
 import { useApp } from "../store";
 import { PageHead, Switch } from "../ui";
+import { PhpQuickSettings, PhpTools } from "../components/PhpDev";
 
 export default function Php(): React.JSX.Element {
   const {
@@ -284,6 +285,9 @@ export default function Php(): React.JSX.Element {
           })}
         </div>
       )}
+
+      {php.some((p) => p.installed) && <PhpQuickSettings />}
+      <PhpTools />
 
       <div className="php-older glass">
         <FolderPlus

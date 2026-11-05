@@ -574,6 +574,40 @@ export interface SkillPackInfo {
   commit: string | null
   at: string | null
   loaded: string[]
+  /** Reference guides that come with its skills (Cloudflare's audit has 14). */
+  guides?: number
+}
+
+export interface PhpQuick {
+  settings: { key: string; label: string; hint: string; options: { value: string; label: string }[]; value: string; fallback: string }[]
+}
+
+export interface PhpToolInfo {
+  id: string
+  name: string
+  command: string
+  about: string
+  version: string | null
+}
+
+export interface OverviewPulse {
+  perMinute: number[]
+  today: number
+  errorsToday: number
+  medianMs: number
+  /** Emails Mailpit caught, when it is running. */
+  mail: number | null
+  /** The newest database backup. */
+  lastBackup: string | null
+  /** The latest code review: its site and findings by severity. */
+  review: { title: string; at: string; critical: number; high: number; medium: number; low: number } | null
+}
+
+export interface IdeStatus {
+  installed: boolean
+  version: string | null
+  running: boolean
+  extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
 }
 
 export interface FreeLlmInfo {
@@ -682,6 +716,15 @@ export interface AppSettings {
   editor: string
   /** The .app chosen with "Choose another app". */
   editorApp?: string | null
+  /** Skill packs you removed, so they are not fetched again by themselves. */
+  packsDeclined?: string[]
+  /** The accent colour of the Studio look and of Laramac Code's theme. */
+  accent?: 'blue' | 'violet' | 'teal' | 'amber' | 'rose'
+  /** The app's font: Apple's own (SF Pro) or Poppins. */
+  uiFont?: 'system' | 'poppins'
+  /** Laramac Code's font and size. */
+  editorFont?: 'system' | 'jetbrains' | 'fira' | 'cascadia' | 'menlo'
+  editorFontSize?: number
   /** Let phones and other computers on the network open your sites. Off by default. */
   allowLan: boolean
   notifications: boolean
@@ -787,6 +830,24 @@ export interface ReviewRequest {
   focus: ReviewFocus
   /** Run MacSec's scanners first (Semgrep, Gitleaks, OSV-Scanner) when MacSec is installed. */
   scanners?: boolean
+  /** The skills to load (ids from review:skill-plan). Left out: the recommended ones. */
+  skills?: string[]
+}
+
+export interface SkillChoice {
+  id: string
+  name: string
+  source: string
+  about: string
+  guides: number
+}
+
+export interface SkillPlan {
+  /** What the project is made of, as short tags (php, laravel, react...). */
+  stack: string[]
+  items: SkillChoice[]
+  recommended: string[]
+  files: number
 }
 
 export interface ReviewerOption {
@@ -1026,6 +1087,19 @@ export interface Channels {
   'sites:open-url': { args: [string]; result: void }
   'sites:open-editor': { args: [string]; result: void }
   'editors:choose-app': { args: []; result: { app: string; name: string } | null }
+  'sites:open-with': { args: [string, string]; result: void }
+  'overview:pulse': { args: []; result: OverviewPulse }
+  'php:quick': { args: []; result: PhpQuick }
+  'php:quick-set': { args: [string, string]; result: PhpQuick }
+  'phptools:list': { args: []; result: PhpToolInfo[] }
+  'phptools:install': { args: [string]; result: PhpToolInfo[] }
+  'phptools:remove': { args: [string]; result: PhpToolInfo[] }
+  'site:artisan': { args: [string, string]; result: void }
+  'ide:status': { args: []; result: IdeStatus }
+  'ide:install': { args: []; result: IdeStatus }
+  'ide:extensions': { args: []; result: IdeStatus }
+  'ide:open': { args: [string | null]; result: void }
+  'ide:stop': { args: []; result: IdeStatus }
   'sites:open-claude': { args: [string]; result: void }
   'sites:share': { args: [string]; result: string }
   'sites:unshare': { args: [string]; result: void }
@@ -1046,6 +1120,7 @@ export interface Channels {
   'llm:servers': { args: []; result: ModelServer[] }
   'mail:relay': { args: []; result: MailRelay }
   'review:run': { args: [ReviewRequest]; result: ReviewResult }
+  'review:skill-plan': { args: [string | null]; result: SkillPlan }
   'dumps:list': { args: []; result: DumpItem[] }
   'db:root-password': { args: ['mysql' | 'mariadb']; result: { set: boolean } }
   'db:set-root-password': { args: ['mysql' | 'mariadb', string]; result: { set: boolean } }

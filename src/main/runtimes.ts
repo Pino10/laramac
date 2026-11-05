@@ -45,7 +45,7 @@ const commonDirs = (): string[] => {
 export function runtimeEnv(): NodeJS.ProcessEnv {
   const managed = Object.values(managedBinDirs()).filter((d) => existsSync(d))
   const brew = brewPrefix()
-  const path = [...managed, dirs.bin(), ...(brew ? [join(brew, 'bin'), join(brew, 'sbin')] : []), ...commonDirs(), process.env.PATH ?? '', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
+  const path = [...managed, dirs.bin(), join(dirs.root(), 'composer', 'vendor', 'bin'), ...(brew ? [join(brew, 'bin'), join(brew, 'sbin')] : []), ...commonDirs(), process.env.PATH ?? '', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
     .filter(Boolean)
     .join(delimiter)
   const env: NodeJS.ProcessEnv = {

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import OpenWith from '../components/OpenWith'
+import { ArtisanPanel } from '../components/PhpDev'
 import { Activity, ArrowLeft, Bot, Camera, Code2, Cog, Database, ExternalLink, FileCog, FlaskConical, FolderOpen, GitBranch, Globe, Lock, Network, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
 import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
@@ -79,9 +81,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
               {site.dev.running ? <Square size={13} /> : <Play size={13} />} {site.dev.running ? 'Stop' : 'Start'}
             </button>
           )}
-          <button className="btn" onClick={() => api.invoke('sites:open-editor', site.path)}>
-            <Code2 size={14} /> {tools?.editor ?? 'Editor'}
-          </button>
+          <OpenWith path={site.path} />
           <button className="btn" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={14} /> Claude Code
           </button>
@@ -108,6 +108,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
       {tab === 'overview' && (
         <div className="site-grid">
           <Doctor site={site.name} />
+          <ArtisanPanel site={site} />
           {facts && (site.kind === 'node' || facts.nodeInfo.want || /^(npm|npx|pnpm|yarn|node|bun)\b/.test(site.dev?.command ?? '')) && (
             <div className="panel">
               <NodeChooser site={site} info={facts.nodeInfo} onChange={(nodeInfo) => setFacts({ ...facts, nodeInfo })} />

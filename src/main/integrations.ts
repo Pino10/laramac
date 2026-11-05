@@ -1,6 +1,8 @@
 import { execFile } from 'child_process'
+import { installIde, ideInstalled, openInIde } from './ide'
+import { jobs } from './jobs'
 import { installedEditors, openInEditorOf } from './seckit/editors'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { dirs } from './paths'
@@ -23,7 +25,7 @@ function osascript(script: string): Promise<void> {
 
 /** Opens a new Terminal window running a command, with Laramac's tools first on PATH. */
 export function openTerminal(cwd: string, command?: string): Promise<void> {
-  const withPath = `export PATH=${shellQuote(dirs.bin())}:$PATH`
+  const withPath = `export PATH=${shellQuote(dirs.bin())}:${shellQuote(join(dirs.root(), 'composer', 'vendor', 'bin'))}:$PATH`
   const parts = [withPath, `cd ${shellQuote(cwd)}`]
   if (command) parts.push(command)
   const line = applescriptString(parts.join(' && '))
@@ -35,9 +37,29 @@ export function openTerminal(cwd: string, command?: string): Promise<void> {
  * is there on the side. Uses the editor's own command-line launcher, which
  * opens folders reliably even when the editor is already running.
  */
-/** Opens a folder, or a file at a line, in the editor chosen in AI tools (or the first one found). */
+/** The project folders a file can belong to: each folder in www. */
+export function projectRoots(): string[] {
+  const www = getSettings().wwwPath
+  try {
+    return readdirSync(www, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(www, d.name))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Opens a folder, or a file at a line. 'auto' and 'laramac' use Laramac Code (installed on first
+ * use when there is no other editor); any other choice is that editor or app.
+ */
 export async function openInEditor(editor: string, path: string, line?: number): Promise<void> {
-  await openInEditorOf({ choice: editor, customApp: getSettings().editorApp, path, line, found: await installedEditors() })
+  const found = await installedEditors()
+  const useIde = editor === 'laramac' || (editor === 'auto' && (ideInstalled() || found.length === 0))
+  if (useIde) {
+    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
+    await openInIde(path, line, projectRoots())
+    return
+  }
+  await openInEditorOf({ choice: editor, customApp: getSettings().editorApp, path, line, found })
 }
 
 export function openClaudeCode(cwd: string): Promise<void> {

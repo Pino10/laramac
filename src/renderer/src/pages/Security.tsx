@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import SkillPicker from '../components/SkillPicker'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import SkillPacks from '../components/SkillPacks'
@@ -53,6 +54,7 @@ export default function Security(): React.JSX.Element {
   const [reviewers, setReviewers] = useState<ReviewerOption[]>([])
   const [scanners, setScanners] = useState(true)
   const [focus, setFocus] = useState<ReviewFocus>('security')
+  const [skills, setSkills] = useState<string[] | undefined>(undefined)
   const [result, setResult] = useState<ReviewResult | null>(null)
   const [history, setHistory] = useState<ReviewInfo[]>([])
   const [opened, setOpened] = useState<{ info: ReviewInfo; md: string } | null>(null)
@@ -124,7 +126,7 @@ export default function Security(): React.JSX.Element {
   const run = async (): Promise<void> => {
     const source =
       kind === 'site' ? { kind, site } : kind === 'github' && connected ? { kind, repo } : { kind: 'git', url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
-    const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus, scanners } as never))
+    const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus, scanners, skills } as never))
     if (r) {
       setResult(r)
       setOpened(null)
@@ -248,6 +250,7 @@ export default function Security(): React.JSX.Element {
                 </div>
               </div>
             </div>
+            {reviewer.startsWith('claude') && <SkillPicker site={kind === 'site' ? site || null : null} reviewer={reviewer} onChange={setSkills} />}
             <label className="check-row">
               <input type="checkbox" checked={scanners} onChange={(e) => setScanners(e.target.checked)} />
               Run MacSec’s scanners first (Semgrep, Gitleaks, OSV-Scanner), when MacSec is installed, and have the reviewer check each result

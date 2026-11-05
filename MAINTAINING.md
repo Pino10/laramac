@@ -78,6 +78,9 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 | `src/main/svc/ollama.ts` | Ollama as a service. |
 | `src/main/seckit/skillpacks.ts` | Shared with MacSec: Trail of Bits, Sentry, Cloudflare and Anthropic skill packs. Slash commands become skills with `commandToSkill`. |
 | `src/main/seckit/editors.ts` | Shared with MacSec: finding editors and IDEs and opening a folder or file at a line in each. |
+| `src/main/seckit/skillplan.ts` | Shared with MacSec: the skills a review can load (`skillCatalog`), the project's stack (`detectStack`), what fits it (`recommend`), the time estimate and the per-review skill folder (`buildSkillSet`). |
+| `src/main/ide.ts`, `src/main/idecore.ts`, `src/main/idetheme.ts` | Laramac Code: installing code-server (checked against GitHub's SHA-256), its settings and extensions, the Studio theme as a VSIX, starting it on 127.0.0.1 with a password, and its window (`ideNavigationAllowed` keeps it on its own address). `idecore.ts` is pure and tested. |
+| `src/main/phpdev.ts` | PHP quick settings (a marked block in each version's custom ini), the global PHP tools installed with Composer, and the Artisan actions (fixed arguments only). |
 | `src/renderer/src/pages/Services.tsx` | The Services page; `SERVICE_SECTIONS` says which services go in which group. |
 | `src/main/seckit/ghapi.ts` | Shared with MacSec: every api.github.com call (sign-in, caching, rate limits, release feed fallback). Never call GitHub's API with plain fetch. |
 | `src/main/seckit/freellm.ts` | Shared with MacSec: Free LLM API addresses, keys, models and the environment for Claude Code. |

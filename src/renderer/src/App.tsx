@@ -15,14 +15,12 @@ import Php from './pages/Php'
 import Databases from './pages/Databases'
 import Tools from './pages/Tools'
 import Services from './pages/Services'
-import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 import Servers from './pages/Servers'
 import Packages from './pages/Packages'
 import ApiClient from './pages/ApiClient'
 import Starters from './pages/Starters'
 import Languages from './pages/Languages'
-import Recon from './pages/Recon'
 import Security from './pages/Security'
 import GitHub from './pages/GitHub'
 import Updates from './pages/Updates'
@@ -34,11 +32,21 @@ function Shell(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
   }, [appInfo])
+  // Studio follows the Mac's light and dark mode, live; Frosted is always light, the others dark.
   useEffect(() => {
+    const root = document.documentElement
     const style = settings?.glassStyle ?? 'studio'
-    document.documentElement.dataset.glass = style
-    document.documentElement.dataset.tone = style === 'frost' ? 'light' : 'dark'
-  }, [settings?.glassStyle])
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = (): void => {
+      root.dataset.glass = style
+      root.dataset.tone = style === 'frost' ? 'light' : style === 'studio' ? (mq.matches ? 'dark' : 'light') : 'dark'
+      root.dataset.accent = settings?.accent ?? 'blue'
+      root.dataset.font = settings?.uiFont ?? 'system'
+    }
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [settings?.glassStyle, settings?.accent, settings?.uiFont])
 
   // ⌘K command bar, ⌘1 to ⌘7 pages, ⌘N new project.
   useEffect(() => {
@@ -86,7 +94,6 @@ function Shell(): React.JSX.Element {
               {page === 'sites' && <Sites />}
               {page === 'starters' && <Starters />}
               {page === 'languages' && <Languages />}
-              {page === 'recon' && <Recon />}
               {page === 'security' && <Security />}
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}
@@ -97,7 +104,7 @@ function Shell(): React.JSX.Element {
               {page === 'api' && <ApiClient />}
               {page === 'github' && <GitHub />}
               {page === 'updates' && <Updates />}
-              {page === 'assistant' && <Assistant />}
+              {page === 'assistant' && <Tools initialTab="assistant" />}
               {page === 'settings' && <Settings />}
             </div>
           </div>

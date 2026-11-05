@@ -327,7 +327,7 @@ export default function Settings(): React.JSX.Element {
         <div className="glass-picker" role="radiogroup" aria-label="Glass style">
           {(
             [
-              ['studio', 'Studio', 'Dark Liquid Glass lit in Google blue, teal and violet, with Apple’s type. The default.'],
+              ['studio', 'Studio', 'Liquid Glass that follows your Mac: night glass lit in colour, or bright frosted glass by day. The default.'],
               ['smoke', 'Smoked', 'Dark tinted glass over soft violet light.'],
               ['aurora', 'Aurora', 'Brighter glass soaked in purple, pink and cyan.'],
               ['midnight', 'Midnight', 'Near black and quiet, with the most contrast.'],
@@ -344,6 +344,46 @@ export default function Settings(): React.JSX.Element {
               <small>{hint}</small>
             </button>
           ))}
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Accent colour</div>
+            <div className="row-sub">For the page you are on, the main buttons and switches, and Laramac Code’s theme.</div>
+          </div>
+          <div className="accent-row" role="radiogroup" aria-label="Accent colour">
+            {(
+              [
+                ['blue', 'Blue', '#4285f4'],
+                ['violet', 'Violet', '#7c4dff'],
+                ['teal', 'Teal', '#14b8a6'],
+                ['amber', 'Amber', '#f59e0b'],
+                ['rose', 'Rose', '#f43f5e']
+              ] as const
+            ).map(([id, label, c]) => (
+              <button key={id} className="accent-dot" role="radio" aria-checked={(settings.accent ?? 'blue') === id} onClick={() => updateSettings({ accent: id })}>
+                <i style={{ background: `linear-gradient(135deg, ${c}aa, ${c})` }} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Font</div>
+            <div className="row-sub">The app’s text. Laramac Code’s font is under Terminal and editor.</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Font">
+            {(
+              [
+                ['system', 'Apple (SF Pro)'],
+                ['poppins', 'Poppins']
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} role="radio" aria-checked={(settings.uiFont ?? 'system') === id} onClick={() => updateSettings({ uiFont: id })}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="row row-set">
           <div className="row-main">

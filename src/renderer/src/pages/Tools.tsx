@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import Assistant from './Assistant'
+import LaramacCode from '../components/LaramacCode'
 import { Cloud, Copy, Sparkles, Code, ExternalLink, Mail, Package, TerminalSquare, Waypoints } from 'lucide-react'
 import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
@@ -8,7 +10,7 @@ import FreeLlm from '../components/FreeLlm'
 import Integrations from '../components/Integrations'
 import MailDelivery, { relaySummary } from '../components/MailDelivery'
 import type { MailRelay } from '@shared/types'
-import { CopyField, PageHead, Switch } from '../ui'
+import { CopyField, PageHead, SubPage, Switch } from '../ui'
 
 type Installable = 'cloudflared' | 'ngrok' | 'composer'
 
@@ -33,7 +35,8 @@ const AI_LETTERS: Record<string, string> = { omlx: 'oM', burp: 'Bp', claude: 'Cc
  * One component, three places: the AI tools page ('ai'), the mail inbox and public links on the
  * Services page ('mail'), and the laramac command, Composer, editor and integrations in Settings ('more').
  */
-export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }): React.JSX.Element {
+export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'ai' | 'mail' | 'more'; initialTab?: 'tools' | 'assistant' }): React.JSX.Element {
+  const [aiTab, setAiTab] = useState<'tools' | 'assistant'>(initialTab)
   const { tools, settings, services, act, busy, setTools, updateSettings, notify, llms, refreshLlms, setPage } = useApp()
   const [tests, setTests] = useState<Record<string, LlmTest>>({})
   const [relay, setRelay] = useState<MailRelay | null>(null)
@@ -74,7 +77,22 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
     <>
       {part === 'ai' && (
       <>
-      <PageHead title="AI tools" desc="Claude Code three ways (your account, your own model, your free keys), other coding agents and local models. Installers run in Terminal so you can see every step." />
+      <PageHead title="AI tools" desc={aiTab === 'tools' ? 'Claude Code three ways (your account, your own model, your free keys), other coding agents and local models. Installers run in Terminal so you can see every step.' : 'Ask the model running on your Mac. It can suggest actions, and nothing runs until you press the button.'}>
+        <div className="seg-tabs" role="tablist" aria-label="AI tools">
+          <button role="tab" aria-selected={aiTab === 'tools'} onClick={() => setAiTab('tools')}>
+            Claude and models
+          </button>
+          <button role="tab" aria-selected={aiTab === 'assistant'} onClick={() => setAiTab('assistant')}>
+            Assistant
+          </button>
+        </div>
+      </PageHead>
+      {aiTab === 'assistant' ? (
+        <SubPage.Provider value={true}>
+          <Assistant />
+        </SubPage.Provider>
+      ) : (
+      <>
 
       <ClaudeSetup />
 
@@ -243,6 +261,8 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
 
       </>
       )}
+      </>
+      )}
 
       {part === 'mail' && (
       <>
@@ -329,6 +349,7 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
 
       {part === 'more' && (
       <>
+      <LaramacCode />
       <div className="panel">
         <div className="row row-icon">
           <span className="icon-chip">
@@ -384,13 +405,13 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
           </span>
           <div className="row-main">
             <div className="row-title">Editor</div>
-            <div className="row-sub">Opens from the code button on each site, and for php.ini.</div>
+            <div className="row-sub">What the code button on each site, .env and php.ini open. “Open with…” on a site picks another one for that time.</div>
           </div>
           <div className="editor-pick">
             <select
               className="input"
               aria-label="Editor"
-              value={settings.editor === 'custom' || settings.editor === 'auto' || tools.editors.some((e) => e.id === settings.editor) ? settings.editor : 'auto'}
+              value={settings.editor === 'custom' || settings.editor === 'auto' || settings.editor === 'laramac' || tools.editors.some((e) => e.id === settings.editor) ? settings.editor : 'auto'}
               onChange={async (e) => {
                 if (e.target.value === 'choose') {
                   const r = await act('editor-app', () => api.invoke('editors:choose-app'))
@@ -404,7 +425,7 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
                 setTools(await api.invoke('tools:status'))
               }}
             >
-              <option value="auto">{tools.editors[0] ? `Automatic (${tools.editors[0].name})` : 'Automatic'}</option>
+              <option value="auto">Laramac Code (built in)</option>
               {tools.editors.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
@@ -413,7 +434,7 @@ export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }
               {settings.editor === 'custom' && settings.editorApp && <option value="custom">{settings.editorApp.split('/').pop()!.replace(/\.app$/, '')}</option>}
               <option value="choose">Choose another app…</option>
             </select>
-            <span className="hint">{tools.editors.length ? `${tools.editors.length} found on this Mac` : 'None found: choose an app'}</span>
+            <span className="hint">{tools.editors.length ? `${tools.editors.length} more found on this Mac` : 'No other editor found'}</span>
           </div>
         </div>
       </div>

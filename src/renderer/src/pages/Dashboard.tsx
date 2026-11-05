@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ArrowUpRight, Database, Info, Mail, Plus, Upload } from 'lucide-react'
+import Pulse from '../components/Pulse'
+import { ArrowUpRight, Code2, Database, Info, Mail, Plus, Upload } from 'lucide-react'
 import SiteQuickView from '../components/SiteQuickView'
 import { useApp } from '../store'
 import { SERVICE_SECTIONS } from './Services'
@@ -167,6 +168,7 @@ export default function Dashboard(): React.JSX.Element {
         </div>
       </div>
 
+      <Pulse />
       <Doctor quietWhenFine />
       <YourSites />
 
@@ -228,6 +230,13 @@ export default function Dashboard(): React.JSX.Element {
             </span>
             <strong>New project</strong>
             <small>React, Laravel, Django, C# and 30 more</small>
+          </button>
+          <button className="shortcut" onClick={() => act('ide-open', () => api.invoke('ide:open', null))}>
+            <span className="shortcut-icon">
+              <Code2 size={18} />
+            </span>
+            <strong>Laramac Code</strong>
+            <small>The built-in editor, set up for PHP</small>
           </button>
           <button className="shortcut" onClick={() => setImportOpen(true)}>
             <span className="shortcut-icon">

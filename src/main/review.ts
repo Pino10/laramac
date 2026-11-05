@@ -3,6 +3,7 @@
  * Bitbucket) is read by Claude Code or by your chosen model, which writes a report of security
  * problems and bugs with the file, line and fix. A built-in check also looks for leaked keys.
  */
+import { buildSkillSet, detectStack, recommend, skillCatalog, type SkillItem, type StackTag } from './seckit/skillplan'
 import { ensureLmContext } from './seckit/lmstudio'
 import { packPluginDirs } from './seckit/skillpacks'
 import { execFile, spawn } from 'child_process'
@@ -151,6 +152,14 @@ export function ensurePlugins(): string[] {
     writeFileSync(join(mine, 'skills', 'README.md'), 'Put each skill in its own folder here, with a SKILL.md inside (name and description at the top). Laramac loads them into every review.\n')
   }
   return [pluginDir(), ...(skillNames(join(mine, 'skills')).length ? [mine] : []), ...packPluginDirs(packsRoot())]
+}
+
+/** Every skill a review can load, and the ones that fit this project. */
+export function skillPlan(root: string | null): { items: SkillItem[]; stack: StackTag[]; recommended: string[]; files: number } {
+  ensurePlugins()
+  const items = skillCatalog({ app: 'Laramac', ownDir: pluginDir(), mineDir: mySkillsDir(), packsRoot: packsRoot() })
+  const stack = root ? detectStack(root) : []
+  return { items, stack, recommended: recommend(items, stack), files: root ? listSourceFiles(root).length : 0 }
 }
 
 export const skillList = (): string[] => [...Object.keys(SKILLS), ...skillNames(join(mySkillsDir(), 'skills'))]
@@ -320,7 +329,7 @@ export function countFindings(md: string): Record<'critical' | 'high' | 'medium'
 
 const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'project'
 
-export async function runReview(o: { root: string; name: string; reviewer: ReviewerKind; focus: ReviewFocus; modelName: string; local?: LocalModel; remote?: boolean; scanners?: boolean }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
+export async function runReview(o: { root: string; name: string; reviewer: ReviewerKind; focus: ReviewFocus; modelName: string; local?: LocalModel; remote?: boolean; scanners?: boolean; skills?: string[] }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
   const started = Date.now()
   update(5, 'Listing the source files')
   const files = listSourceFiles(o.root)
@@ -328,7 +337,7 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
   const secrets = scanSecrets(o.root, files)
   const scanned = o.scanners && hasMacsec() ? await macsecScan(o.root, (l) => update(20, l)) : []
   let session: string | undefined
-  const skills = skillList()
+  let skills = skillList()
   let report: string
   if (o.reviewer === 'model') report = await runModel(o.root, o.name, o.focus, files, (l, p) => update(p ?? null, l))
   else {
@@ -336,7 +345,18 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
     const bin = findCli(CLI_NAMES[id])
     if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed. ${reviewerOptions(o.modelName).find((r) => r.id === id)?.note ?? ''}`.trim())
     const viaClaude = id === 'claude' || id === 'claude-local' || id === 'claude-free'
-    const plugins = viaClaude ? ensurePlugins() : []
+    // The skills you picked, from a folder built for this review; without a choice, the ones that fit the project.
+    let skillDir: string | null = null
+    let plugins: string[] = []
+    let chosenSkills: string[]
+    if (viaClaude) {
+      const plan = skillPlan(o.root)
+      const ids = o.skills?.length ? o.skills.filter((s) => plan.items.some((i) => i.id === s)) : plan.recommended
+      chosenSkills = plan.items.filter((i) => ids.includes(i.id)).map((i) => i.name)
+      skills = chosenSkills
+      skillDir = join(reviewsDir(), `.skills-${randomBytes(4).toString('hex')}`)
+      plugins = buildSkillSet(plan.items, ids, skillDir)
+    }
     // Claude Code loads the skills itself; the others get the method in the prompt.
     // Claude Code loads skills itself. Big-context reviewers get every vector; a local model gets the plan and the core method.
     const vectorSkills = ['api-security-review', 'auth-session-review', 'injection-catalog', 'client-side-review', 'business-logic-review', 'infra-config-review', 'supply-chain-review', 'cloud-baas-review', 'ai-app-review', 'electron-review', 'privacy-data-review']
@@ -362,6 +382,7 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
       throw new Error(explainFailure(id, (e as Error).message))
     } finally {
       rmSync(outFile, { force: true })
+      if (skillDir) rmSync(skillDir, { recursive: true, force: true })
     }
   }
   if (scanned.length) report += `\n\n## What the scanners reported\n${scanned.map((s) => `- ${s}`).join('\n')}`

@@ -8,7 +8,6 @@ import {
   Globe,
   Package,
   LayoutDashboard,
-  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Server,
@@ -19,7 +18,6 @@ import {
   Rocket,
   ShieldCheck,
   Code2,
-  Radar
 } from 'lucide-react'
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
@@ -53,8 +51,7 @@ export const GROUPS: Group[] = [
     id: 'check',
     label: 'Check',
     items: [
-      { id: 'security', label: 'Code review', icon: <ShieldCheck size={I} /> },
-      { id: 'recon', label: 'Recon', icon: <Radar size={I} /> }
+      { id: 'security', label: 'Code review', icon: <ShieldCheck size={I} /> }
     ]
   },
   {
@@ -70,7 +67,6 @@ export const GROUPS: Group[] = [
     id: 'ai',
     label: 'AI',
     items: [
-      { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={I} /> },
       { id: 'tools', label: 'AI tools', icon: <Sparkles size={I} /> }
     ]
   }
@@ -154,7 +150,7 @@ export default function Sidebar(): React.JSX.Element {
       data-tour={it.id}
       data-tip={slim ? it.label : undefined}
       aria-label={slim ? it.label : undefined}
-      aria-current={page === it.id ? 'page' : undefined}
+      aria-current={page === it.id || (it.id === 'tools' && page === 'assistant') ? 'page' : undefined}
       onClick={() => setPage(it.id)}
     >
       <span className="nav-icon">{it.icon}</span>

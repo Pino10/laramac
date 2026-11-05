@@ -340,3 +340,38 @@ export function hostingCommand(kind: 'vercel' | 'netlify' | 'azure', o: { app?: 
   if (!app) throw new Error('Enter the App Service name.')
   return `az webapp up --name ${app}${group ? ` --resource-group ${group}` : ''}`
 }
+
+export interface Pulse {
+  /** Requests per minute for the last `minutes`, oldest first. */
+  perMinute: number[]
+  /** Since midnight. */
+  today: number
+  errorsToday: number
+  /** Median response time of today's requests, in ms. */
+  medianMs: number
+}
+
+/** The Overview's live strip: traffic per minute and today's totals, from the web servers' access logs. */
+export function pulseFrom(text: string, now: number, minutes = 30): Pulse {
+  const perMinute = new Array<number>(minutes).fill(0)
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  let today = 0
+  let errorsToday = 0
+  const times: number[] = []
+  for (const l of text.split('\n')) {
+    const r = parseAccessLine(l)
+    if (!r) continue
+    const at = Date.parse(r.at.replace(/([+-]\d\d)(\d\d)$/, '$1:$2'))
+    if (!Number.isFinite(at)) continue
+    if (at >= midnight.getTime() && at <= now + 60_000) {
+      today++
+      if (r.status >= 500) errorsToday++
+      times.push(r.ms)
+    }
+    const ago = Math.floor((now - at) / 60_000)
+    if (ago >= 0 && ago < minutes) perMinute[minutes - 1 - ago]++
+  }
+  times.sort((a, b) => a - b)
+  return { perMinute, today, errorsToday, medianMs: times.length ? times[Math.floor(times.length / 2)] : 0 }
+}
