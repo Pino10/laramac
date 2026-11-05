@@ -130,6 +130,53 @@ function findTool(root, name, globalDirs) {
 
 // ---------------------------------------------------------------- The extension
 
+/** Routes from `php artisan route:list --json`, as rows to show. */
+function parseRoutes(text) {
+  let rows
+  try {
+    rows = JSON.parse(text.slice(text.indexOf('[')))
+  } catch {
+    return null
+  }
+  if (!Array.isArray(rows)) return null
+  return rows
+    .filter((r) => r && typeof r.uri === 'string')
+    .map((r) => ({
+      method: String(r.method || '').replace('|HEAD', ''),
+      uri: r.uri.startsWith('/') ? r.uri : `/${r.uri}`,
+      name: r.name || '',
+      action: String(r.action || ''),
+      middleware: Array.isArray(r.middleware) ? r.middleware : [],
+      // Laravel 11+ says where a closure route is defined: "routes/web.php:5".
+      path: typeof r.path === 'string' && /^[\w./-]+:\d+$/.test(r.path) ? r.path : null
+    }))
+}
+
+/** Where a route's controller lives: "App\\Http\\Controllers\\OrderController@show" to its file and method. */
+function actionFile(root, action) {
+  const m = /^App\\(.+?)(?:@(\w+))?$/.exec(action)
+  if (!m) return null
+  return { file: path.join(root, 'app', ...m[1].split('\\')) + '.php', method: m[2] || '__invoke' }
+}
+
+/** Scripts a project already has: composer.json and package.json. */
+function projectScripts(root) {
+  const out = []
+  const read = (f) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'))
+    } catch {
+      return null
+    }
+  }
+  const composer = read('composer.json')
+  for (const name of Object.keys((composer && composer.scripts) || {})) if (!/^(pre|post)-/.test(name)) out.push({ kind: 'composer', name, command: `composer run ${name}` })
+  const pkg = read('package.json')
+  const pm = fs.existsSync(path.join(root, 'bun.lockb')) || fs.existsSync(path.join(root, 'bun.lock')) ? 'bun' : fs.existsSync(path.join(root, 'pnpm-lock.yaml')) ? 'pnpm' : fs.existsSync(path.join(root, 'yarn.lock')) ? 'yarn' : 'npm'
+  for (const name of Object.keys((pkg && pkg.scripts) || {})) out.push({ kind: pm, name, command: `${pm} run ${name}` })
+  return out
+}
+
 function activate(context) {
   const vscode = require('vscode')
   const diags = vscode.languages.createDiagnosticCollection('laramac')
@@ -305,6 +352,168 @@ function activate(context) {
   )
   refreshStatus()
 
+  // ---------------------------------------------------------------- The Laravel and Scripts panel
+
+  const root0 = rootOf()
+  const isLaravel = !!root0 && fs.existsSync(path.join(root0, 'artisan'))
+  void vscode.commands.executeCommand('setContext', 'laramac.isLaravel', isLaravel)
+  let routes = null
+  const term = (name, command) => {
+    const t = vscode.window.terminals.find((x) => x.name === name) || vscode.window.createTerminal({ name, cwd: root0 || undefined })
+    t.show()
+    t.sendText(command)
+  }
+  const ARTISAN = [
+    ['Run the migrations', 'php artisan migrate', 'database'],
+    ['Run the tests', 'php artisan test', 'beaker'],
+    ['Clear the caches', 'php artisan optimize:clear', 'trash'],
+    ['Open Tinker', 'php artisan tinker', 'terminal'],
+    ['What is scheduled', 'php artisan schedule:list', 'calendar'],
+    ['Watch the queue', 'php artisan queue:work', 'debug-start']
+  ]
+  const item = (label, o = {}) => Object.assign(new vscode.TreeItem(label, o.children ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None), o)
+  const files = (dir, re) => {
+    try {
+      return fs.readdirSync(dir).filter((f) => re.test(f)).sort()
+    } catch {
+      return []
+    }
+  }
+  const tree = new vscode.EventEmitter()
+  const provider = {
+    onDidChangeTreeData: tree.event,
+    getTreeItem: (e) => e,
+    getChildren: async (e) => {
+      const root = rootOf()
+      if (!root) return []
+      if (!e) {
+        const top = []
+        if (isLaravel) {
+          top.push(item('Routes', { children: 'routes', iconPath: new vscode.ThemeIcon('globe'), tooltip: 'Loads with php artisan route:list, which runs your app.', description: routes ? `${routes.length}` : 'open to load' }))
+          top.push(item('Models', { children: 'models', iconPath: new vscode.ThemeIcon('symbol-class') }))
+          top.push(item('Migrations', { children: 'migrations', iconPath: new vscode.ThemeIcon('database') }))
+          top.push(item('Artisan', { children: 'artisan', iconPath: new vscode.ThemeIcon('terminal') }))
+        }
+        if (projectScripts(root).length) top.push(item('Scripts', { children: 'scripts', iconPath: new vscode.ThemeIcon('play-circle') }))
+        return top
+      }
+      if (e.children === 'routes') {
+        if (!routes) {
+          const text = await run(process.env.LARAMAC_PHP || 'php', ['artisan', 'route:list', '--json'], root, 60000)
+          routes = parseRoutes(text)
+          if (!routes) {
+            out.appendLine(text)
+            return [item('Could not list the routes: see the Laramac output', { iconPath: new vscode.ThemeIcon('warning'), command: { command: 'workbench.action.output.show.laramac', title: 'Show' } })]
+          }
+        }
+        return routes.slice(0, 1000).map((r) => {
+          const target = actionFile(root, r.action)
+          return item(`${r.method} ${r.uri}`, {
+            description: r.name || r.action.replace(/^App\\Http\\Controllers\\/, ''),
+            tooltip: `${r.action}${r.middleware.length ? `\nMiddleware: ${r.middleware.join(', ')}` : ''}`,
+            iconPath: new vscode.ThemeIcon(/GET/.test(r.method) ? 'arrow-down' : 'arrow-up'),
+            command:
+              target && fs.existsSync(target.file)
+                ? { command: 'laramac.openSymbol', title: 'Open', arguments: [target.file, target.method] }
+                : r.path
+                  ? { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(path.join(root, r.path.split(':')[0])), { selection: new vscode.Range(Number(r.path.split(':')[1]) - 1, 0, Number(r.path.split(':')[1]) - 1, 0) }] }
+                  : undefined
+          })
+        })
+      }
+      if (e.children === 'models') return files(path.join(root, 'app', 'Models'), /\.php$/).map((f) => item(f.replace(/\.php$/, ''), { resourceUri: vscode.Uri.file(path.join(root, 'app', 'Models', f)), command: { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(path.join(root, 'app', 'Models', f))] } }))
+      if (e.children === 'migrations')
+        return files(path.join(root, 'database', 'migrations'), /\.php$/)
+          .reverse()
+          .map((f) => item(f.replace(/^\d{4}_\d{2}_\d{2}_\d{6}_/, '').replace(/\.php$/, '').replace(/_/g, ' '), { description: f.slice(0, 10), resourceUri: vscode.Uri.file(path.join(root, 'database', 'migrations', f)), command: { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(path.join(root, 'database', 'migrations', f))] } }))
+      if (e.children === 'artisan') return ARTISAN.map(([label, cmd, icon]) => item(label, { description: cmd, iconPath: new vscode.ThemeIcon(icon), command: { command: 'laramac.runInTerminal', title: 'Run', arguments: ['Artisan', cmd] } }))
+      if (e.children === 'scripts') return projectScripts(root).map((x) => item(x.name, { description: x.command, iconPath: new vscode.ThemeIcon('play'), command: { command: 'laramac.runInTerminal', title: 'Run', arguments: [x.name, x.command] } }))
+      return []
+    }
+  }
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('laramac.project', provider),
+    vscode.commands.registerCommand('laramac.refreshProject', () => {
+      routes = null
+      tree.fire()
+    }),
+    // Runs only when you click it: the command is shown in full first.
+    vscode.commands.registerCommand('laramac.runInTerminal', (name, command) => typeof name === 'string' && typeof command === 'string' && term(name, command)),
+    vscode.commands.registerCommand('laramac.openSymbol', async (file, method) => {
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file))
+      const line = doc.getText().split('\n').findIndex((l) => new RegExp(`function\\s+${method}\\b`).test(l))
+      const ed = await vscode.window.showTextDocument(doc)
+      if (line >= 0) {
+        const pos = new vscode.Position(line, 0)
+        ed.selection = new vscode.Selection(pos, pos)
+        ed.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter)
+      }
+    }),
+    vscode.commands.registerCommand('laramac.startPage', () => startPage())
+  )
+
+  // ---------------------------------------------------------------- The start page
+
+  function startPage() {
+    const panel = vscode.window.createWebviewPanel('laramac.start', 'Start', vscode.ViewColumn.One, { enableScripts: true, localResourceRoots: [] })
+    const root = rootOf()
+    const name = root ? path.basename(root) : 'Laramac Code'
+    const ai = [
+      vscode.extensions.getExtension('anthropic.claude-code') && ['claude', 'Claude Code', 'Ask, plan and edit with your Claude account'],
+      vscode.extensions.getExtension('continue.continue') && ['continue', 'Continue', 'Chat and agent on LM Studio, Ollama or the Free LLM API'],
+      vscode.extensions.getExtension('saoudrizwan.claude-dev') && ['cline', 'Cline', 'An agent for any model']
+    ].filter(Boolean)
+    const actions = [
+      ['open', 'Go to a file', '⌘P'],
+      ['search', 'Search the project', '⇧⌘F'],
+      ['check', 'Check the project', 'PHPStan and Semgrep'],
+      ['review', 'Review with AI', 'Reads only, never edits'],
+      ['tests', 'Run the tests', 'Testing panel'],
+      ['terminal', 'Terminal', '⌃`']
+    ]
+    const nonce = require('crypto').randomBytes(16).toString('hex')
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+    panel.webview.html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'">
+<style>
+body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-editor-background);margin:0;padding:56px 64px;max-width:980px}
+.kick{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--vscode-descriptionForeground)}
+h1{font-size:34px;font-weight:650;letter-spacing:-.02em;margin:6px 0 4px}
+.sub{color:var(--vscode-descriptionForeground);margin:0 0 34px}
+h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--vscode-descriptionForeground);font-weight:600;margin:28px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+button{all:unset;cursor:pointer;display:grid;gap:4px;padding:14px 16px;border-radius:12px;background:color-mix(in srgb,var(--vscode-foreground) 5%,transparent);border:1px solid color-mix(in srgb,var(--vscode-foreground) 8%,transparent);transition:background .15s,border-color .15s,transform .15s}
+button:hover{background:color-mix(in srgb,var(--vscode-focusBorder) 12%,transparent);border-color:color-mix(in srgb,var(--vscode-focusBorder) 45%,transparent);transform:translateY(-1px)}
+button:focus-visible{outline:2px solid var(--vscode-focusBorder)}
+b{font-weight:600;font-size:13.5px}small{color:var(--vscode-descriptionForeground);font-size:12px}
+.ai button{background:linear-gradient(135deg,color-mix(in srgb,var(--vscode-focusBorder) 14%,transparent),transparent)}
+label{display:flex;gap:8px;align-items:center;margin-top:40px;color:var(--vscode-descriptionForeground);font-size:12px}
+@media (prefers-reduced-motion: reduce){button{transition:none}button:hover{transform:none}}
+</style></head><body>
+<div class="kick">Laramac Code</div><h1>${esc(name)}</h1><p class="sub">${isLaravel ? 'A Laravel project. Routes, models and Artisan are in the Laravel panel in the Explorer.' : 'Pick up where you left off.'}</p>
+${ai.length ? `<h2>AI</h2><div class="grid ai">${ai.map(([id, t, d]) => `<button data-a="ai:${id}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('')}</div>` : ''}
+<h2>Get going</h2><div class="grid">${actions.map(([id, t, d]) => `<button data-a="${id}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('')}</div>
+<label><input type="checkbox" id="show" ${cfg().get('startPage', true) ? 'checked' : ''}> Show this page when a project opens</label>
+<script nonce="${nonce}">const vs=acquireVsCodeApi();document.querySelectorAll('button').forEach(b=>b.onclick=()=>vs.postMessage({a:b.dataset.a}));document.getElementById('show').onchange=e=>vs.postMessage({show:e.target.checked})</script>
+</body></html>`
+    const COMMANDS = {
+      open: 'workbench.action.quickOpen',
+      search: 'workbench.action.findInFiles',
+      check: 'laramac.checkProject',
+      review: 'laramac.reviewProject',
+      tests: 'workbench.view.testing.focus',
+      terminal: 'workbench.action.terminal.toggleTerminal',
+      'ai:claude': 'claude-vscode.sidebar.open',
+      'ai:continue': 'continue.focusContinueInput',
+      'ai:cline': 'claude-dev.SidebarProvider.focus'
+    }
+    panel.webview.onDidReceiveMessage((m) => {
+      if (m && typeof m.show === 'boolean') return void cfg().update('startPage', m.show, vscode.ConfigurationTarget.Global)
+      const c = m && COMMANDS[m.a]
+      if (c) vscode.commands.executeCommand(c).then(undefined, () => undefined)
+    })
+  }
+  if (cfg().get('startPage', true) && root0 && !vscode.window.visibleTextEditors.length && !vscode.window.tabGroups.all.some((g) => g.tabs.length)) startPage()
+
   // The first time: Claude Code opens in the side panel on the right, so the AI chat is there
   // straight away. After that the editor remembers where you put it.
   const claude = vscode.extensions.getExtension('anthropic.claude-code')
@@ -318,4 +527,4 @@ function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, parsePhpLint, parsePhpstan, parsePsalm, parseSemgrep, parseAiFindings, aiPrompt, findTool }
+module.exports = { activate, deactivate, parsePhpLint, parsePhpstan, parsePsalm, parseSemgrep, parseAiFindings, aiPrompt, findTool, parseRoutes, actionFile, projectScripts }

@@ -24,8 +24,10 @@ import { runtimeEnv } from './runtimes'
 import { githubApi } from './seckit/ghapi'
 import { getSettings } from './settings'
 import { defaultMinor, phpBinary } from './php'
-import { IDE_EXTENSIONS, checksPackage, codeAppAsset, folderFor, ideSettings, launchEnv, macAsset, mergeSettings, openRequestUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
+import { IDE_EXTENSIONS, aiLaunch, checksPackage, codeAppAsset, folderFor, ideSettings, launchEnv, macAsset, mergeSettings, openRequestUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
 import { ensurePlugins } from './review'
+import { listServers } from './models'
+import { FREELLM_DEFAULT_URL, FREELLM_MODELS, freeLlmUrl } from './seckit/freellm'
 import { openAsset, releasesApi } from './distribution'
 import { hashFor } from './versions'
 import checksSource from './idext/extension.cjs?raw'
@@ -220,7 +222,7 @@ async function installVsix(dir: string, name: string): Promise<void> {
 
 /** Laramac Checks: the extension that runs the free checkers and AI reviews inside Laramac Code. */
 async function ensureChecks(force = false): Promise<void> {
-  const hash = createHash('sha256').update(checksSource).digest('hex').slice(0, 12)
+  const hash = createHash('sha256').update(checksSource).update(JSON.stringify(checksPackage('0'))).digest('hex').slice(0, 12)
   if (!force && readState().checksBuild === hash) return
   const version = `1.0.${parseInt(hash.slice(0, 6), 16) % 100000}`
   const dir = join(home(), 'checks-build')
@@ -298,6 +300,14 @@ function poppinsFonts(): { family: string; weight: number; data: string }[] {
  * launch.json: how the Laramac Code app starts the editor. Laramac's PATH and folders, the look,
  * the skills for AI reviews. No password or token: the app makes a password for each start.
  */
+const safeServers = (): ReturnType<typeof listServers> => {
+  try {
+    return listServers()
+  } catch {
+    return []
+  }
+}
+
 export function writeLaunch(): void {
   if (!ideInstalled()) return
   writeSettings()
@@ -316,7 +326,8 @@ export function writeLaunch(): void {
     css: workbenchCss({ uiFont: getSettings().uiFont === 'poppins' ? 'poppins' : 'system' }),
     fonts: getSettings().uiFont === 'poppins' ? poppinsFonts() : [],
     home: getSettings().wwwPath,
-    background: { dark: '#0d1017', light: '#f6f7fb' }
+    background: { dark: '#0d1017', light: '#f6f7fb' },
+    ai: aiLaunch({ llm: getSettings().llm, servers: safeServers(), freellm: { baseUrl: freeLlmUrl(getSettings().freellm?.baseUrl ?? FREELLM_DEFAULT_URL) }, freeModels: FREELLM_MODELS })
   }
   mkdirSync(home(), { recursive: true })
   writeFileSync(join(home(), 'launch.json'), JSON.stringify(launch), { mode: 0o600 })

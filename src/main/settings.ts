@@ -18,6 +18,7 @@ const defaults = (): AppSettings => ({
   tourDone: false,
   dumps: false,
   xdebug: false,
+  profiler: false,
   defaultPhp: null,
   phpFlavor: 'full',
   mysqlVersion: 'latest',

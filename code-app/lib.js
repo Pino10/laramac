@@ -11,6 +11,9 @@
 
 const path = require('path')
 const fs = require('fs')
+const http = require('http')
+const https = require('https')
+const crypto = require('crypto')
 
 /** The address that opens a folder, and optionally a file at a line, in the editor. */
 function editorUrl(origin, port, o) {
@@ -76,7 +79,98 @@ function readLaunch(text, exists = fs.existsSync) {
     css: typeof l.css === 'string' ? l.css : '',
     fonts: Array.isArray(l.fonts) ? l.fonts.filter((f) => f && typeof f.family === 'string' && /^[\w ]{1,40}$/.test(f.family) && Number.isInteger(f.weight) && f.weight >= 100 && f.weight <= 900 && typeof f.data === 'string' && /^[A-Za-z0-9+/=]{100,400000}$/.test(f.data)) : [],
     home: typeof l.home === 'string' ? l.home : null,
+    ai: readAi(l.ai),
     background: { dark: /^#[0-9a-f]{6}$/i.test(l.background?.dark) ? l.background.dark : '#0d1017', light: /^#[0-9a-f]{6}$/i.test(l.background?.light) ? l.background.light : '#f6f7fb' }
+  }
+}
+
+const PROVIDERS = new Set(['lmstudio', 'ollama', 'openai'])
+const okUrl = (u) => {
+  try {
+    const x = new URL(u)
+    return (x.protocol === 'http:' || x.protocol === 'https:') && !x.username && !x.password ? x.href : null
+  } catch {
+    return null
+  }
+}
+/** Only on this Mac, or over https: where the Free LLM API key may be sent. */
+const okKeyUrl = (u) => {
+  const x = okUrl(u)
+  if (!x) return null
+  const h = new URL(x)
+  return h.protocol === 'https:' || ['127.0.0.1', 'localhost', '[::1]'].includes(h.hostname) ? x : null
+}
+
+/** The AI part of launch.json: model servers (no keys in it, ever) and the Free LLM API address. */
+function readAi(ai) {
+  if (!ai || typeof ai !== 'object') return { servers: [], freellm: null }
+  const servers = (Array.isArray(ai.servers) ? ai.servers : [])
+    .filter((s) => s && typeof s.name === 'string' && /^[\w .()-]{1,40}$/.test(s.name) && PROVIDERS.has(s.provider) && okUrl(s.baseUrl) && (s.model === undefined || (typeof s.model === 'string' && s.model.length <= 120 && !/[\n\r]/.test(s.model))))
+    .slice(0, 8)
+    .map((s) => ({ name: s.name, provider: s.provider, baseUrl: okUrl(s.baseUrl), model: s.model || 'AUTODETECT' }))
+  const f = ai.freellm
+  const freellm = f && okKeyUrl(f.baseUrl) ? { baseUrl: okKeyUrl(f.baseUrl), models: (Array.isArray(f.models) ? f.models : ['auto']).filter((m) => typeof m === 'string' && /^[\w.:/-]{1,80}$/.test(m)).slice(0, 6) } : null
+  return { servers, freellm }
+}
+
+const y = (v) => JSON.stringify(String(v))
+/**
+ * Continue's config.yaml: the chat in Laramac Code's side bar. LM Studio and Ollama find their own
+ * models; the Free LLM API goes through the relay on this Mac, so its real key is never written.
+ */
+function continueConfig(ai, relay) {
+  const lines = ['# Made by Laramac Code each time it starts. Changes here are replaced.', 'name: Laramac', 'version: 1.0.0', 'schema: v1', 'models:']
+  const add = (m) => {
+    lines.push(`  - name: ${y(m.name)}`, `    provider: ${m.provider}`, `    model: ${y(m.model)}`)
+    if (m.apiBase) lines.push(`    apiBase: ${y(m.apiBase)}`)
+    if (m.apiKey) lines.push(`    apiKey: ${y(m.apiKey)}`)
+    lines.push('    roles:', '      - chat', '      - edit', '      - apply')
+    if (m.tools) lines.push('    capabilities:', '      - tool_use')
+  }
+  if (relay && ai.freellm) for (const model of ai.freellm.models.length ? ai.freellm.models : ['auto']) add({ name: `Free LLM API (${model})`, provider: 'openai', model, apiBase: `http://127.0.0.1:${relay.port}/v1/`, apiKey: relay.token, tools: true })
+  for (const s of ai.servers) add({ name: s.name, provider: s.provider, model: s.model, apiBase: s.provider === 'ollama' ? s.baseUrl.replace(/\/v1\/?$/, '') : s.baseUrl.replace(/\/?$/, '/') })
+  if (lines[lines.length - 1] === 'models:') lines[lines.length - 1] = 'models: []'
+  return lines.join('\n') + '\n'
+}
+
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a))
+  const z = Buffer.from(String(b))
+  return x.length === z.length && crypto.timingSafeEqual(x, z)
+}
+
+/**
+ * The relay for the Free LLM API: takes requests from the editor on 127.0.0.1 with this start's
+ * token, adds the real key, and sends them on only to the Free LLM API's own address. Browsers
+ * (anything with an Origin) and other hosts are refused.
+ */
+function relayHandler({ base, key, token }) {
+  const target = new URL(base)
+  const prefix = target.pathname.replace(/\/+$/, '')
+  const mod = target.protocol === 'https:' ? https : http
+  const fail = (res, code, message) => {
+    res.writeHead(code, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: { message } }))
+  }
+  return (req, res) => {
+    if (req.headers.origin || !/^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host || '')) return fail(res, 403, 'Only Laramac Code can use this.')
+    const auth = String(req.headers.authorization || '')
+    if (!safeEqual(auth.startsWith('Bearer ') ? auth.slice(7) : '', token)) return fail(res, 401, 'Wrong token.')
+    if (req.method !== 'GET' && req.method !== 'POST') return fail(res, 405, 'Only GET and POST.')
+    const u = new URL(req.url || '/', 'http://relay')
+    if (!/^\/v1\/[\w./-]*$/.test(u.pathname) || u.pathname.includes('..')) return fail(res, 404, 'Not here.')
+    const headers = { authorization: `Bearer ${key}`, accept: req.headers.accept || '*/*', 'user-agent': 'Laramac Code' }
+    if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
+    if (req.headers['content-length']) headers['content-length'] = req.headers['content-length']
+    const up = mod.request({ protocol: target.protocol, hostname: target.hostname.replace(/^\[|\]$/g, ''), port: target.port || undefined, path: prefix + u.pathname.slice(3) + u.search, method: req.method, headers, timeout: 600000 }, (r) => {
+      const out = {}
+      for (const h of ['content-type', 'cache-control', 'x-request-id']) if (r.headers[h]) out[h] = r.headers[h]
+      res.writeHead(r.statusCode || 502, out)
+      r.pipe(res)
+    })
+    up.on('timeout', () => up.destroy(new Error('The Free LLM API took too long.')))
+    up.on('error', (e) => (res.headersSent ? res.destroy() : fail(res, 502, `The Free LLM API did not answer: ${e.message}`)))
+    req.pipe(up)
   }
 }
 
@@ -105,4 +199,4 @@ function remember(list, folder, exists = fs.existsSync, max = 12) {
   return [folder, ...list.filter((f) => f !== folder)].filter((f) => exists(f)).slice(0, max)
 }
 
-module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS }
+module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, readAi, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS }

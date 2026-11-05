@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import OpenWith from '../components/OpenWith'
+import SiteCommands from '../components/SiteCommands'
+import SiteProfiler from '../components/SiteProfiler'
+import { ReviewOwasp } from '../components/OwaspList'
 import { ArtisanPanel } from '../components/PhpDev'
-import { Activity, ArrowLeft, Bot, Camera, Code2, Cog, Database, ExternalLink, FileCog, FlaskConical, FolderOpen, GitBranch, Globe, Lock, Network, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
+import { Activity, ArrowLeft, Bot, Camera, Code2, Cog, Database, ExternalLink, FileCog, FlaskConical, FolderOpen, Gauge, GitBranch, Globe, Lock, Network, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, SquareTerminal, Stethoscope } from 'lucide-react'
 import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
@@ -13,10 +16,12 @@ import { FindingsList } from './Security'
 import { AzurePushDialog } from './Azure'
 import { HostingPanel, RequestsTab, SiteExtras, TestsTab, WorkersTab } from '../components/SiteTools'
 
-type Tab = 'overview' | 'logs' | 'requests' | 'database' | 'env' | 'packages' | 'workers' | 'tests' | 'security' | 'deploy'
+type Tab = 'overview' | 'commands' | 'profiler' | 'logs' | 'requests' | 'database' | 'env' | 'packages' | 'workers' | 'tests' | 'security' | 'deploy'
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview', icon: <Globe size={14} /> },
+  { id: 'commands', label: 'Commands', icon: <SquareTerminal size={14} /> },
   { id: 'logs', label: 'Logs', icon: <ScrollText size={14} /> },
+  { id: 'profiler', label: 'Profiler', icon: <Gauge size={14} /> },
   { id: 'requests', label: 'Requests', icon: <Activity size={14} /> },
   { id: 'database', label: 'Database', icon: <Database size={14} /> },
   { id: 'env', label: 'Environment', icon: <FileCog size={14} /> },
@@ -98,7 +103,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
       </div>
 
       <div className="seg-tabs site-tabs" role="tablist">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.id !== 'profiler' || !!site.php).map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
             {t.icon} {t.label}
           </button>
@@ -132,6 +137,8 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           </div>
         </div>
       )}
+      {tab === 'commands' && <SiteCommands site={site} />}
+      {tab === 'profiler' && <SiteProfiler site={site} />}
       {tab === 'logs' && <Logs site={site} />}
       {tab === 'requests' && <RequestsTab site={site} />}
       {tab === 'workers' && <WorkersTab site={site} />}
@@ -392,6 +399,7 @@ function SiteSecurity({ site, facts }: { site: SiteInfo; facts: SiteFacts | null
         </button>
       </div>
       {last && findings && <FindingsList id={last.id} findings={findings} onChange={setFindings} />}
+      {last && <ReviewOwasp id={last.id} stamp={findings} />}
     </div>
   )
 }

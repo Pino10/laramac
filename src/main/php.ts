@@ -197,7 +197,9 @@ export function writePhpConfig(minor: string, sendmail?: string): void {
       custom,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       mysqlSocket: join(dirs.run(), 'mysql.sock'),
-      xdebug: getSettings().xdebug && existsSync(xdebugPath(minor)) ? xdebugPath(minor) : null
+      xdebug: (getSettings().xdebug || getSettings().profiler) && existsSync(xdebugPath(minor)) ? xdebugPath(minor) : null,
+      debug: getSettings().xdebug,
+      profileDir: getSettings().profiler ? join(dirs.root(), 'profiles') : null
     })
   )
   writeFileSync(

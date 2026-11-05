@@ -40,11 +40,14 @@ interface Palette {
   error: string
   warn: string
   ok: string
+  /** The base the islands sit on: title bar, status bar and the gaps between parts. */
+  base: string
 }
 
 const DARK: Palette = {
   bg: '#0f131c',
   bg2: '#0b0e15',
+  base: '#07090d',
   bg3: '#161b27',
   line: '#ffffff12',
   fg: '#e6e9f2',
@@ -71,6 +74,7 @@ const DARK: Palette = {
 const LIGHT: Palette = {
   bg: '#ffffff',
   bg2: '#f5f7fb',
+  base: '#e8ecf3',
   bg3: '#eef1f7',
   line: '#0f172a14',
   fg: '#1d2433',
@@ -128,7 +132,7 @@ export function themeJson(kind: 'dark' | 'light', accent: Accent): Record<string
       'editorGutter.background': p.bg,
       'editorError.foreground': p.error,
       'editorWarning.foreground': p.warn,
-      'editorGroupHeader.tabsBackground': p.bg2,
+      'editorGroupHeader.tabsBackground': p.bg,
       'editorGroup.border': p.line,
       'editorWidget.background': p.bg3,
       'editorWidget.border': p.line,
@@ -137,36 +141,36 @@ export function themeJson(kind: 'dark' | 'light', accent: Accent): Record<string
       'editorHoverWidget.background': p.bg3,
       'tab.activeBackground': p.bg,
       'tab.activeForeground': p.fg,
-      'tab.inactiveBackground': p.bg2,
+      'tab.inactiveBackground': p.bg,
       'tab.inactiveForeground': p.fg2,
-      'tab.border': p.bg2,
+      'tab.border': p.bg,
       'tab.activeBorderTop': a,
-      'sideBar.background': p.bg2,
+      'sideBar.background': p.bg,
       'sideBar.foreground': p.fg2,
-      'sideBar.border': p.line,
+      'sideBar.border': '#00000000',
       'sideBarTitle.foreground': p.fg,
-      'sideBarSectionHeader.background': p.bg2,
-      'activityBar.background': p.bg2,
+      'sideBarSectionHeader.background': p.bg,
+      'activityBar.background': p.bg,
       'activityBar.foreground': a,
       'activityBar.inactiveForeground': p.fg3,
-      'activityBar.border': p.line,
+      'activityBar.border': '#00000000',
       'activityBarBadge.background': a,
       'activityBarBadge.foreground': onAccent,
-      'titleBar.activeBackground': p.bg2,
+      'titleBar.activeBackground': p.base,
       'titleBar.activeForeground': p.fg2,
-      'titleBar.inactiveBackground': p.bg2,
-      'titleBar.border': p.line,
-      'statusBar.background': p.bg2,
+      'titleBar.inactiveBackground': p.base,
+      'titleBar.border': '#00000000',
+      'statusBar.background': p.base,
       'statusBar.foreground': p.fg2,
-      'statusBar.border': p.line,
+      'statusBar.border': '#00000000',
       'statusBar.debuggingBackground': a,
       'statusBar.debuggingForeground': onAccent,
       'statusBarItem.remoteBackground': a,
       'statusBarItem.remoteForeground': onAccent,
-      'panel.background': p.bg2,
-      'panel.border': p.line,
+      'panel.background': p.bg,
+      'panel.border': '#00000000',
       'panelTitle.activeBorder': a,
-      'terminal.background': p.bg2,
+      'terminal.background': p.bg,
       'terminal.foreground': p.fg,
       'terminalCursor.foreground': a,
       'terminal.ansiBlue': kind === 'dark' ? '#8ab4f8' : '#1a73e8',
@@ -284,4 +288,4 @@ export const VSIX_CONTENT_TYPES = `<?xml version="1.0" encoding="utf-8"?>
 `
 
 /** A small number that changes when the accent does, for the theme's version. */
-export const accentBuild = (accent: Accent): number => Object.keys(ACCENTS).indexOf(accent) + 10
+export const accentBuild = (accent: Accent): number => Object.keys(ACCENTS).indexOf(accent) + 30

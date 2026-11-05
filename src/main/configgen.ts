@@ -528,8 +528,35 @@ export interface PhpIniOptions {
   timezone?: string
   /** MySQL's socket, so 'localhost' in a project's config reaches Laramac's MySQL. */
   mysqlSocket?: string
-  /** Full path of xdebug.so, when Xdebug is turned on. */
+  /** Full path of xdebug.so, when Xdebug (debugging or the profiler) is turned on. */
   xdebug?: string | null
+  /** Step debugging. On unless this says false (the profiler alone loads Xdebug too). */
+  debug?: boolean
+  /** Where profiles go, when the profiler is on. */
+  profileDir?: string | null
+}
+
+/** Host first, so each site's profiles can be told apart: cachegrind.out.<host>.<time><path>. */
+export const PROFILE_NAME = 'cachegrind.out.%H.%u%R'
+
+/** The php.ini lines for Xdebug, for step debugging, profiling or both. */
+export function xdebugIni(so: string, o: { debug: boolean; profile: boolean; outputDir: string }): string[] {
+  const modes = [o.debug && 'debug', o.profile && 'profile'].filter(Boolean).join(',')
+  return [
+    '',
+    '[xdebug]',
+    `zend_extension = "${so}"`,
+    `xdebug.mode = ${modes}`,
+    // With the profiler on, only requests that ask (the XDEBUG_PROFILE cookie) are profiled, so
+    // pages stay fast, and the debugger waits for its own trigger (XDEBUG_SESSION) too.
+    // Debugging alone starts on every request, as before.
+    `xdebug.start_with_request = ${o.profile ? 'trigger' : 'yes'}`,
+    'xdebug.client_host = 127.0.0.1',
+    'xdebug.client_port = 9003',
+    ...(o.profile ? [`xdebug.output_dir = "${o.outputDir}"`, `xdebug.profiler_output_name = ${PROFILE_NAME}`] : []),
+    // No warning in the log on every request when the editor is not listening.
+    'xdebug.log_level = 0'
+  ]
 }
 
 /**
@@ -617,20 +644,8 @@ export function generatePhpIni(o: PhpIniOptions): string {
   }
   if (o.sendmail) lines.push('', '[mail function]', `sendmail_path = "${o.sendmail}"`, 'mail.add_x_header = On')
 
-  if (o.xdebug) {
-    lines.push(
-      '',
-      '[xdebug]',
-      `zend_extension = "${o.xdebug}"`,
-      // Step debugging only; profiling and tracing stay off so pages stay fast.
-      'xdebug.mode = debug',
-      // Every request tries to reach your editor; with nothing listening it carries on at once.
-      'xdebug.start_with_request = yes',
-      'xdebug.client_host = 127.0.0.1',
-      'xdebug.client_port = 9003',
-      // No warning in the log on every request when the editor is not listening.
-      'xdebug.log_level = 0'
-    )
+  if (o.xdebug && (o.debug !== false || o.profileDir)) {
+    lines.push(...xdebugIni(o.xdebug, { debug: o.debug !== false, profile: !!o.profileDir, outputDir: o.profileDir ?? '' }))
   }
   if (o.custom && o.custom.trim()) {
     lines.push('', '; ---- Your settings (php.custom.ini) ----', o.custom.trim())

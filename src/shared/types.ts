@@ -123,6 +123,8 @@ export interface SiteConfig {
   cors?: boolean
   /** Background commands such as queue workers and schedulers. */
   workers?: WorkerConfig[]
+  /** Commands you saved for this site (Commands tab), some on a schedule. */
+  commands?: SavedCommand[]
   /** Forge or Ploi deploy hook, Vercel, Netlify or Azure App Service. */
   hosting?: HostingConfig
 }
@@ -156,6 +158,47 @@ export interface TestSummary {
   failed: number
   skipped: number
   failures: string[]
+}
+
+export interface CommandSchedule {
+  every: 'minutes' | 'daily'
+  minutes?: number
+  at?: string
+}
+
+export interface SavedCommand {
+  id: string
+  name: string
+  argv: string[]
+  /** A folder inside the site, relative; empty for the site's own folder. */
+  cwd?: string
+  schedule?: CommandSchedule | null
+}
+
+export interface FoundCommand {
+  name: string
+  argv: string[]
+  kind: 'script' | 'npm' | 'composer' | 'make'
+  file?: string
+}
+
+export interface CommandRunInfo {
+  id: string
+  site: string
+  name: string
+  startedAt: number
+  endedAt: number | null
+  code: number | null
+}
+
+export interface CommandsInfo {
+  saved: SavedCommand[]
+  found: FoundCommand[]
+  /** Folders of the site to run in, relative. */
+  folders: string[]
+  runs: CommandRunInfo[]
+  /** The last run of each saved command: when, how it ended, how long it took. */
+  last: Record<string, { at: number; code: number | null; ms: number }>
 }
 
 export interface WorkerConfig {
@@ -195,6 +238,44 @@ export interface SiteInfo {
   devSuggestion?: string
   /** The project has a laramac.yml that has not been applied, or has changed since. */
   projectFile?: 'new' | 'applied'
+}
+
+export interface ProfileFunction {
+  name: string
+  internal: boolean
+  file: string
+  line: number
+  calls: number
+  selfMs: number
+  inclMs: number
+  memoryKb: number
+}
+
+export interface ProfileReport {
+  cmd: string
+  creator: string
+  totalMs: number
+  /** The slowest functions by their own time, at most 80. */
+  functions: ProfileFunction[]
+  /** How many functions ran in all. */
+  count: number
+}
+
+export interface ProfileListItem {
+  file: string
+  at: number
+  path: string
+  size: number
+}
+
+export interface ProfilerInfo {
+  /** The profiler is switched on. */
+  on: boolean
+  /** Xdebug is installed for this site's PHP, so profiling can work. */
+  ready: boolean
+  /** The site runs on PHP at all. */
+  php: boolean
+  items: ProfileListItem[]
 }
 
 export interface PhpVersionInfo {
@@ -714,6 +795,8 @@ export interface AppSettings {
   dumps: boolean
   /** Xdebug loaded into PHP (step debugging). Off by default: it slows PHP down. */
   xdebug: boolean
+  /** Xdebug's profiler, for pages that ask for it. Off by default. */
+  profiler?: boolean
   defaultPhp: string | null
   phpFlavor: 'full' | 'light'
   mysqlVersion: string
@@ -941,12 +1024,35 @@ export interface ScanFinding {
   description?: string
   remediation?: string
   reference?: string[]
+  /** CWE ids from the template, like "cwe-79". */
+  cwe?: string[]
+  tags?: string[]
 }
 
 export interface ScanResult {
   target: string
   findings: ScanFinding[]
   ms: number
+  /** The findings under the OWASP Top 10, and what this scan could see. */
+  owasp?: OwaspChecklistInfo
+}
+
+export interface OwaspItemInfo {
+  id: string
+  name: string
+  about: string
+  howToCheck: string
+  status: 'issues' | 'checked' | 'not-checked'
+  count: number
+  worst: 'critical' | 'high' | 'medium' | 'low' | 'info' | null
+  examples: string[]
+  checkedBy: string[]
+}
+
+export interface OwaspChecklistInfo {
+  items: OwaspItemInfo[]
+  other: number
+  covered: number
 }
 
 export type ModelApi = 'openai' | 'anthropic'
@@ -1173,6 +1279,15 @@ export interface Channels {
   'site:lan': { args: [string]; result: { urls: string[]; allowLan: boolean; folders: boolean; share: string | null } }
   'site:debug-setup': { args: [string]; result: void }
   'workers:list': { args: [string]; result: WorkersInfo }
+  'cmd:list': { args: [string]; result: CommandsInfo }
+  'cmd:save': { args: [string, SavedCommand[]]; result: CommandsInfo }
+  /** Runs typed words (text), a saved command (savedId) or a found one (argv), in a folder of the site. */
+  'cmd:run': { args: [string, { text?: string; argv?: string[]; savedId?: string; cwd?: string; cols?: number; rows?: number }]; result: { id: string; name: string } }
+  'cmd:input': { args: [string, string]; result: void }
+  'cmd:stop': { args: [string]; result: void }
+  'cmd:output': { args: [string]; result: string }
+  /** Opens Terminal in the site's folder (for pipes and the like) with the command copied. */
+  'cmd:terminal': { args: [string, string]; result: void }
   'workers:save': { args: [string, WorkerConfig[]]; result: WorkersInfo }
   'workers:start': { args: [string, string]; result: WorkersInfo }
   'workers:stop': { args: [string, string]; result: WorkersInfo }
@@ -1215,6 +1330,7 @@ export interface Channels {
   'db:tables': { args: ['mysql' | 'mariadb', string]; result: { name: string; rows: string }[] }
   'db:query': { args: ['mysql' | 'mariadb', string, string]; result: { columns: string[]; rows: string[][]; truncated: boolean } }
   'review:findings': { args: [string]; result: ReviewFinding[] }
+  'review:owasp': { args: [string]; result: OwaspChecklistInfo }
   'review:triage': { args: [string, number, 'fixed' | 'accepted' | 'not-a-problem' | null]; result: ReviewFinding[] }
   'review:fix-one': { args: [string, number]; result: void }
   'recon:list': { args: []; result: ReconInfo[] }
@@ -1244,6 +1360,13 @@ export interface Channels {
   'sites:open-log': { args: [string, string]; result: void }
   'import:choose': { args: []; result: ImportPlan | null }
   'php:xdebug': { args: [boolean]; result: PhpVersionInfo[] }
+  'site:boost-state': { args: [site: string]; result: { laravel: boolean; installed: boolean; version: string | null } }
+  'site:boost': { args: [site: string, action: 'install' | 'update']; result: void }
+  'profiler:info': { args: [site: string]; result: ProfilerInfo }
+  'profiler:set': { args: [on: boolean, site?: string]; result: ProfilerInfo | null }
+  'profiler:run': { args: [site: string, path: string]; result: { file: string; status: number; report: ProfileReport | null } }
+  'profiler:read': { args: [site: string, file: string]; result: ProfileReport }
+  'profiler:clear': { args: [site: string]; result: ProfilerInfo }
   'php:import': { args: []; result: PhpVersionInfo[] | null }
   'import:git': { args: [string, string]; result: ImportPlan }
   'import:run': { args: [string, ImportAnswers]; result: ImportResult }
@@ -1339,6 +1462,8 @@ export interface Channels {
 export type ChannelName = keyof Channels
 
 export interface Events {
+  'cmd:data': { id: string; data: string }
+  'cmd:exit': { id: string; code: number | null }
   /** Open the Laramac Code page with this address (from "Open in editor" or the Laramac Code app). */
   'ide:show': { url: string | null }
   'services:changed': ServiceInfo[]
@@ -1389,6 +1514,8 @@ export interface ReviewFinding {
   line?: number
   what?: string
   fix?: string
+  /** The OWASP Top 10 category and CWE the reviewer gave, like "A05 Injection, CWE-89". */
+  owasp?: string
   triage?: 'fixed' | 'accepted' | 'not-a-problem'
 }
 

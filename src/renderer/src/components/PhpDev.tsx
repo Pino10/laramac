@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, Download, SlidersHorizontal, TerminalSquare, Trash2, Wrench } from 'lucide-react'
+import { Check, Download, Rocket, SlidersHorizontal, TerminalSquare, Trash2, Wrench } from 'lucide-react'
+import { useAsk } from './Ask'
 import type { PhpQuick, PhpToolInfo, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 
@@ -106,7 +107,26 @@ const ARTISAN: { id: string; label: string; confirm?: string }[] = [
 /** Artisan on a Laravel site: each button runs exactly that command in Terminal, with the site's PHP. */
 export function ArtisanPanel({ site }: { site: SiteInfo }): React.JSX.Element | null {
   const { act } = useApp()
-  if (site.kind !== 'laravel') return null
+  const [boost, setBoost] = useState<{ installed: boolean; version: string | null } | null>(null)
+  const [ask, askDialog] = useAsk()
+  const laravel = site.kind === 'laravel'
+  useEffect(() => {
+    if (laravel) void window.laramac.invoke('site:boost-state', site.name).then(setBoost).catch(() => setBoost(null))
+  }, [laravel, site.name])
+  if (!laravel) return null
+  const runBoost = async (action: 'install' | 'update'): Promise<void> => {
+    const yes = await ask({
+      title: action === 'install' ? 'Install Laravel Boost?' : 'Update Laravel Boost?',
+      label:
+        action === 'install'
+          ? 'Terminal runs “composer require laravel/boost --dev”, then “php artisan boost:install”, which asks which AI tools you use. It adds Laravel’s guidelines and its MCP server to this project.'
+          : 'Terminal runs “composer update laravel/boost”, then “php artisan boost:update” to refresh the guidelines and skills.',
+      yesNo: true,
+      confirm: action === 'install' ? 'Install' : 'Update'
+    })
+    if (yes === null) return
+    await act(`boost-${site.name}`, () => window.laramac.invoke('site:boost', site.name, action))
+  }
   return (
     <div className="panel artisan">
       <div className="artisan-head">
@@ -118,6 +138,19 @@ export function ArtisanPanel({ site }: { site: SiteInfo }): React.JSX.Element | 
           <div className="row-sub">Runs in Terminal with this site’s PHP, so you see every line.</div>
         </div>
       </div>
+      <div className="boost-row">
+        <span className="icon-chip">
+          <Rocket size={14} />
+        </span>
+        <div className="row-main">
+          <div className="row-title">Laravel Boost {boost?.installed && <span className="tag">{boost.version ? `v${boost.version}` : 'installed'}</span>}</div>
+          <div className="row-sub">{boost?.installed ? 'Your AI tools know this Laravel app: its guidelines, docs search and MCP tools.' : 'Teaches Claude Code, Cursor and others how to write good Laravel, with docs search and MCP tools.'}</div>
+        </div>
+        <button className={boost?.installed ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onClick={() => runBoost(boost?.installed ? 'update' : 'install')}>
+          {boost?.installed ? 'Update' : 'Install'}
+        </button>
+      </div>
+      {askDialog}
       <div className="artisan-grid">
         {ARTISAN.map((a) => (
           <button

@@ -9,14 +9,14 @@
 'use strict'
 
 const { app, BrowserWindow, Menu, dialog, nativeTheme, session, shell } = require('electron')
-const { spawn } = require('child_process')
+const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
 const fs = require('fs')
 const http = require('http')
 const net = require('net')
 const os = require('os')
 const path = require('path')
-const { editorUrl, validOpen, parseOpenUrl, readLaunch, withPort, remember, fontScript, WINDOW_CSS } = require('./lib')
+const { editorUrl, validOpen, parseOpenUrl, readLaunch, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS } = require('./lib')
 
 const HOME = path.join(os.homedir(), '.laramac', 'code')
 const LAUNCH = path.join(HOME, 'launch.json')
@@ -36,6 +36,45 @@ let origin = ''
 let launch = null
 let quitting = false
 const pending = []
+
+// ---------------------------------------------------------------- The AI chat
+
+const FREE_KEYCHAIN_SERVICE = 'Laramac Free LLM API'
+const CONTINUE_DIR = path.join(HOME, 'continue')
+let relay = null
+
+/** The Free LLM API key, read from the Keychain (where Laramac keeps it). Never written to a file. */
+const freeKey = () =>
+  new Promise((resolve) =>
+    execFile('/usr/bin/security', ['find-generic-password', '-s', FREE_KEYCHAIN_SERVICE, '-w'], { timeout: 8000 }, (err, out) => resolve(err ? null : String(out).trim() || null))
+  )
+
+/**
+ * Gets the chat ready: Continue's settings with LM Studio, Ollama and your other model servers,
+ * and the Free LLM API through a relay on this Mac that adds the key, so the key stays in the
+ * Keychain. Returns the folder Continue reads its settings from.
+ */
+async function prepareAi(ai) {
+  if (relay) {
+    relay.server.close()
+    relay = null
+  }
+  const key = ai.freellm ? await freeKey() : null
+  if (ai.freellm && key) {
+    const token = crypto.randomBytes(24).toString('hex')
+    const srv = http.createServer(relayHandler({ base: ai.freellm.baseUrl, key, token }))
+    const p = await new Promise((resolve, reject) => {
+      srv.once('error', reject)
+      srv.listen(0, '127.0.0.1', () => resolve(srv.address().port))
+    })
+    relay = { server: srv, port: p, token }
+  }
+  fs.mkdirSync(CONTINUE_DIR, { recursive: true, mode: 0o700 })
+  const file = path.join(CONTINUE_DIR, 'config.yaml')
+  fs.writeFileSync(file, continueConfig(ai, relay), { mode: 0o600 })
+  fs.chmodSync(file, 0o600)
+  return CONTINUE_DIR
+}
 
 // ---------------------------------------------------------------- The editor server
 
@@ -76,7 +115,13 @@ function startServer() {
     password = crypto.randomBytes(24).toString('hex')
     fs.mkdirSync(HOME, { recursive: true })
     const log = fs.openSync(LOG, 'a')
-    const env = { ...process.env, ...launch.env, PASSWORD: password, LARAMAC_CODE: '1' }
+    let continueDir = null
+    try {
+      continueDir = await prepareAi(launch.ai)
+    } catch (e) {
+      fs.appendFileSync(LOG, `AI chat setup: ${e.message}\n`)
+    }
+    const env = { ...process.env, ...launch.env, PASSWORD: password, LARAMAC_CODE: '1', ...(continueDir ? { CONTINUE_GLOBAL_DIR: continueDir } : {}) }
     delete env.ELECTRON_RUN_AS_NODE
     server = spawn(launch.bin, withPort(launch.args, port), { env, stdio: ['ignore', log, log] })
     server.on('exit', () => {
@@ -113,6 +158,10 @@ async function restart() {
 }
 
 function stopServer() {
+  if (relay) {
+    relay.server.close()
+    relay = null
+  }
   if (server) {
     try {
       server.kill('SIGTERM')

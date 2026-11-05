@@ -115,3 +115,33 @@ export const ARTISAN: ArtisanAction[] = [
   { id: 'about', label: 'About', args: ['about'] },
   { id: 'storage-link', label: 'Storage link', args: ['storage:link'] }
 ]
+
+/** Laravel Boost in a Laravel project: installed or not, and which version (from composer.lock). */
+export function boostState(root: string): { laravel: boolean; installed: boolean; version: string | null } {
+  const laravel = existsSync(join(root, 'artisan'))
+  let installed = false
+  let version: string | null = null
+  try {
+    const c = JSON.parse(readFileSync(join(root, 'composer.json'), 'utf8')) as { require?: Record<string, string>; 'require-dev'?: Record<string, string> }
+    installed = !!(c['require-dev']?.['laravel/boost'] ?? c.require?.['laravel/boost'])
+  } catch {
+    /* no composer.json */
+  }
+  try {
+    const lock = JSON.parse(readFileSync(join(root, 'composer.lock'), 'utf8')) as { packages?: { name: string; version: string }[]; 'packages-dev'?: { name: string; version: string }[] }
+    const p = [...(lock['packages-dev'] ?? []), ...(lock.packages ?? [])].find((x) => x.name === 'laravel/boost')
+    if (p) {
+      installed = true
+      version = p.version.replace(/^v/, '')
+    }
+  } catch {
+    /* not installed yet */
+  }
+  return { laravel, installed, version }
+}
+
+/** The exact commands the Boost buttons run, in Terminal, after the person agrees. */
+export const BOOST_COMMANDS = {
+  install: 'composer require laravel/boost --dev && php artisan boost:install',
+  update: 'composer update laravel/boost && php artisan boost:update'
+} as const

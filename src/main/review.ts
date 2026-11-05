@@ -121,6 +121,7 @@ Two or three sentences on the overall state and the most urgent problem.
 File: path/to/file.ext:123
 What: what is wrong and how it could be abused or fail, in plain words.
 Fix: the concrete change, with a short code snippet when it helps.
+OWASP: the OWASP Top 10 (2025) category and the CWE, like "A05 Injection, CWE-89" (leave it out for plain bugs).
 
 Use [CRITICAL], [HIGH], [MEDIUM] or [LOW]. Order by severity. Only report real problems you can point to
 in the code; never invent files or lines. If nothing is wrong, say so under Findings.`

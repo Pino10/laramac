@@ -178,7 +178,7 @@ export function reviewFindings(md: string): ReviewFinding[] {
     const where = field('File') ?? field('Where')
     const fileLine = where ? /`?([^\s`:]+\.[A-Za-z0-9]+)(?::(\d+))?`?/.exec(where) : null
     const body = p.replace(/^#{2,4}.*\n/, '').trim()
-    out.push({ index: out.length, severity: h[1].toLowerCase() as ReviewFinding['severity'], title: h[2].trim().replace(/\*+/g, ''), file: fileLine?.[1], line: fileLine?.[2] ? Number(fileLine[2]) : undefined, what: field('What') ?? body.split('\n').find((l) => l.trim() && !/^(\**)?(File|Where|Fix)/i.test(l.trim()))?.trim(), fix: field('Fix') })
+    out.push({ index: out.length, severity: h[1].toLowerCase() as ReviewFinding['severity'], title: h[2].trim().replace(/\*+/g, ''), file: fileLine?.[1], line: fileLine?.[2] ? Number(fileLine[2]) : undefined, what: field('What') ?? body.split('\n').find((l) => l.trim() && !/^(\**)?(File|Where|Fix|OWASP)/i.test(l.trim()))?.trim(), fix: field('Fix'), ...(field('OWASP') ? { owasp: field('OWASP') } : {}) })
   }
   return out
 }

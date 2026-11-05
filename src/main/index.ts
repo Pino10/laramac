@@ -24,6 +24,8 @@ import * as apiRoutes from './apiroutes'
 import * as tools from './sitetools'
 import { checkHookUrl, hookBody, raycastScripts, sendHook, type HookKind } from './webhooks'
 import { startWorker, stopAllWorkers, stopWorker, workerLogs, workerRunning } from './workers'
+import { cleanSaved, findCommands, isDue, joinCommand, listFolders, splitCommand } from './commands'
+import { inputRun, isRunning, lastRuns, onRunEvent, runOutput, siteRuns, startRun, stopAllRuns, stopRun } from './cmdrun'
 import { claudeFreeConfigFor, claudeFreeInstalled, claudeLmConfigFor, claudeLmInstalled, installClaudeFree, installClaudeLm, readFreeKey, removeClaudeFree, storeFreeKey, storeLmToken } from './claudesetup'
 import { checkFreeLlm, checkFreeLlmKey, FREELLM_DEFAULT_URL, FREELLM_MODELS, freeLlmModel, freeLlmUrl } from './seckit/freellm'
 import { ensureLmContext } from './seckit/lmstudio'
@@ -54,12 +56,14 @@ import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopCon
 import * as scan from './scan'
 import * as audit from './audit'
 import * as dumps from './dumps'
+import * as profiler from './profiler'
+import { owaspChecklist } from './seckit/owasp'
 import * as project from './project'
 import * as cli from './cli'
 import { dbPassword, getSecret, setSecret, setSecretsCrypto } from './secrets'
 import { createPgDatabase } from './svc/postgres'
 import { runQuiet } from './starterrun'
-import { runtimeEnv } from './runtimes'
+import { runtimeEnv, runtimesRoot } from './runtimes'
 import { normalize } from 'path'
 import { buildTrayMenu, type TrayAction, type TrayItem } from './traymenu'
 import { resetLaramac } from './reset'
@@ -68,13 +72,13 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { CommandsInfo, ProfilerInfo, SiteInfo as SiteInfoT, OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
 import type { ImportAnswers } from '../shared/types'
 import { watch, type FSWatcher } from 'fs'
-import { dirname, join } from 'path'
+import { dirname, join, resolve, sep } from 'path'
 import { pathToFileURL } from 'url'
 import type { ChannelName, Channels, ChatMessage, Events, Material, ProjectKind, SiteConfig, SiteInfo } from '../shared/types'
 import { ensureDirs } from './paths'
@@ -1485,6 +1489,16 @@ function registerIpc(): void {
     return hub.reviewFindings(review.readReview(id)).map((f) => ({ ...f, triage: info.triage?.[f.index] }))
   }
   handle('review:findings', (id) => findingsOf(String(id)))
+  handle('review:owasp', (id) => {
+    const info = reviewInfo(String(id))
+    const md = review.readReview(String(id))
+    const found = findingsOf(String(id)).filter((f) => f.triage !== 'not-a-problem')
+    const secrets = [...(md.split('## Keys and passwords in files')[1] ?? '').matchAll(/^- (.+?) in `([^`]+)`$/gm)].map((m) => ({ title: `${m[1]} in the code`, severity: 'high', cwe: [798] }))
+    return owaspChecklist(
+      [...found.map((f) => ({ title: f.title, text: `${f.owasp ?? ''}\n${f.what ?? ''}`, severity: f.severity })), ...secrets],
+      info.focus === 'bugs' ? ['secrets'] : ['code-review', 'secrets']
+    )
+  })
   handle('review:triage', (id, index, t) => {
     const info = reviewInfo(String(id))
     const triage = { ...(info.triage ?? {}) }
@@ -1752,7 +1766,8 @@ function registerIpc(): void {
     }
     return jobs.run(`Scanning ${siteName ?? target}`, async (update) => {
       if (!existsSync(scan.nucleiBinary())) await scan.installNuclei(update)
-      return scan.runNuclei(opts, update)
+      const r = await scan.runNuclei(opts, update)
+      return { ...r, owasp: owaspChecklist(r.findings.map((f) => ({ title: f.name, text: `${f.template} ${(f.tags ?? []).join(' ')} ${f.description ?? ''}`, severity: f.severity, cwe: f.cwe })), ['web-scan', 'headers']) }
     })
   })
   handle('llm:servers', () => models.listServers())
@@ -2609,6 +2624,144 @@ function registerIpc(): void {
     setSiteConfig(site.name, { workers: clean })
     return workerList(site)
   })
+  // ---- Commands: scripts in the project, the project's own scripts, and your saved commands.
+  const uvBin = (): string | null => {
+    const p = join(runtimesRoot(), 'uv', 'bin', 'uv')
+    return existsSync(p) ? p : null
+  }
+  const commandsInfo = (site: SiteInfo): CommandsInfo => {
+    const saved = getSettings().siteConfig[site.name]?.commands ?? []
+    const all = lastRuns()
+    const last = Object.fromEntries(saved.filter((c) => all[`${site.name}:${c.id}`]).map((c) => [c.id, all[`${site.name}:${c.id}`]]))
+    return { saved, found: findCommands(site.path), folders: listFolders(site.path), runs: siteRuns(site.name), last }
+  }
+  const folderIn = (site: SiteInfo, cwd: unknown): string => {
+    if (typeof cwd !== 'string' || !cwd.trim()) return site.path
+    const p = resolve(site.path, cwd.replace(/^\/+/, ''))
+    if (!(p === site.path || p.startsWith(site.path + sep)) || !existsSync(p)) throw new ValidationError('That folder is not inside the site.')
+    return p
+  }
+  onRunEvent((e) => (e.kind === 'data' ? send('cmd:data', { id: e.id, data: e.data }) : send('cmd:exit', { id: e.id, code: e.code })))
+  // The free profiler (Xdebug's), off unless switched on.
+  const profileHosts = (site: SiteInfoT): string[] => [site.domain, ...site.aliases]
+  const profilerInfo = (site: SiteInfoT): ProfilerInfo => ({
+    on: !!getSettings().profiler,
+    php: !!site.php,
+    ready: !!site.php && existsSync(xdebugPath(site.php)),
+    items: profiler.listProfiles(profileHosts(site))
+  })
+  handle('profiler:info', (name) => profilerInfo(siteByName(name)))
+  handle('profiler:set', async (on, name) => {
+    if (on) {
+      for (const m of installedMinors().filter((m) => !existsSync(xdebugPath(m)))) {
+        await jobs.run(`Adding Xdebug to PHP ${m}`, () => ensureXdebug(m)).catch((err) => activity.push('error', `Xdebug for PHP ${m}`, (err as Error).message.slice(0, 200)))
+      }
+      if (!installedMinors().some((m) => existsSync(xdebugPath(m)))) throw new ValidationError('The profiler needs Xdebug, which is not ready for your PHP versions yet. Laramac’s PHP builds add it within a day; try again tomorrow.')
+      mkdirSync(profiler.profilesDir(), { recursive: true })
+    }
+    setSettings({ profiler: !!on })
+    await restartPhp()
+    activity.push('info', on ? 'The profiler is on' : 'The profiler is off', on ? 'Pages are profiled only when you ask, so the rest stay fast.' : 'PHP runs at full speed again.')
+    return typeof name === 'string' && name ? profilerInfo(siteByName(name)) : null
+  })
+  handle('profiler:run', async (name, path) => {
+    const site = siteByName(name)
+    if (!getSettings().profiler) throw new ValidationError('Switch the profiler on first.')
+    if (!site.php) throw new ValidationError('This site does not run on PHP, so there is nothing to profile.')
+    const p = typeof path === 'string' ? path.trim() : '/'
+    if (p.length > 2000 || !/^\/[^\s]*$/.test(p || '/')) throw new ValidationError('Enter a path on this site, like / or /dashboard.')
+    const r = await jobs.run(`Profiling ${site.domain}${p || '/'}`, () => profiler.profilePage(site.secure ? site.httpsUrl : site.url, p || '/', profileHosts(site))).catch((err) => {
+      throw new ValidationError(`The page did not load: ${(err as Error).message}`)
+    })
+    if (!r?.file) return { file: '', status: r?.status ?? 0, report: null }
+    return { file: r.file, status: r.status, report: await profiler.readProfile(profiler.profileFile(r.file)!) }
+  })
+  handle('profiler:read', async (name, file) => {
+    const site = siteByName(name)
+    const ok = profiler.listProfiles(profileHosts(site)).some((x) => x.file === file)
+    const p = ok ? profiler.profileFile(String(file)) : null
+    if (!p) throw new ValidationError('That profile is gone.')
+    return profiler.readProfile(p)
+  })
+  handle('profiler:clear', (name) => {
+    const site = siteByName(name)
+    for (const x of profiler.listProfiles(profileHosts(site))) {
+      const p = profiler.profileFile(x.file)
+      if (p) rmSync(p, { force: true })
+    }
+    return profilerInfo(site)
+  })
+  handle('cmd:list', (name) => commandsInfo(siteByName(name)))
+  handle('cmd:save', (name, list) => {
+    const site = siteByName(name)
+    let clean
+    try {
+      clean = cleanSaved(list)
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+    setSiteConfig(site.name, { commands: clean })
+    return commandsInfo(site)
+  })
+  handle('cmd:run', (name, req) => {
+    const site = siteByName(name)
+    const r = (req ?? {}) as { text?: unknown; argv?: unknown; savedId?: unknown; cwd?: unknown; cols?: unknown; rows?: unknown }
+    let argv: string[]
+    let label: string
+    let savedId: string | undefined
+    let cwd = r.cwd
+    if (typeof r.savedId === 'string') {
+      const c = (getSettings().siteConfig[site.name]?.commands ?? []).find((x) => x.id === r.savedId)
+      if (!c) throw new ValidationError('That command is not saved any more.')
+      argv = c.argv
+      label = c.name
+      savedId = c.id
+      cwd = c.cwd
+    } else if (typeof r.text === 'string') {
+      try {
+        argv = splitCommand(r.text)
+      } catch (e) {
+        throw new ValidationError((e as Error).message)
+      }
+      label = joinCommand(argv)
+    } else if (Array.isArray(r.argv) && r.argv.length && r.argv.every((w) => typeof w === 'string')) {
+      argv = r.argv as string[]
+      label = joinCommand(argv)
+    } else throw new ValidationError('Choose a command to run.')
+    const n = (v: unknown, d: number, max: number): number => (typeof v === 'number' && v >= 10 && v <= max ? Math.floor(v) : d)
+    const id = startRun({ site: site.name, name: label, argv, cwd: folderIn(site, cwd), env: siteCmdEnv(site), cols: n(r.cols, 120, 500), rows: n(r.rows, 32, 200), savedId, uv: uvBin() })
+    return { id, name: label }
+  })
+  handle('cmd:input', (id, text) => {
+    if (typeof id === 'string' && typeof text === 'string' && text.length < 100_000) inputRun(id, text)
+  })
+  handle('cmd:stop', (id) => {
+    if (typeof id === 'string') stopRun(id)
+  })
+  handle('cmd:output', (id) => (typeof id === 'string' ? runOutput(id) : ''))
+  handle('cmd:terminal', async (name, text) => {
+    const site = siteByName(name)
+    // Your Terminal, in the site's folder; the command is copied for you to paste, so nothing runs by itself.
+    if (typeof text === 'string' && text.trim()) clipboard.writeText(text.trim().slice(0, 4000))
+    await openTerminal(site.path)
+  })
+  // Scheduled commands, checked every half minute while Laramac is open.
+  setInterval(() => {
+    const now = Date.now()
+    const all = lastRuns()
+    for (const site of listSites()) {
+      for (const c of getSettings().siteConfig[site.name]?.commands ?? []) {
+        if (!c.schedule || isRunning(site.name, c.name)) continue
+        if (!isDue(c.schedule, all[`${site.name}:${c.id}`]?.at ?? 0, now)) continue
+        try {
+          startRun({ site: site.name, name: c.name, argv: c.argv, cwd: folderIn(site, c.cwd), env: siteCmdEnv(site), savedId: c.id, scheduled: true, uv: uvBin() })
+        } catch {
+          // A folder that is gone: the next check tries again.
+        }
+      }
+    }
+  }, 30_000)
+
   handle('workers:start', async (name, id) => {
     const site = siteByName(name)
     const w = (getSettings().siteConfig[site.name]?.workers ?? []).find((x) => x.id === id)
@@ -2822,6 +2975,15 @@ function registerIpc(): void {
     if (!t) throw new ValidationError('That tool is not on the list.')
     await composerGlobal(['remove', t.pkg], `Removing ${t.name}`)
     return toolList()
+  })
+  handle('site:boost-state', (name) => phpdev.boostState(siteByName(name).path))
+  handle('site:boost', async (name, action) => {
+    const site = siteByName(name)
+    if (!existsSync(join(site.path, 'artisan'))) throw new ValidationError('Laravel Boost is for Laravel projects.')
+    if (action !== 'install' && action !== 'update') throw new ValidationError('Choose install or update.')
+    // Runs Composer and the project's own Artisan: the person agreed in the window first.
+    await openTerminal(site.path, phpdev.BOOST_COMMANDS[action])
+    activity.push('info', action === 'install' ? `Installing Laravel Boost in ${site.name}` : `Updating Laravel Boost in ${site.name}`, 'Answer its questions in Terminal: pick the AI tools you use (Claude Code, Cursor and others).')
   })
   handle('site:artisan', async (name, action) => {
     const site = siteByName(name)
@@ -3226,7 +3388,7 @@ app.on('before-quit', (event) => {
   quitting = true
   ssh.disconnectAll()
   dumps.stopDumpServer()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends(), Promise.resolve(stopAllRuns())]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

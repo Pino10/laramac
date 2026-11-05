@@ -26,7 +26,23 @@ export const IDE_EXTENSIONS: IdeExtension[] = [
   { id: 'dbaeumer.vscode-eslint', name: 'ESLint', why: 'JavaScript and TypeScript problems as you type' },
   { id: 'bradlc.vscode-tailwindcss', name: 'Tailwind CSS IntelliSense', why: 'Class name completion and previews' },
   { id: 'vue.volar', name: 'Vue', why: 'Vue single-file components' },
-  { id: 'redhat.vscode-yaml', name: 'YAML', why: 'YAML with schema checks (Docker Compose, CI files)' }
+  { id: 'redhat.vscode-yaml', name: 'YAML', why: 'YAML with schema checks (Docker Compose, CI files)' },
+  { id: 'continue.continue', name: 'Continue', why: 'AI chat and agent with LM Studio, Ollama or the Free LLM API: it reads your project and edits many files at once (open source)' },
+  { id: 'laravel.vscode-laravel', name: 'Laravel', why: 'The Laravel team’s own: routes, views, config and translations with completion and links. It runs your app’s PHP to learn them' },
+  { id: 'recca0120.vscode-phpunit', name: 'PHPUnit and Pest', why: 'Run one test from its line with the ▶ next to it, or all of them from the Testing panel' },
+  { id: 'vitest.explorer', name: 'Vitest', why: 'Run JavaScript and TypeScript tests from their line' },
+  { id: 'ms-python.python', name: 'Python', why: 'Python: run, debug, virtual environments and Jupyter' },
+  { id: 'detachhead.basedpyright', name: 'basedpyright', why: 'Python completion, types and errors (the open-source Pylance)' },
+  { id: 'charliermarsh.ruff', name: 'Ruff', why: 'Fast Python lint and formatting' },
+  { id: 'golang.go', name: 'Go', why: 'Go: completion, tests and debugging' },
+  { id: 'rust-lang.rust-analyzer', name: 'rust-analyzer', why: 'Rust: completion, errors and refactoring' },
+  { id: 'redhat.java', name: 'Java', why: 'Java and Maven or Gradle projects' },
+  { id: 'ms-azuretools.vscode-docker', name: 'Docker', why: 'Dockerfiles and Compose files with completion' },
+  { id: 'mtxr.sqltools', name: 'SQLTools', why: 'Run SQL against your databases from the editor' },
+  { id: 'usernamehw.errorlens', name: 'Error Lens', why: 'Problems shown on the line itself, as you type' },
+  { id: 'mhutchie.git-graph', name: 'Git Graph', why: 'See branches and history as a graph' },
+  { id: 'miguelsolorio.fluent-icons', name: 'Fluent Icons', why: 'Softer, rounder icons for the whole window' },
+  { id: 'pkief.material-icon-theme', name: 'Material Icon Theme', why: 'A clear icon for every kind of file' }
 ]
 
 export interface ReleaseAsset {
@@ -135,12 +151,22 @@ export function ideSettings(o: IdeSettingsInput): { managed: Record<string, unkn
     'workbench.layoutControl.enabled': true,
     'workbench.layoutControl.type': 'toggles',
     'chat.disableAIFeatures': true,
+    'continue.telemetryEnabled': false,
+    'continue.showInlineTip': false,
+    // basedpyright is the Python language server, so the Python extension's own one stays off.
+    'python.languageServer': 'None',
+    'basedpyright.analysis.typeCheckingMode': 'standard',
     'claudeCode.preferredLocation': 'sidebar',
     'workbench.tips.enabled': false,
     ...(o.phpVersion ? { 'intelephense.environment.phpVersion': o.phpVersion } : {})
   }
   const defaults: Record<string, unknown> = {
     'workbench.startupEditor': 'none',
+    'workbench.productIconTheme': 'fluent-icons',
+    'workbench.iconTheme': 'material-icon-theme',
+    'laramac.startPage': true,
+    'errorLens.enabledDiagnosticLevels': ['error', 'warning'],
+    'phpunit.showAfterExecution': 'onFailure',
     'workbench.activityBar.location': 'top',
     'workbench.secondarySideBar.defaultVisibility': 'visibleInWorkspace',
     'window.title': '${rootName}${separator}${activeEditorShort}',
@@ -227,16 +253,21 @@ export function checksPackage(version: string): Record<string, unknown> {
         { command: 'laramac.reviewFile', title: 'Review this file with AI', category: 'Laramac' },
         { command: 'laramac.reviewProject', title: 'Review the project with AI', category: 'Laramac' },
         { command: 'laramac.clear', title: 'Clear Laramac’s problems', category: 'Laramac' },
-        { command: 'laramac.menu', title: 'Laramac', category: 'Laramac' }
+        { command: 'laramac.menu', title: 'Laramac', category: 'Laramac' },
+        { command: 'laramac.refreshProject', title: 'Refresh', category: 'Laramac', icon: '$(refresh)' },
+        { command: 'laramac.startPage', title: 'Start page', category: 'Laramac' }
       ],
+      views: { explorer: [{ id: 'laramac.project', name: 'Laravel and scripts' }] },
       menus: {
         'editor/title': [{ command: 'laramac.reviewFile', group: 'navigation@99', when: 'resourceScheme == file' }],
-        'explorer/context': [{ command: 'laramac.reviewProject', group: 'laramac' }]
+        'explorer/context': [{ command: 'laramac.reviewProject', group: 'laramac' }],
+        'view/title': [{ command: 'laramac.refreshProject', when: 'view == laramac.project', group: 'navigation' }]
       },
       keybindings: [{ command: 'laramac.menu', key: 'cmd+alt+l' }],
       configuration: {
         title: 'Laramac',
         properties: {
+          'laramac.startPage': { type: 'boolean', default: true, description: 'Show the start page when a project opens with no files open.' },
           'laramac.checkOnSave': { type: 'boolean', default: true, description: 'Check PHP files when you save them (PHP syntax, PHPStan, and Psalm when the project has psalm.xml).' },
           'laramac.phpstan': { type: 'boolean', default: true, description: 'Use PHPStan (the project’s own, or the one installed on Laramac’s PHP page).' },
           'laramac.phpstanLevel': { type: 'number', default: 5, minimum: 0, maximum: 10, description: 'PHPStan level for projects without their own phpstan.neon.' },
@@ -246,6 +277,32 @@ export function checksPackage(version: string): Record<string, unknown> {
     }
   }
 }
+
+/**
+ * Islands: the side bar, editor, panel and chat float as rounded panels on a deeper base, with
+ * the title and status bars part of the base. This is what makes it Laramac Code and not a
+ * stock VS Code window.
+ */
+const ISLANDS_CSS = `
+.monaco-workbench{--lc-base:var(--vscode-titleBar-activeBackground);--lc-line:color-mix(in srgb,var(--vscode-foreground) 7%,transparent);background:var(--lc-base)!important}
+.monaco-workbench .part.sidebar,.monaco-workbench .part.auxiliarybar,.monaco-workbench .part.panel,.monaco-workbench .part.editor{clip-path:inset(0 4px 6px 4px round 12px)}
+.monaco-workbench .part.editor>.content{background:var(--vscode-editor-background)}
+.monaco-workbench .part.sidebar>.composite.title,.monaco-workbench .part.auxiliarybar>.composite.title{padding-left:6px}
+.monaco-workbench .part.panel.bottom .composite.title{border-top:0!important}
+.monaco-workbench .part.statusbar{color:var(--vscode-descriptionForeground)!important}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab{border:0!important;margin:5px 0 0 4px;height:29px!important;border-radius:8px!important}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab.active{background:color-mix(in srgb,var(--vscode-foreground) 7%,transparent)!important}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab:not(.active){background:transparent!important}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab .tab-border-top-container,.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab .tab-border-bottom-container{display:none!important}
+.monaco-workbench .part.editor>.content .editor-group-container>.title.tabs>.tabs-and-actions-container.tabs-border-bottom::after{display:none!important}
+.monaco-workbench .sash:not(.active):not(:hover){background:transparent!important}
+.monaco-workbench .pane-header{border-top:0!important}
+.monaco-workbench .split-view-view>.pane>.pane-header{border-radius:8px;margin:0 6px}
+.monaco-workbench .part.titlebar .command-center .command-center-center{background:color-mix(in srgb,var(--vscode-editor-background) 80%,transparent)!important;border:1px solid var(--lc-line)!important;height:26px!important;border-radius:9px!important;width:42vw!important;max-width:560px}
+.monaco-workbench .part.titlebar .command-center .command-center-center:hover{border-color:color-mix(in srgb,var(--vscode-focusBorder) 55%,transparent)!important}
+.monaco-workbench .monaco-scrollable-element>.scrollbar>.slider{border-radius:6px}
+.monaco-workbench .part.editor .editor-group-watermark .letterpress{opacity:.35}
+`
 
 /**
  * Poppins (from Laramac) for the interface, or the Mac's own font. Code keeps a monospaced font.
@@ -272,7 +329,7 @@ export function workbenchCss(o: { uiFont: 'system' | 'poppins' }): string {
 .monaco-workbench .part.statusbar .statusbar-item .statusbar-item-label{border-radius:6px}
 .monaco-workbench .command-center .command-center-center{border-radius:8px!important}
 .monaco-workbench .welcomePageContainer .welcomePage h1{font-weight:600}
-`
+${ISLANDS_CSS}`
 }
 
 /** The Laramac Code app's zip for this Mac's chip, in Laramac's release of that version. */
@@ -298,4 +355,47 @@ export function launchEnv(env: Record<string, string | undefined>, extra: Record
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(env)) if (LAUNCH_KEYS.test(k) && typeof v === 'string') out[k] = v
   return { ...out, ...extra }
+}
+
+export interface AiLaunch {
+  servers: { name: string; provider: 'lmstudio' | 'ollama' | 'openai'; baseUrl: string; model?: string }[]
+  freellm: { baseUrl: string; models: string[] } | null
+}
+
+/**
+ * The chat models Laramac Code offers: LM Studio and Ollama (they list their own models), your
+ * other OpenAI-style model servers that need no key, and the Free LLM API (its key stays in the
+ * Keychain: the app adds it through a relay on this Mac). No key is ever in launch.json.
+ */
+export function aiLaunch(o: { llm?: { baseUrl: string; model: string }; servers: { name: string; baseUrl: string; api: string; hasKey: boolean }[]; freellm: { baseUrl: string } | null; freeModels: readonly string[] }): AiLaunch {
+  const providerOf = (url: string): 'lmstudio' | 'ollama' | 'openai' => {
+    const port = (() => {
+      try {
+        return new URL(url).port
+      } catch {
+        return ''
+      }
+    })()
+    return port === '1234' ? 'lmstudio' : port === '11434' ? 'ollama' : 'openai'
+  }
+  const out: AiLaunch['servers'] = [
+    { name: 'LM Studio', provider: 'lmstudio', baseUrl: 'http://127.0.0.1:1234/v1' },
+    { name: 'Ollama', provider: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1' }
+  ]
+  const key = (u: string): string => u.replace(/\/+$/, '').replace('localhost', '127.0.0.1')
+  const seen = new Set(out.map((s) => key(s.baseUrl)))
+  const extra = [
+    ...(o.llm?.baseUrl ? [{ name: 'Local model', baseUrl: o.llm.baseUrl, api: 'openai', hasKey: false, model: o.llm.model }] : []),
+    ...o.servers.map((s) => ({ ...s, model: '' }))
+  ]
+  for (const s of extra) {
+    if (s.hasKey || s.api !== 'openai' || seen.has(key(s.baseUrl)) || !/^https?:\/\//.test(s.baseUrl)) continue
+    const name = s.name.replace(/[^\w .()-]/g, '').slice(0, 40) || 'Model server'
+    const provider = providerOf(s.baseUrl)
+    // A plain OpenAI-style server needs a model name; without one it is left out.
+    if (provider === 'openai' && !s.model) continue
+    seen.add(key(s.baseUrl))
+    out.push({ name, provider, baseUrl: s.baseUrl, ...(s.model ? { model: s.model } : {}) })
+  }
+  return { servers: out.slice(0, 8), freellm: o.freellm ? { baseUrl: o.freellm.baseUrl, models: [...o.freeModels] } : null }
 }

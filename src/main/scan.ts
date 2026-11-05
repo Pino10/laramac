@@ -82,6 +82,12 @@ export async function installNuclei(
   rmSync(archive, { force: true });
 }
 
+const listOf = (v: string[] | string | null | undefined): string[] =>
+  (Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : [])
+    .map((x) => String(x).trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
 /** Reads Nuclei's JSON lines into findings, most severe first. */
 export function parseNuclei(jsonl: string): ScanFinding[] {
   const order = ["critical", "high", "medium", "low", "info", "unknown"];
@@ -98,6 +104,8 @@ export function parseNuclei(jsonl: string): ScanFinding[] {
           description?: string;
           remediation?: string;
           reference?: string[] | string;
+          tags?: string[] | string;
+          classification?: { "cwe-id"?: string[] | string | null };
         };
         "matched-at"?: string;
         host?: string;
@@ -121,6 +129,10 @@ export function parseNuclei(jsonl: string): ScanFinding[] {
           : j.info.reference
             ? [j.info.reference]
             : undefined,
+        ...listOf(j.info.classification?.["cwe-id"]).length
+          ? { cwe: listOf(j.info.classification?.["cwe-id"]) }
+          : {},
+        ...listOf(j.info.tags).length ? { tags: listOf(j.info.tags) } : {},
       });
     } catch {
       // Not a finding line.

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import SkillPicker from '../components/SkillPicker'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
+import { OwaspList, ReviewOwasp } from '../components/OwaspList'
 import SkillPacks from '../components/SkillPacks'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
@@ -397,6 +398,7 @@ function ReportView({ title, md, id, onAgent, remote }: { title: string; md: str
         </span>
       </div>
       <ReviewFindings id={id} remote={remote} />
+      <ReviewOwasp id={id} />
       <details className="report-full">
         <summary>The whole report</summary>
         <Answer text={md.replace(/^# .*\n/, '')} />
@@ -564,6 +566,7 @@ function WebScan(): React.JSX.Element {
             )}
           </div>
           {explain && <Answer text={explain} />}
+          {res.owasp && <OwaspList list={res.owasp} />}
           <div className="scan-list">
             {res.findings.map((f, i) => (
               <div key={i} className="scan-item">

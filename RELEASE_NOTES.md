@@ -1,3 +1,32 @@
+## New in 0.28
+
+### Commands on every site
+- **A Commands tab on each site**, with a real terminal inside Laramac. Type a command like `python3 tools/make_film.py --from-clips`, pick the folder it runs in (any folder of the site, not just tools), and press Run. Colours, progress bars and questions work, and you can type into it while it runs.
+- **Python through uv, in any folder you choose.** uv brings its own Python, and when the folder (or the script's folder) has a requirements.txt, those packages are installed for that run and cached. A folder with pyproject.toml is used as a project. Ask for a version with `python3.12`.
+- **Scripts it finds for you**: scripts in tools, scripts, bin and similar folders, package.json scripts (with npm, pnpm, yarn or bun, whichever the project uses), composer scripts and Makefile targets. Laramac asks before it runs one the first time.
+- **Saved commands, on a schedule if you like**: every minute, every few hours or each day at a time, while Laramac is open. Each shows when it last ran and whether it worked, with its own log.
+- **Laravel's scheduler in one click**: "Run it every minute" makes tasks in routes/console.php run on time, and "See what is scheduled" shows them.
+- No shell is used, so text cannot sneak in extra commands. For pipes and the like, the Terminal button opens Terminal in the site with your command copied.
+
+### A free profiler, off until you want it
+- **The Profiler tab** on PHP sites shows which functions make a page slow, slowest first, by their own time or with what they call, with "Only my code" to hide the framework. Click a file to open it at the line.
+- It is Xdebug's own profiler. When switched on, only the pages you profile are measured (the XDEBUG_PROFILE cookie), so everything else stays fast. "Profile this page" loads a page of the site once; pages behind a login can be profiled from your browser with the Xdebug Helper extension.
+
+### Laravel Boost in one click
+- On Laravel sites (and only there), **Install Laravel Boost** next to Artisan runs Composer and boost:install in Terminal after you agree, so Claude Code, Cursor and others know your Laravel app. Once it is in, the button updates it.
+
+### OWASP Top 10, on every review and scan
+- Code reviews and web scans now come with the **OWASP Top 10 (2025) checklist**: each of the ten says whether it had problems (and how many), was checked and looked fine, or was not checked by that run, with what would check it. The AI reviewer now names the OWASP category and CWE of each finding.
+
+### Laramac Code, its own look and an AI that ships
+- **Islands**: the side bar, editor, panel and chat float as rounded panels on a deeper base. With Fluent icons and Material file icons it no longer looks like stock VS Code. In light and dark.
+- **A start page** when a project opens: the AI tools, go to a file, search, check, review, tests and the terminal. Switch it off from the page itself.
+- **AI chat on your own models, ready when it opens**: Continue is in the side bar with **LM Studio** and **Ollama** (they list their own models) and the **Free LLM API**. Its agent reads your project and changes many files at once, showing each change. The Free LLM API key stays in the Keychain: the app adds it through a small relay on this Mac that only Laramac Code can use, so the key is never written to a file.
+- **Laravel and scripts panel** in the Explorer: routes (loaded when you open them, click one to go to its controller method), models, migrations, Artisan actions and the project's own scripts.
+- **The Laravel team's own extension**: completion and links for routes, views, config and translations.
+- **Run a test from its line**: a ▶ next to every PHPUnit and Pest test (and Vitest for JavaScript), or all of them from the Testing panel.
+- **More languages, all built in**: Python (with basedpyright and Ruff), Go, Rust, Java, Docker, SQL, Error Lens and Git Graph. Everything comes in one package: there is no light start.
+
 ## New in 0.27
 
 ### Laramac Code is its own app
