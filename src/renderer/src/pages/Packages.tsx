@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Trash2 } from 'lucide-react'
+import type { UpdateItem } from '@shared/types'
 import type { PackageInfo } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, PageHead } from '../ui'
@@ -16,7 +17,18 @@ const GROUPS: { id: PackageInfo['group']; title: string; note?: string }[] = [
 const LETTERS: Record<PackageInfo['group'], string> = { php: 'Php', database: 'Db', tool: 'Tl', brew: 'Br', cache: 'Ca' }
 
 export default function Packages(): React.JSX.Element {
-  const { act, busy, notify, setServices } = useApp()
+  const { act, busy, notify, setServices, updates, setUpdates } = useApp()
+  // An update for a package, from the Updates page's last check.
+  const updateFor = (p: PackageInfo): UpdateItem | undefined =>
+    (updates?.items ?? []).find((u) => u.group !== 'site' && u.group !== 'laramac' && (u.id === p.id || u.name.toLowerCase() === p.name.toLowerCase() || (u.id.split(':')[1] && u.id.split(':')[1] === p.id.split(':')[1])))
+  const update = async (u: UpdateItem): Promise<void> => {
+    const r = await act(`upd-${u.id}`, () => api.invoke('updates:apply', [u.id], false))
+    if (r) {
+      notify(r.failed.length ? { kind: 'error', text: `${u.name}: ${r.failed[0].error}` } : { kind: 'info', text: `${u.name} is now ${u.latest}.` })
+      setUpdates(r.report)
+      load()
+    }
+  }
   const api = window.laramac
   const [items, setItems] = useState<PackageInfo[] | null>(null)
   const [ask, askDialog] = useAsk()
@@ -51,7 +63,7 @@ export default function Packages(): React.JSX.Element {
 
   return (
     <>
-      <PageHead title="Packages" desc="Everything Laramac has installed on this Mac, and how much space it takes. Remove what you no longer use." />
+      <PageHead title="Packages" desc="Everything Laramac has installed on this Mac, how much space it takes, and which ones have an update. Remove what you no longer use." />
 
       <div className="pkg-total">
         <div>
@@ -92,7 +104,16 @@ export default function Packages(): React.JSX.Element {
                     <small>{p.detail}</small>
                   </span>
                   <span className="hint" style={{ textAlign: 'right' }}>
-                    {g.id === 'cache' ? '' : 'Installed'}
+                    {(() => {
+                      const u = updateFor(p)
+                      if (u)
+                        return (
+                          <button className="btn btn-sm btn-tonal" disabled={busy.has(`upd-${u.id}`)} onClick={() => update(u)}>
+                            <ArrowUpCircle size={13} /> {busy.has(`upd-${u.id}`) ? 'Updating…' : `Update to ${u.latest}`}
+                          </button>
+                        )
+                      return g.id === 'cache' ? '' : 'Up to date'
+                    })()}
                   </span>
                   <span className="num" style={{ textAlign: 'right' }}>
                     {formatBytes(p.bytes)}

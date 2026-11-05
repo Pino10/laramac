@@ -162,7 +162,8 @@ async function editorStatus(): Promise<{ editors: { id: string; name: string }[]
   const st = getSettings()
   const found = await installedEditors()
   const custom = st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : null
-  return { editors: found.map((f) => ({ id: f.id, name: f.name })), editor: custom ?? pickEditor(st.editor, found)?.name ?? null }
+  // Laramac Code unless you chose an editor that is still on this Mac.
+  return { editors: found.map((f) => ({ id: f.id, name: f.name })), editor: custom ?? found.find((f) => f.id === st.editor)?.name ?? 'Laramac Code' }
 }
 
 export function claudePath(): string | null {

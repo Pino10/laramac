@@ -23,7 +23,7 @@ interface ToolDef {
     needsNode?: boolean
   }
   /** App bundle names, matched case-insensitively, and where to get the app. */
-  app?: { names: string[]; url: string }
+  app?: { names: string[]; url: string; /** Also match any app whose name starts with this (versions, editions). */ prefix?: string }
   appleSiliconOnly?: boolean
 }
 
@@ -115,7 +115,7 @@ export const AI_TOOLS: ToolDef[] = [
     id: 'burp',
     name: 'Burp Suite',
     description: 'Web security testing, including logged-in scans, with its own AI',
-    app: { names: ['Burp Suite Professional.app', 'Burp Suite Community Edition.app'], url: 'https://portswigger.net/burp/releases' }
+    app: { names: ['Burp Suite Professional.app', 'Burp Suite Pro.app', 'Burp Suite Community Edition.app', 'Burp Suite.app'], prefix: 'burp suite', url: 'https://portswigger.net/burp/releases' }
   },
   {
     id: 'openclaw',
@@ -203,16 +203,33 @@ export function findCli(names: string[]): string | null {
   return null
 }
 
-function findApp(names: string[]): string | null {
-  const wanted = new Set(names.map((n) => n.toLowerCase()))
+function findApp(names: string[], prefix?: string): string | null {
+  const wanted = names.map((n) => n.toLowerCase())
+  let loose: string | null = null
   for (const dir of appDirs()) {
     try {
-      for (const entry of readdirSync(dir)) if (wanted.has(entry.toLowerCase())) return join(dir, entry)
+      const entries = readdirSync(dir)
+      // The first name on the list wins (Burp Suite Professional before Community).
+      for (const w of wanted) {
+        const hit = entries.find((e) => e.toLowerCase() === w)
+        if (hit) return join(dir, hit)
+      }
+      if (prefix && !loose) {
+        const hit = entries.find((e) => e.toLowerCase().startsWith(prefix) && e.endsWith('.app'))
+        if (hit) loose = join(dir, hit)
+      }
     } catch {
       /* folder missing */
     }
   }
-  return null
+  return loose
+}
+
+/** The edition in the app's name, such as Professional or Community Edition. */
+export function appEdition(toolName: string, appPath: string | null): string {
+  if (!appPath) return toolName
+  const base = appPath.split('/').pop()!.replace(/\.app$/i, '')
+  return /professional|\bpro\b/i.test(base) && !/professional|\bpro\b/i.test(toolName) ? `${toolName} Professional` : /community/i.test(base) ? `${toolName} Community` : toolName
 }
 
 const hasNode = (): boolean => findCli(['node']) !== null
@@ -221,7 +238,7 @@ export function listAiTools(): AiTool[] {
   return AI_TOOLS.map((t) => {
     const unsupported = !!t.appleSiliconOnly && process.arch !== 'arm64'
     const cliPath = t.cli ? findCli(t.cli.find) : null
-    const appPath = t.app ? findApp(t.app.names) : null
+    const appPath = t.app ? findApp(t.app.names, t.app.prefix) : null
     const note = unsupported
       ? 'Needs an Apple Silicon Mac'
       : t.cli?.needsNode && !cliPath && !appPath && !hasNode()
@@ -229,7 +246,7 @@ export function listAiTools(): AiTool[] {
         : undefined
     return {
       id: t.id,
-      name: t.name,
+      name: appEdition(t.name, appPath),
       description: t.description,
       cli: t.cli ? { installed: cliPath !== null } : null,
       app: t.app ? { installed: appPath !== null } : null,
@@ -250,7 +267,7 @@ export async function installAiTool(id: string, kind: 'cli' | 'app'): Promise<vo
   const t = tool(id)
   if (kind === 'app' && t.app) return shell.openExternal(t.app.url)
   // LM Studio's lms command ships inside the app.
-  if (kind === 'cli' && t.id === 'lmstudio' && t.app && !findApp(t.app.names)) return shell.openExternal(t.app.url)
+  if (kind === 'cli' && t.id === 'lmstudio' && t.app && !findApp(t.app.names, t.app.prefix)) return shell.openExternal(t.app.url)
   if (kind === 'cli' && t.cli) return openTerminal(homedir(), t.cli.install)
   throw new Error(`${t.name} has no ${kind === 'app' ? 'Mac app' : 'command-line version'}.`)
 }
@@ -265,7 +282,7 @@ const openApp = (path: string, folder?: string): Promise<void> =>
 export async function launchAiTool(id: string, cwd: string | null, kind?: 'cli' | 'app'): Promise<void> {
   const t = tool(id)
   const cliPath = t.cli ? findCli(t.cli.find) : null
-  const appPath = t.app ? findApp(t.app.names) : null
+  const appPath = t.app ? findApp(t.app.names, t.app.prefix) : null
   const useApp = kind === 'app' || (!kind && !cliPath) || (!kind && !cwd && !!appPath)
   if (useApp) {
     if (!appPath) throw new Error(`The ${t.name} app is not installed yet.`)

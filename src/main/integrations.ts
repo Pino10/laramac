@@ -53,7 +53,11 @@ export function projectRoots(): string[] {
  */
 export async function openInEditor(editor: string, path: string, line?: number): Promise<void> {
   const found = await installedEditors()
-  const useIde = editor === 'laramac' || (editor === 'auto' && (ideInstalled() || found.length === 0))
+  // Laramac Code is the default. A saved editor that is no longer on this Mac (Cursor removed,
+  // a custom app moved) falls back to it too, instead of failing.
+  const customApp = getSettings().editorApp
+  const stillThere = editor === 'custom' ? !!customApp && existsSync(customApp) : found.some((f) => f.id === editor)
+  const useIde = editor === 'laramac' || editor === 'auto' || !stillThere
   if (useIde) {
     if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
     await openInIde(path, line, projectRoots())

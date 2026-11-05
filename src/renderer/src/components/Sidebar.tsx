@@ -12,7 +12,7 @@ import {
   PanelLeftOpen,
   Server,
   Settings as SettingsIcon,
-  Terminal,
+  SquareCode,
   Layers,
   Sparkles,
   Rocket,
@@ -34,7 +34,8 @@ export const GROUPS: Group[] = [
     items: [
       { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={I} /> },
       { id: 'sites', label: 'Sites', icon: <Globe size={I} /> },
-      { id: 'starters', label: 'New project', icon: <Rocket size={I} /> }
+      { id: 'starters', label: 'Starter', icon: <Rocket size={I} /> },
+      { id: 'code', label: 'Laramac Code', icon: <SquareCode size={I} /> }
     ]
   },
   {
@@ -42,7 +43,6 @@ export const GROUPS: Group[] = [
     label: 'Run',
     items: [
       { id: 'services', label: 'Services', icon: <Layers size={I} /> },
-      { id: 'php', label: 'PHP', icon: <Terminal size={I} /> },
       { id: 'languages', label: 'Languages', icon: <Code2 size={I} /> },
       { id: 'databases', label: 'Databases', icon: <Database size={I} /> }
     ]
@@ -150,7 +150,7 @@ export default function Sidebar(): React.JSX.Element {
       data-tour={it.id}
       data-tip={slim ? it.label : undefined}
       aria-label={slim ? it.label : undefined}
-      aria-current={page === it.id || (it.id === 'tools' && page === 'assistant') ? 'page' : undefined}
+      aria-current={page === it.id || (it.id === 'tools' && page === 'assistant') || (it.id === 'languages' && page === 'php') ? 'page' : undefined}
       onClick={() => setPage(it.id)}
     >
       <span className="nav-icon">{it.icon}</span>

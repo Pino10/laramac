@@ -14,6 +14,7 @@ const defaults = (): AppSettings => ({
   tld: 'test',
   glass: true,
   glassStyle: 'studio',
+  appearance: 'auto',
   tourDone: false,
   dumps: false,
   xdebug: false,
@@ -28,7 +29,7 @@ const defaults = (): AppSettings => ({
   secondaryHttpsPort: 8443,
   shareProvider: 'cloudflare',
   ngrokToken: '',
-  editor: 'auto',
+  editor: 'laramac',
   allowLan: false,
   notifications: true,
   autoUpdateCheck: true,
@@ -86,6 +87,16 @@ export function migrate(loaded: Partial<AppSettings> & Record<string, unknown>):
     loaded.secondaryHttpsPort = (loaded.apacheHttpsPort as number) ?? 8443
     delete loaded.apachePort
     delete loaded.apacheHttpsPort
+    changed = true
+  }
+  // 0.26: Midnight became Prism.
+  if ((loaded.glassStyle as string) === 'midnight') {
+    loaded.glassStyle = 'prism'
+    changed = true
+  }
+  // An editor that was never really chosen ('auto') means Laramac Code now.
+  if (loaded.editor === 'auto') {
+    loaded.editor = 'laramac'
     changed = true
   }
   return changed

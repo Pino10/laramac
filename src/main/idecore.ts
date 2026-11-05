@@ -15,6 +15,7 @@ export interface IdeExtension {
 /** Installed with Laramac Code, for PHP first and the front end next to it. */
 export const IDE_EXTENSIONS: IdeExtension[] = [
   { id: 'bmewburn.vscode-intelephense-client', name: 'PHP Intelephense', why: 'PHP completion, go to definition, find references, errors and formatting' },
+  { id: 'phpactor.vscode-phpactor', name: 'Phpactor', why: 'PHP refactoring: rename, extract, import classes, generate methods (open source)' },
   { id: 'xdebug.php-debug', name: 'PHP Debug', why: 'Breakpoints and stepping through PHP with Xdebug' },
   { id: 'onecentlin.laravel-blade', name: 'Laravel Blade', why: 'Blade templates with snippets' },
   { id: 'mikestead.dotenv', name: 'DotENV', why: 'Colours for .env files' },
@@ -87,6 +88,24 @@ export interface IdeSettingsInput {
 }
 
 /**
+ * Phpactor does refactoring; Intelephense does completion. Phpactor's own completion and
+ * diagnostics are switched off so the two do not show everything twice.
+ */
+export const PHPACTOR_COMPLETORS = ['doctrine_annotation', 'imported_names', 'worse_parameter', 'named_parameter', 'constructor', 'class_member', 'scf_class', 'local_variable', 'subscript', 'declared_function', 'declared_constant', 'declared_class', 'expression_name_search', 'use', 'attribute', 'class_like', 'type', 'keyword', 'docblock']
+export function phpactorConfig(): Record<string, unknown> {
+  return {
+    ...Object.fromEntries(PHPACTOR_COMPLETORS.map((c) => [`completion_worse.completor.${c}.enabled`, false])),
+    'language_server_worse_reflection.diagnostics.enable': false,
+    'language_server_worse_reflection.inlay_hints.enable': false,
+    'language_server_phpstan.enabled': false,
+    'language_server_psalm.enabled': false,
+    'language_server_php_cs_fixer.enabled': false,
+    'language_server.enable_trust_check': false,
+    'indexer.exclude_patterns': ['/vendor/**/Tests/**/*', '/vendor/**/tests/**/*', '/node_modules/**/*', '/storage/**/*']
+  }
+}
+
+/**
  * Settings Laramac writes for Laramac Code. `managed` are always set (they follow Laramac);
  * `defaults` are only set when you have not set them yourself.
  */
@@ -105,11 +124,28 @@ export function ideSettings(o: IdeSettingsInput): { managed: Record<string, unkn
     'update.mode': 'none',
     'extensions.autoUpdate': true,
     'security.workspace.trust.enabled': false,
-    ...(o.phpPath ? { 'php.validate.executablePath': o.phpPath, 'php.debug.executablePath': o.phpPath } : {}),
+    ...(o.phpPath ? { 'php.validate.executablePath': o.phpPath, 'php.debug.executablePath': o.phpPath, 'phpactor.executablePath': o.phpPath } : {}),
+    'phpactor.config': phpactorConfig(),
+    // Laramac's own look: the activity bar on top, no layout clutter, no built-in AI chat (Laramac's checks and Claude Code do that).
+    'workbench.activity.showAccounts': false,
+    'workbench.layoutControl.enabled': false,
+    'chat.commandCenter.enabled': false,
+    'chat.disableAIFeatures': true,
+    'workbench.tips.enabled': false,
     ...(o.phpVersion ? { 'intelephense.environment.phpVersion': o.phpVersion } : {})
   }
   const defaults: Record<string, unknown> = {
     'workbench.startupEditor': 'none',
+    'workbench.activityBar.location': 'top',
+    'workbench.tree.indent': 14,
+    'workbench.tree.renderIndentGuides': 'onHover',
+    'editor.minimap.enabled': false,
+    'editor.scrollbar.verticalScrollbarSize': 9,
+    'editor.scrollbar.horizontalScrollbarSize': 9,
+    'explorer.compactFolders': false,
+    'window.commandCenter': true,
+    'laramac.checkOnSave': true,
+    'laramac.ai': 'ask',
     'editor.fontLigatures': true,
     'editor.lineHeight': 1.6,
     'editor.smoothScrolling': true,
@@ -160,4 +196,67 @@ export function serverArgs(o: { port: number; dataDir: string; extDir: string })
     '--disable-getting-started-override',
     '--ignore-last-opened'
   ]
+}
+
+/** The Laramac Checks extension's manifest (the code is idext/extension.cjs). */
+export function checksPackage(version: string): Record<string, unknown> {
+  return {
+    name: 'laramac-checks',
+    displayName: 'Laramac Checks',
+    description: 'Free checkers on save (PHP, PHPStan, Psalm), Semgrep from MacSec, and AI reviews with Laramac’s skills.',
+    publisher: 'laramac',
+    version,
+    engines: { vscode: '^1.70.0' },
+    categories: ['Linters'],
+    main: './extension.js',
+    activationEvents: ['onStartupFinished'],
+    contributes: {
+      commands: [
+        { command: 'laramac.checkFile', title: 'Check this file', category: 'Laramac' },
+        { command: 'laramac.checkProject', title: 'Check the project', category: 'Laramac' },
+        { command: 'laramac.reviewFile', title: 'Review this file with AI', category: 'Laramac' },
+        { command: 'laramac.reviewProject', title: 'Review the project with AI', category: 'Laramac' },
+        { command: 'laramac.clear', title: 'Clear Laramac’s problems', category: 'Laramac' },
+        { command: 'laramac.menu', title: 'Laramac', category: 'Laramac' }
+      ],
+      menus: {
+        'editor/title': [{ command: 'laramac.reviewFile', group: 'navigation@99', when: 'resourceScheme == file' }],
+        'explorer/context': [{ command: 'laramac.reviewProject', group: 'laramac' }]
+      },
+      keybindings: [{ command: 'laramac.menu', key: 'cmd+alt+l' }],
+      configuration: {
+        title: 'Laramac',
+        properties: {
+          'laramac.checkOnSave': { type: 'boolean', default: true, description: 'Check PHP files when you save them (PHP syntax, PHPStan, and Psalm when the project has psalm.xml).' },
+          'laramac.phpstan': { type: 'boolean', default: true, description: 'Use PHPStan (the project’s own, or the one installed on Laramac’s PHP page).' },
+          'laramac.phpstanLevel': { type: 'number', default: 5, minimum: 0, maximum: 10, description: 'PHPStan level for projects without their own phpstan.neon.' },
+          'laramac.ai': { type: 'string', enum: ['ask', 'claude', 'claudelm', 'claudefree'], enumDescriptions: ['Ask each time', 'Claude Code with your Claude account', 'Claude Code on your local model (LM Studio or Ollama)', 'Claude Code on Free LLM API'], default: 'ask', description: 'Who reviews code when you choose Review with AI. Reviews only read: they never change files.' }
+        }
+      }
+    }
+  }
+}
+
+/** Poppins (from Laramac) for the interface, or the Mac's own font. Code keeps a monospaced font. */
+export function workbenchCss(o: { uiFont: 'system' | 'poppins'; fonts: { weight: number; url: string }[] }): string {
+  const faces = o.uiFont === 'poppins' ? o.fonts.map((f) => `@font-face{font-family:'Laramac Poppins';font-style:normal;font-weight:${f.weight};font-display:swap;src:url(${f.url}) format('woff2')}`).join('') : ''
+  const family = o.uiFont === 'poppins' ? "'Laramac Poppins', -apple-system, BlinkMacSystemFont, sans-serif" : "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+  return `${faces}
+.monaco-workbench{font-family:${family}!important;-webkit-font-smoothing:antialiased}
+.monaco-workbench .part>.title .title-label h2,.monaco-workbench .pane-header .title,.monaco-workbench .composite.title .title-label{text-transform:none!important;letter-spacing:.01em;font-weight:600}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab{border-radius:9px 9px 0 0}
+.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab.active{font-weight:500}
+.monaco-workbench .activitybar .action-item .action-label,.monaco-workbench .composite-bar .action-item .action-label{border-radius:8px}
+.monaco-workbench .quick-input-widget{border-radius:14px!important;overflow:hidden;box-shadow:0 28px 70px -16px rgba(0,0,0,.5)!important}
+.monaco-workbench .quick-input-widget .monaco-inputbox,.monaco-workbench .monaco-inputbox{border-radius:8px!important}
+.monaco-workbench .quick-input-list .monaco-list-row,.monaco-workbench .monaco-list .monaco-list-row{border-radius:6px}
+.monaco-workbench .monaco-menu-container,.context-view .monaco-menu,.monaco-workbench .monaco-menu .actions-container{border-radius:12px!important}
+.monaco-workbench .notifications-toasts .notification-toast,.monaco-workbench .notifications-center{border-radius:12px!important;overflow:hidden}
+.monaco-editor .suggest-widget,.monaco-editor .monaco-hover,.monaco-workbench .monaco-hover,.monaco-editor .parameter-hints-widget{border-radius:10px!important;overflow:hidden}
+.monaco-workbench .monaco-button{border-radius:8px!important}
+.monaco-workbench .part.statusbar{font-size:11.5px}
+.monaco-workbench .part.statusbar .statusbar-item .statusbar-item-label{border-radius:6px}
+.monaco-workbench .command-center .command-center-center{border-radius:8px!important}
+.monaco-workbench .welcomePageContainer .welcomePage h1{font-weight:600}
+`
 }

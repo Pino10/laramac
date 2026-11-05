@@ -256,14 +256,14 @@ export function themePackage(accent: Accent, build: number): Record<string, unkn
 }
 
 /** A VSIX is a zip with these two files at its root, and the extension under extension/. */
-export function vsixManifest(version: string): string {
+export function vsixManifest(version: string, o: { id: string; name: string; description: string; category: string } = { id: 'laramac-studio-theme', name: 'Laramac Studio', description: 'The Laramac Studio look for Laramac Code.', category: 'Themes' }): string {
   return `<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Metadata>
-    <Identity Language="en-US" Id="laramac-studio-theme" Version="${version}" Publisher="laramac" />
-    <DisplayName>Laramac Studio</DisplayName>
-    <Description xml:space="preserve">The Laramac Studio look for Laramac Code.</Description>
-    <Categories>Themes</Categories>
+    <Identity Language="en-US" Id="${o.id}" Version="${version}" Publisher="laramac" />
+    <DisplayName>${o.name}</DisplayName>
+    <Description xml:space="preserve">${o.description}</Description>
+    <Categories>${o.category}</Categories>
     <Properties>
       <Property Id="Microsoft.VisualStudio.Code.Engine" Value="^1.70.0" />
     </Properties>
@@ -280,7 +280,7 @@ export function vsixManifest(version: string): string {
 }
 
 export const VSIX_CONTENT_TYPES = `<?xml version="1.0" encoding="utf-8"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json" /><Default Extension=".vsixmanifest" ContentType="text/xml" /></Types>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json" /><Default Extension=".js" ContentType="application/javascript" /><Default Extension=".vsixmanifest" ContentType="text/xml" /></Types>
 `
 
 /** A small number that changes when the accent does, for the theme's version. */

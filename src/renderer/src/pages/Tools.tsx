@@ -411,7 +411,7 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
             <select
               className="input"
               aria-label="Editor"
-              value={settings.editor === 'custom' || settings.editor === 'auto' || settings.editor === 'laramac' || tools.editors.some((e) => e.id === settings.editor) ? settings.editor : 'auto'}
+              value={(settings.editor === 'custom' && settings.editorApp) || tools.editors.some((e) => e.id === settings.editor) ? settings.editor : 'laramac'}
               onChange={async (e) => {
                 if (e.target.value === 'choose') {
                   const r = await act('editor-app', () => api.invoke('editors:choose-app'))
@@ -425,7 +425,7 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
                 setTools(await api.invoke('tools:status'))
               }}
             >
-              <option value="auto">Laramac Code (built in)</option>
+              <option value="laramac">Laramac Code (built in)</option>
               {tools.editors.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}

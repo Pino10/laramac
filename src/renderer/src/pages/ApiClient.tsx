@@ -743,9 +743,33 @@ export default function ApiClient(): React.JSX.Element {
 
             <div className="apic-resp glass">
               {!res ? (
-                <div className="hint" style={{ padding: 20 }}>
-                  Press Send or Return to see the response. Use {'{{name}}'} to fill in variables from {env ? `the ${env.name} environment` : 'an environment'}
-                  {activeCol?.variables?.length ? ' or the collection' : ''}.
+                <div className="apic-empty">
+                  <span className="apic-empty-icon">
+                    <Send size={22} />
+                  </span>
+                  <strong>Ready when you are</strong>
+                  <span className="hint">
+                    Press Send, or Return in the address. {'{{name}}'} fills in variables from {env ? `the ${env.name} environment` : 'an environment'}
+                    {activeCol?.variables?.length ? ' or the collection' : ''}.
+                  </span>
+                  <div className="apic-empty-actions">
+                    <button className="btn btn-sm" onClick={() => setDialog({ kind: 'code' })}>
+                      Code for this request
+                    </button>
+                    <button className="btn btn-sm" onClick={() => setDialog({ kind: 'paste' })}>
+                      Paste a cURL command
+                    </button>
+                    <button className="btn btn-sm" onClick={() => setDialog({ kind: 'env' })}>
+                      Environments
+                    </button>
+                  </div>
+                  <div className="apic-tips">
+                    <span>
+                      <kbd>↩</kbd> send
+                    </span>
+                    <span>Tests check the status, headers or a JSON value</span>
+                    <span>Save values passes a token to the next request</span>
+                  </div>
                 </div>
               ) : 'error' in res ? (
                 <div className="errbox" style={{ margin: 16, gridColumn: 'auto' }}>
@@ -757,8 +781,9 @@ export default function ApiClient(): React.JSX.Element {
                     <span className="status-chip lg" data-ok={res.status < 400} data-warn={res.status >= 300 && res.status < 400}>
                       {res.status} {res.statusText}
                     </span>
-                    <span className="hint">{res.ms} ms</span>
-                    <span className="hint">{formatBytes(res.bytes)}</span>
+                    <span className="resp-metric" data-speed={res.ms < 200 ? 'fast' : res.ms < 1000 ? 'ok' : 'slow'}>{res.ms} ms</span>
+                    <span className="resp-metric">{formatBytes(res.bytes)}</span>
+                    <span className="resp-metric resp-type">{res.contentType.split(';')[0] || 'no type'}</span>
                     <div className="seg-tabs" style={{ marginLeft: 'auto' }} role="tablist">
                       <button role="tab" aria-selected={respTab === 'body'} onClick={() => setRespTab('body')}>
                         Body

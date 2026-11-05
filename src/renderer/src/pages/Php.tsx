@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { ArrowUpCircle, Bug, FileCog, FolderPlus, Puzzle } from "lucide-react";
 import type { PhpVersionInfo } from "@shared/types";
 import { useApp } from "../store";
@@ -34,6 +35,9 @@ export default function Php(): React.JSX.Element {
 
   return (
     <>
+      <button className="back-link" onClick={() => setPage("languages")}>
+        <ArrowLeft size={14} /> Languages
+      </button>
       <PageHead
         title="PHP"
         desc="Laramac gives you the newest PHP and keeps it up to date. Need an older one for a project? Add it from a download and pick it per site."

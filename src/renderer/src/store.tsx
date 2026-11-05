@@ -17,7 +17,7 @@ export interface Toast {
   text: string
 }
 
-export type Page = 'dashboard' | 'sites' | 'starters' | 'languages' | 'recon' | 'security' | 'php' | 'databases' | 'servers' | 'tools' | 'packages' | 'api' | 'github' | 'assistant' | 'settings' | 'updates' | 'services'
+export type Page = 'dashboard' | 'sites' | 'starters' | 'code' | 'languages' | 'recon' | 'security' | 'php' | 'databases' | 'servers' | 'tools' | 'packages' | 'api' | 'github' | 'assistant' | 'settings' | 'updates' | 'services'
 
 interface AppCtx {
   page: Page
@@ -59,6 +59,8 @@ interface AppCtx {
   /** A starter picked from the command bar, opened by the Starters page. */
   pendingStarter: string | null
   setPendingStarter: (id: string | null) => void
+  /** What Laramac Code should show next (from "Open in editor"); null: what was open. */
+  codeUrl: { url: string | null; at: number } | null
   /** The site page that is open, and on which tab. */
   openSite: { name: string; tab?: string } | null
   showSite: (name: string | null, tab?: string) => void
@@ -100,6 +102,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [tourOpen, setTourOpen] = useState(false)
   const [pendingStarter, setPendingStarter] = useState<string | null>(null)
+  const [codeUrl, setCodeUrl] = useState<{ url: string | null; at: number } | null>(null)
   const [openSite, setOpenSite] = useState<{ name: string; tab?: string } | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
@@ -167,7 +170,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       api().on('activity:changed', setActivity),
       api().on('update:available', setUpdate),
       api().on('updates:changed', setUpdates),
-      api().on('app:navigate', (p) => setPage(p as Page))
+      api().on('app:navigate', (p) => setPage(p as Page)),
+      api().on('ide:show', ({ url }) => {
+        setCodeUrl({ url, at: Date.now() })
+        setPage('code')
+      })
     ]
     window.addEventListener('focus', refreshAll)
     return () => {
@@ -223,6 +230,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       tourOpen,
       setTourOpen,
       pendingStarter,
+      codeUrl,
       setPendingStarter,
       openSite,
       showSite: (name: string | null, tab?: string) => {
@@ -230,7 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         if (name) setPage('sites')
       }
     }),
-    [tourOpen, pendingStarter, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, updates, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [tourOpen, pendingStarter, codeUrl, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, updates, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

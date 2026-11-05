@@ -1,7 +1,7 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import * as phpdev from './phpdev'
-import { ideInstalled, ideLatest, ideLookChanged, ideNavigationAllowed, ideOpenWindow, ideStatus, ideVersion, installExtensions, installIde, isIdeContents, openInIde, stopIde } from './ide'
-import { isAppBundle, isEditorChoice } from './seckit/editors'
+import { addShortcut, ideDetach, ideEmbed, ideEmbedBounds, ideInstalled, ideLatest, ideLookChanged, ideNavigationAllowed, ideOpenWindow, ideStatus, ideUnembed, ideVersion, installExtensions, installIde, isIdeContents, openInIde, removeShortcut, setIdeHost, stopIde, type Rect } from './ide'
+import { EDITORS, isAppBundle, isEditorChoice } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
@@ -245,11 +245,35 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
+    ideUnembed(true)
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingIdeShow) {
+      send('ide:show', pendingIdeShow)
+      pendingIdeShow = null
+    }
   })
 
   if (RENDERER_URL) mainWindow.loadURL(RENDERER_URL)
   else mainWindow.loadFile(RENDERER_FILE)
 }
+
+/** Laramac Code shown inside Laramac's window: from "Open in editor" or the Laramac Code app. */
+let pendingIdeShow: { url: string | null } | null = null
+function showIde(url: string | null): void {
+  const loading = !mainWindow || mainWindow.webContents.isLoading()
+  showWindow()
+  if (loading) pendingIdeShow = { url }
+  else send('ide:show', { url })
+}
+setIdeHost((url) => showIde(url))
+// laramac://code, from the Laramac Code app in Applications. Nothing else is accepted.
+app.on('open-url', (e, url) => {
+  e.preventDefault()
+  if (!/^laramac:\/\/code\/?$/.test(url)) return
+  if (app.isReady()) showIde(null)
+  else pendingIdeShow = { url: null }
+})
 
 function showWindow(): void {
   if (!mainWindow) createWindow()
@@ -365,7 +389,7 @@ function createTray(): void {
             sites: listSites(),
             tld: st.tld,
             phpmyadmin: phpmyadminInstalled(),
-            editor: st.editor === 'auto' || st.editor === 'laramac' ? 'Laramac Code' : st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : st.editor === 'auto' ? 'your editor' : st.editor,
+            editor: st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : (EDITORS.find((e) => e.id === st.editor)?.name ?? 'Laramac Code'),
             aiName: AI_LABEL[st.aiTool] ?? 'AI tool'
           })
         )
@@ -491,6 +515,7 @@ function registerIpc(): void {
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
     if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize) void ideLookChanged(next.accent !== before.accent)
+    if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' || next.appearance === 'dark' ? next.appearance : 'system'
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
       const claude = findCli(['claude'])
@@ -663,6 +688,27 @@ function registerIpc(): void {
   })
   handle('ide:stop', async () => {
     await stopIde()
+    return ideStatus()
+  })
+  const validRect = (r: unknown): Rect => {
+    const o = (r ?? {}) as Record<string, unknown>
+    const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= -10 && v < 20000 ? v : 0)
+    return { x: n(o.x), y: n(o.y), width: n(o.width), height: n(o.height) }
+  }
+  handle('ide:embed', async (url, rect) => {
+    if (!mainWindow) throw new ValidationError('The window is not open.')
+    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
+    return ideEmbed(mainWindow, typeof url === 'string' ? url : null, validRect(rect), getSettings().wwwPath)
+  })
+  handle('ide:embed-bounds', (rect) => ideEmbedBounds(validRect(rect)))
+  handle('ide:unembed', () => ideUnembed())
+  handle('ide:detach', () => ideDetach())
+  handle('macsec:status', () => ({ installed: existsSync('/Applications/MacSec.app') || existsSync(join(homedir(), 'Applications', 'MacSec.app')) || review.hasMacsec() }))
+  handle('ide:shortcut', (on) => {
+    if (on === true) {
+      const p = addShortcut()
+      activity.push('success', 'Laramac Code is in your Applications', `Find it with Spotlight or drag it to the Dock. It is ${p.replace(process.env.HOME ?? '', '~')}.`)
+    } else removeShortcut()
     return ideStatus()
   })
   handle('editors:choose-app', async () => {
@@ -3134,6 +3180,8 @@ app.whenReady().then(() => {
   }, 25_000)
   // 0.23 brings the Studio look as the default; it reaches everyone once, and Settings, Look switches back.
   if ((getSettings().lookVersion ?? 0) < 23) setSettings({ glassStyle: 'studio', lookVersion: 23 })
+  // Light, dark or the Mac's own: for the window, its glass and Laramac Code.
+  nativeTheme.themeSource = getSettings().appearance === 'light' || getSettings().appearance === 'dark' ? (getSettings().appearance as 'light' | 'dark') : 'system'
   ensureWww()
   refreshShims()
   refreshRuntimeShims()

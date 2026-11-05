@@ -1,3 +1,37 @@
+## New in 0.26
+
+### Laramac Code, inside Laramac
+- **Its own place in the sidebar.** Laramac Code opens inside Laramac's window, with a bar to switch sites, open it in its own window, or stop it.
+- **"Open in editor" now really opens Laramac Code** unless you chose another editor in Settings. Before, an editor that was no longer on your Mac (Cursor removed, for example) gave "No code editor was found".
+- **A Laramac Code app in your Applications**, for Spotlight, Launchpad and the Dock: one click on its page or in Settings.
+- **Laramac's look**: Poppins or the Mac's font for the interface, rounder tabs, menus and pop-ups, the activity bar on top, no layout clutter. Code keeps a monospaced font.
+- **Smarter PHP, all free**: Intelephense for completion and errors, now with **Phpactor** for rename, extract, import and generate. Phpactor's own suggestions are off so you never see everything twice; Intelephense's paid extras stay off.
+- **Laramac Checks**, built in: when you save a PHP file, PHP's own syntax check, PHPStan (the project's, or the one from the PHP page) and Psalm (when the project has psalm.xml) show their problems in the editor. "Check the project" adds Semgrep when MacSec is installed.
+- **Reviews with skills, from the editor**: "Review with AI" asks Claude Code, your local model or Free LLM API to read the file or project with Laramac's skills and Laravel's own, and shows what it finds in the Problems panel. It only reads.
+
+### Laravel's own skills
+- **Laravel Boost's skills**, from Laravel (MIT): Laravel best practices with a rule for each topic (security, Eloquent and N+1, validation, queues, caching, routing), Tailwind CSS 4 and Pennant. They come by default and are picked for Laravel projects. The paid Flux UI Pro and Laravel Cloud skills are left out.
+
+### A sidebar that reads better
+- **Starter** (was New project) and **Laramac Code** at the top.
+- **PHP lives in Languages** now: every language is a card. PHP opens its versions, settings and tools; Node.js opens its versions to install side by side.
+
+### The Overview
+- **Requests today**, bigger and clearer, with mail, backups, the median time and security beside it. Server errors became a small red note when there are any.
+- **Live on this Mac**: your sites and services in orbit around your Mac, with requests flowing in, faster when traffic is busier.
+- **A round plus** to start a project, and **Shortcuts** as app icons (phpMyAdmin, Mail inbox, Services, Projects folder, Import).
+
+### Every look, light and dark
+- **Like my Mac, Light or Dark**, for every look, so you can switch without waiting for the evening.
+- **Prism** replaces Midnight: glass with a rainbow edge over slowly moving light.
+- **Studio** has clearer, deeper glass. Smoked, Aurora and Frosted have a proper light and dark side each.
+
+### Also
+- **Packages** shows an Update button where there is an update.
+- **API client**: a useful start screen, and the response's time (green when fast), size and type at a glance.
+- **Burp Suite Professional** shows as Professional on AI tools.
+- **Settings** introduces Laramac Code and MacSec.
+
 ## New in 0.25
 
 ### Laramac Code: a code editor built in

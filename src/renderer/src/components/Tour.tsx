@@ -35,10 +35,10 @@ export const TOUR: Step[] = [
     body: 'New projects in any language: React, Next.js, Laravel, Django, C#, Go, Rust, Swift and more. Laramac installs what is missing and starts it at name.test.'
   },
   {
-    target: '[data-tour="php"]',
-    page: 'php',
-    title: 'PHP and databases',
-    body: 'Install any PHP version and pick one per site. Databases has MySQL, PostgreSQL, Redis and the rest, with backups, imports and phpMyAdmin.'
+    target: '[data-tour="languages"]',
+    page: 'languages',
+    title: 'Languages and databases',
+    body: 'PHP, Node.js and every other language, each with the versions you want. Open PHP for its versions, settings and tools. Databases has MySQL, PostgreSQL, Redis and the rest, with backups, imports and phpMyAdmin.'
   },
   {
     target: '[data-tour="servers"]',

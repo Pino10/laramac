@@ -19,6 +19,7 @@ import Settings from './pages/Settings'
 import Servers from './pages/Servers'
 import Packages from './pages/Packages'
 import ApiClient from './pages/ApiClient'
+import Code from './pages/Code'
 import Starters from './pages/Starters'
 import Languages from './pages/Languages'
 import Security from './pages/Security'
@@ -32,14 +33,15 @@ function Shell(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
   }, [appInfo])
-  // Studio follows the Mac's light and dark mode, live; Frosted is always light, the others dark.
+  // Every look has a light and a dark side. Laramac sets the window's appearance (Auto follows the
+  // Mac, or always light or dark), so the media query below already says which one to show.
   useEffect(() => {
     const root = document.documentElement
     const style = settings?.glassStyle ?? 'studio'
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
       root.dataset.glass = style
-      root.dataset.tone = style === 'frost' ? 'light' : style === 'studio' ? (mq.matches ? 'dark' : 'light') : 'dark'
+      root.dataset.tone = mq.matches ? 'dark' : 'light'
       root.dataset.accent = settings?.accent ?? 'blue'
       root.dataset.font = settings?.uiFont ?? 'system'
     }
@@ -89,10 +91,11 @@ function Shell(): React.JSX.Element {
           </header>
           <div className="scroll">
             <div className="main-inner" data-page={page} key={page}>
-              {page !== 'updates' && <UpdateBanner />}
+              {page !== 'updates' && page !== 'code' && <UpdateBanner />}
               {page === 'dashboard' && <Dashboard />}
               {page === 'sites' && <Sites />}
               {page === 'starters' && <Starters />}
+              {page === 'code' && <Code />}
               {page === 'languages' && <Languages />}
               {page === 'security' && <Security />}
               {page === 'php' && <Php />}

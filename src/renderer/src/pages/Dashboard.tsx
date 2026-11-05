@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import Pulse from '../components/Pulse'
-import { ArrowUpRight, Code2, Database, Info, Mail, Plus, Upload } from 'lucide-react'
+import { ArrowUpRight, Database, FolderOpen, Info, Layers, Mail, Plus, Upload } from 'lucide-react'
 import SiteQuickView from '../components/SiteQuickView'
 import { useApp } from '../store'
 import { SERVICE_SECTIONS } from './Services'
@@ -206,44 +206,45 @@ export default function Dashboard(): React.JSX.Element {
 
       <section className="ov-block">
         <h2 className="section-title">Shortcuts</h2>
-        <div className="shortcut-tiles">
-          <button className="shortcut" onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
-            <span className="shortcut-icon">
-              <Database size={18} />
+        <div className="dock">
+          <button className="dock-app" style={{ ['--g1' as string]: '#f59e0b', ['--g2' as string]: '#ea580c' }} onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
+            <span className="dock-icon">
+              <Database size={24} />
             </span>
             <strong>phpMyAdmin</strong>
             <small>{busy.has('tool-phpmyadmin') ? 'Installing…' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</small>
           </button>
           <button
-            className="shortcut"
+            className="dock-app"
+            style={{ ['--g1' as string]: '#38bdf8', ['--g2' as string]: '#2563eb' }}
             onClick={() => (mailpit?.status === 'running' ? api.invoke('sites:open-url', 'http://127.0.0.1:8025') : notify({ kind: 'info', text: 'Start Mailpit first, on the Services page.' }))}
           >
-            <span className="shortcut-icon">
-              <Mail size={18} />
+            <span className="dock-icon">
+              <Mail size={24} />
             </span>
             <strong>Mail inbox</strong>
-            <small>{mailpit?.status === 'running' ? 'Catching mail on port 1025' : 'Mailpit is off'}</small>
+            <small>{mailpit?.status === 'running' ? 'Catching mail' : 'Mailpit is off'}</small>
           </button>
-          <button className="shortcut" onClick={() => setPage('starters')}>
-            <span className="shortcut-icon">
-              <Plus size={18} />
+          <button className="dock-app" style={{ ['--g1' as string]: '#a78bfa', ['--g2' as string]: '#7c3aed' }} onClick={() => setPage('services')}>
+            <span className="dock-icon">
+              <Layers size={24} />
             </span>
-            <strong>New project</strong>
-            <small>React, Laravel, Django, C# and 30 more</small>
+            <strong>Services</strong>
+            <small>{running} of {installed.length} running</small>
           </button>
-          <button className="shortcut" onClick={() => act('ide-open', () => api.invoke('ide:open', null))}>
-            <span className="shortcut-icon">
-              <Code2 size={18} />
+          <button className="dock-app" style={{ ['--g1' as string]: '#34d399', ['--g2' as string]: '#059669' }} onClick={() => settings && act('www', () => api.invoke('sites:open-folder', settings.wwwPath))}>
+            <span className="dock-icon">
+              <FolderOpen size={24} />
             </span>
-            <strong>Laramac Code</strong>
-            <small>The built-in editor, set up for PHP</small>
+            <strong>Projects folder</strong>
+            <small>{(settings?.wwwPath ?? '').replace(/^\/Users\/[^/]+/, '~')}</small>
           </button>
-          <button className="shortcut" onClick={() => setImportOpen(true)}>
-            <span className="shortcut-icon">
-              <Upload size={18} />
+          <button className="dock-app" style={{ ['--g1' as string]: '#f472b6', ['--g2' as string]: '#db2777' }} onClick={() => setImportOpen(true)}>
+            <span className="dock-icon">
+              <Upload size={24} />
             </span>
             <strong>Import</strong>
-            <small>From Laragon, a zip or a .sql dump</small>
+            <small>Laragon, a zip or a .sql dump</small>
           </button>
         </div>
       </section>
@@ -301,8 +302,11 @@ function YourSites(): React.JSX.Element | null {
             )}
           </div>
         ))}
-        <button className="ys-card ys-new glass" onClick={() => setPage('starters')}>
-          <Plus size={18} /> New project
+        <button className="ys-new-fab" onClick={() => setPage('starters')} aria-label="Start a new project">
+          <span className="fab">
+            <Plus size={24} />
+          </span>
+          <span>Starter</span>
         </button>
       </div>
       {open && <SiteQuickView site={open} onClose={() => setDetails(null)} />}

@@ -603,10 +603,19 @@ export interface OverviewPulse {
   review: { title: string; at: string; critical: number; high: number; medium: number; low: number } | null
 }
 
+export interface ViewRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface IdeStatus {
   installed: boolean
   version: string | null
   running: boolean
+  /** Whether the Laramac Code app is in ~/Applications. */
+  shortcut: boolean
   extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
 }
 
@@ -691,7 +700,9 @@ export interface AppSettings {
   tld: string
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
-  glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'midnight'
+  glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism'
+  /** Light or dark: follow the Mac, or always one. Every look has both. */
+  appearance?: 'auto' | 'light' | 'dark'
   /** The first-run tour has been seen. */
   tourDone: boolean
   /** Send dump() and dd() to the Dumps window instead of the page. */
@@ -1100,6 +1111,15 @@ export interface Channels {
   'ide:extensions': { args: []; result: IdeStatus }
   'ide:open': { args: [string | null]; result: void }
   'ide:stop': { args: []; result: IdeStatus }
+  /** Shows Laramac Code inside the window over this rectangle; null opens what was open, or the www folder. */
+  'ide:embed': { args: [string | null, ViewRect]; result: { url: string } }
+  'ide:embed-bounds': { args: [ViewRect]; result: void }
+  'ide:unembed': { args: []; result: void }
+  'ide:detach': { args: []; result: void }
+  /** Adds (true) or removes (false) the Laramac Code app in ~/Applications. */
+  'ide:shortcut': { args: [boolean]; result: IdeStatus }
+  /** Whether MacSec, Laramac's security workbench, is on this Mac. */
+  'macsec:status': { args: []; result: { installed: boolean } }
   'sites:open-claude': { args: [string]; result: void }
   'sites:share': { args: [string]; result: string }
   'sites:unshare': { args: [string]; result: void }
@@ -1320,6 +1340,8 @@ export interface Channels {
 export type ChannelName = keyof Channels
 
 export interface Events {
+  /** Open the Laramac Code page with this address (from "Open in editor" or the Laramac Code app). */
+  'ide:show': { url: string | null }
   'services:changed': ServiceInfo[]
   'jobs:changed': JobInfo[]
   'sites:changed': SiteInfo[]

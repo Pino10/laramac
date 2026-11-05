@@ -251,6 +251,14 @@ export default function Security(): React.JSX.Element {
               </div>
             </div>
             {reviewer.startsWith('claude') && <SkillPicker site={kind === 'site' ? site || null : null} reviewer={reviewer} onChange={setSkills} />}
+            <div className="while-coding">
+              <span>
+                <strong>While you code</strong> Laramac Code checks PHP when you save (PHPStan, Psalm) and reviews one file with these same skills, from the editor.
+              </span>
+              <button className="btn btn-sm" onClick={() => setPage('code')}>
+                Open Laramac Code
+              </button>
+            </div>
             <label className="check-row">
               <input type="checkbox" checked={scanners} onChange={(e) => setScanners(e.target.checked)} />
               Run MacSec’s scanners first (Semgrep, Gitleaks, OSV-Scanner), when MacSec is installed, and have the reviewer check each result

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Tools from './Tools'
+import Family from '../components/Family'
 import { FolderOpen, RotateCcw, Search, X } from 'lucide-react'
 import { SETTINGS_INDEX } from '../settingsIndex'
 import type { AppSettings, ResetOptions } from '@shared/types'
@@ -298,6 +299,7 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <h2 className="section-title">Terminal and editor</h2>
+      <Family />
       <Tools part="more" />
 
       <h2 className="section-title">Appearance and alerts</h2>
@@ -321,17 +323,30 @@ export default function Settings(): React.JSX.Element {
         <div className="row row-set" style={{ borderBottom: 0 }}>
           <div className="row-main">
             <div className="row-title">Look</div>
-            <div className="row-sub">How the panels, pop-ups and menus look. It changes straight away.</div>
+            <div className="row-sub">How the panels, pop-ups and menus look. Every look has a light and a dark side.</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Light or dark">
+            {(
+              [
+                ['auto', 'Like my Mac'],
+                ['light', 'Light'],
+                ['dark', 'Dark']
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} role="radio" aria-checked={(settings.appearance ?? 'auto') === id} onClick={() => updateSettings({ appearance: id })}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="glass-picker" role="radiogroup" aria-label="Glass style">
           {(
             [
-              ['studio', 'Studio', 'Liquid Glass that follows your Mac: night glass lit in colour, or bright frosted glass by day. The default.'],
-              ['smoke', 'Smoked', 'Dark tinted glass over soft violet light.'],
-              ['aurora', 'Aurora', 'Brighter glass soaked in purple, pink and cyan.'],
-              ['midnight', 'Midnight', 'Near black and quiet, with the most contrast.'],
-              ['frost', 'Frosted', 'Light glass that follows light and dark mode.']
+              ['studio', 'Studio', 'Clear Liquid Glass lit in your accent colour. The default.'],
+              ['prism', 'Prism', 'Glass with a rainbow edge over slowly moving light, like a lens catching the sun.'],
+              ['aurora', 'Aurora', 'Glass soaked in purple, pink and cyan.'],
+              ['smoke', 'Smoked', 'Tinted glass over soft violet light.'],
+              ['frost', 'Frosted', 'Quiet, neutral frosted glass.']
             ] as const
           ).map(([id, label, hint]) => (
             <button key={id} className="gp-tile" role="radio" aria-checked={(settings.glassStyle ?? 'studio') === id} onClick={() => updateSettings({ glassStyle: id })}>

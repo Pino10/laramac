@@ -33,3 +33,8 @@ electronFuses:
   enableNodeCliInspectArguments: false
   enableCookieEncryption: true
   onlyLoadAppFromAsar: true
+# laramac://code opens Laramac Code (the small Laramac Code app in Applications uses it).
+protocols:
+  - name: Laramac
+    schemes:
+      - laramac
