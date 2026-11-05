@@ -323,7 +323,7 @@ export default function Settings(): React.JSX.Element {
         <div className="glass-picker" role="radiogroup" aria-label="Glass style">
           {(
             [
-              ['studio', 'Studio', 'Solid dark surfaces and a soft blue, like Google’s dark apps, with Apple’s type. The default.'],
+              ['studio', 'Studio', 'Dark Liquid Glass lit in Google blue, teal and violet, with Apple’s type. The default.'],
               ['smoke', 'Smoked', 'Dark tinted glass over soft violet light.'],
               ['aurora', 'Aurora', 'Brighter glass soaked in purple, pink and cyan.'],
               ['midnight', 'Midnight', 'Near black and quiet, with the most contrast.'],

@@ -4186,260 +4186,6 @@ html[data-tone='light'] .nav-item[aria-current='page'] svg {
 .int-cmd code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .hosting > .input { display: block; width: 100%; }
 
-/* ==========================================================================
- * Studio (Laramac 0.23, the default)
- *
- * Google's dark apps meet Apple: solid, calm surfaces in tonal greys (no glass
- * to read through), a soft blue accent, filled tonal pills for what is chosen,
- * and Apple's own type, rounding and hairlines. Easy on the eyes all day.
- * ========================================================================== */
-html[data-glass='studio'] {
-  color-scheme: dark;
-  --canvas: 19 19 20;
-  --canvas-alpha: 1;
-  --wash-a: transparent;
-  --wash-b: transparent;
-  --wash-c: transparent;
-  --s0: #131314;
-  --s1: #1b1c1d;
-  --s2: #1f2022;
-  --s3: #282a2c;
-  --s4: #333537;
-  --glass: var(--s2);
-  --glass-strong: var(--s3);
-  --glass-solid: var(--s4);
-  --glass-sheen: transparent;
-  --glass-edge: rgba(255, 255, 255, 0.06);
-  --glass-hair: rgba(0, 0, 0, 0.4);
-  --blur: none;
-  --surface: var(--s3);
-  --surface-2: var(--s4);
-  --ink: #e3e3e3;
-  --ink-2: #c4c7c5;
-  --ink-3: #8e918f;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.13);
-  --sel: rgba(255, 255, 255, 0.06);
-  --accent: #a8c7fa;
-  --accent-text: #a8c7fa;
-  --accent-ink: #062e6f;
-  --accent-soft: rgba(168, 199, 250, 0.16);
-  --accent-softer: rgba(168, 199, 250, 0.08);
-  --chosen: #004a77;
-  --chosen-ink: #c2e7ff;
-  --ok: #6dd58c;
-  --ok-soft: rgba(109, 213, 140, 0.14);
-  --warn: #fdd663;
-  --bad: #f2b8b5;
-  --bad-soft: rgba(242, 184, 181, 0.14);
-  --focus: 0 0 0 2px var(--s0), 0 0 0 4px #a8c7fa;
-  --float: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
-  --float-hi: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --r-xl: 28px;
-  --r-lg: 24px;
-  --r-md: 16px;
-  --r-sm: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.005em;
-}
-html[data-glass='studio'] body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
-}
-html[data-glass='studio'] body,
-html[data-glass='studio'] .canvas,
-html[data-glass='studio'][data-material] .canvas {
-  background: var(--s0);
-}
-html[data-glass='studio'] h1,
-html[data-glass='studio'] h2,
-html[data-glass='studio'] .page-title {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  letter-spacing: -0.02em;
-  font-weight: 600;
-}
-
-/* Surfaces: solid tonal layers, a hairline, no blur. */
-html[data-glass='studio'] .glass,
-html[data-glass='studio'] .panel,
-html[data-glass='studio'] .group,
-html[data-glass='studio'] .main,
-html[data-glass='studio'][data-material] .main {
-  background: var(--s1);
-  border: 1px solid var(--glass-edge);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-html[data-glass='studio'] .sidebar,
-html[data-glass='studio'][data-material] .sidebar {
-  background: var(--s0);
-  border: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-html[data-glass='studio'] .group,
-html[data-glass='studio'] .panel .group,
-html[data-glass='studio'] .card {
-  background: var(--s2);
-}
-html[data-glass='studio'] .dialog,
-html[data-glass='studio'] .popover,
-html[data-glass='studio'] .palette,
-html[data-glass='studio'] .menu,
-html[data-glass='studio'] .toast {
-  background: var(--s3);
-  border: 1px solid var(--line);
-  box-shadow: var(--float-hi);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-html[data-glass='studio'] .dialog {
-  border-radius: var(--r-xl);
-}
-html[data-glass='studio'] .banner {
-  background: var(--s3);
-  border-color: var(--line);
-}
-
-/* Navigation: Google's filled pill for the page you are on. */
-html[data-glass='studio'] .nav-item {
-  border-radius: 999px;
-  color: var(--ink-2);
-}
-html[data-glass='studio'] .nav-item:hover {
-  background: var(--sel);
-}
-html[data-glass='studio'] .nav-item[aria-current='page'],
-html[data-glass='studio'][data-tone='dark'] .nav-item[aria-current='page'] {
-  background: var(--chosen);
-  color: var(--chosen-ink);
-  box-shadow: none;
-  font-weight: 600;
-}
-html[data-glass='studio'] .nav-item[aria-current='page'] svg,
-html[data-glass='studio'][data-tone='dark'] .nav-item[aria-current='page'] svg {
-  color: var(--chosen-ink);
-}
-
-/* Buttons: outlined by default, filled blue for the main action, tonal for the rest. */
-html[data-glass='studio'] .btn,
-html[data-glass='studio'] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
-  background: transparent;
-  border: 1px solid #8e918f66;
-  color: var(--accent);
-  box-shadow: none;
-  font-weight: 500;
-}
-html[data-glass='studio'] .btn:hover:not(:disabled) {
-  background: var(--accent-softer);
-  box-shadow: none;
-}
-html[data-glass='studio'] .btn-primary,
-html[data-glass='studio'] .btn-primary:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: transparent;
-  box-shadow: none;
-}
-html[data-glass='studio'] .btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, #fff);
-  box-shadow: var(--float);
-}
-html[data-glass='studio'] .btn-tonal,
-html[data-glass='studio'] .btn-accent {
-  background: var(--chosen);
-  color: var(--chosen-ink);
-  border-color: transparent;
-  box-shadow: none;
-}
-html[data-glass='studio'] .btn-quiet {
-  background: transparent;
-  border-color: transparent;
-  color: var(--accent);
-}
-html[data-glass='studio'] .btn-danger {
-  background: transparent;
-  border: 1px solid rgba(242, 184, 181, 0.4);
-  color: var(--bad);
-}
-
-/* Fields, chips, tabs and switches. */
-html[data-glass='studio'] .input,
-html[data-glass='studio'] select.input,
-html[data-glass='studio'] textarea.input {
-  background: var(--s3);
-  border: 1px solid transparent;
-  color: var(--ink);
-}
-html[data-glass='studio'] .input:focus,
-html[data-glass='studio'] textarea.input:focus {
-  border-color: var(--accent);
-  box-shadow: none;
-  outline: none;
-}
-html[data-glass='studio'] .searchbox {
-  background: var(--s3) !important;
-  border-color: transparent !important;
-}
-html[data-glass='studio'] .tag {
-  background: var(--s4);
-  color: var(--ink-2);
-}
-html[data-glass='studio'] .tag-accent {
-  background: var(--chosen);
-  color: var(--chosen-ink);
-}
-html[data-glass='studio'] .seg-tabs {
-  background: var(--s3);
-}
-html[data-glass='studio'] .seg-tabs button[aria-selected='true'],
-html[data-glass='studio'] .dialog .seg-tabs button[aria-selected='true'] {
-  background: var(--chosen);
-  color: var(--chosen-ink);
-  box-shadow: none;
-}
-html[data-glass='studio'] .switch {
-  background: var(--s4);
-  outline: 2px solid #8e918f;
-  outline-offset: -2px;
-}
-html[data-glass='studio'] .switch[aria-checked='true'] {
-  background: var(--accent) !important;
-  outline-color: transparent;
-}
-html[data-glass='studio'] .switch[aria-checked='true']::after {
-  background: var(--accent-ink);
-}
-html[data-glass='studio'] :focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-}
-html[data-glass='studio'] ::selection {
-  background: rgba(168, 199, 250, 0.35);
-}
-
-/* Its tile in Settings. */
-.gp-studio {
-  background: #131314;
-}
-.gp-studio .gp-side {
-  background: #004a77;
-  height: 14px;
-  bottom: auto;
-  top: 12px;
-  border-radius: 999px;
-}
-.gp-studio .gp-card {
-  background: #1f2022;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.gp-studio .gp-pop {
-  background: #282a2c;
-  color: #a8c7fa;
-}
-
 /* ---------- Free LLM API ---------- */
 .fl-fields {
   display: grid;
@@ -4469,20 +4215,316 @@ html[data-glass='studio'] ::selection {
   }
 }
 
-/* Studio: the rest of the details. */
-html[data-glass='studio'] .settings-jump {
-  background: var(--s1);
-  box-shadow: 0 8px 12px -10px rgba(0, 0, 0, 0.6);
+/* ==========================================================================
+ * Studio (Laramac 0.23.1, the default)
+ *
+ * Apple's Liquid Glass in the dark, with Google's colour. A deep night canvas
+ * lit by soft blue, teal and violet light; panels are thick frosted glass
+ * with a bright rim and a sheen on top; what you choose glows in Google blue.
+ * ========================================================================== */
+html[data-glass='studio'] {
+  color-scheme: dark;
+  --canvas: 7 9 15;
+  --wash-a: rgba(26, 115, 232, 0.62);
+  --wash-b: rgba(124, 77, 255, 0.38);
+  --wash-c: rgba(0, 191, 165, 0.36);
+  --glass: rgba(22, 26, 38, 0.46);
+  --glass-strong: rgba(255, 255, 255, 0.07);
+  --glass-solid: rgba(255, 255, 255, 0.13);
+  --glass-sheen: rgba(255, 255, 255, 0.07);
+  --glass-edge: rgba(255, 255, 255, 0.13);
+  --glass-hair: rgba(0, 0, 0, 0.5);
+  --blur: saturate(190%) blur(44px);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.1);
+  --ink: #f1f4fb;
+  --ink-2: rgba(226, 232, 245, 0.76);
+  --ink-3: rgba(210, 218, 236, 0.5);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --sel: rgba(255, 255, 255, 0.08);
+  --accent: #8ab4f8;
+  --accent-2: #669df6;
+  --accent-text: #aecbfa;
+  --accent-ink: #041e49;
+  --accent-soft: rgba(138, 180, 248, 0.2);
+  --accent-softer: rgba(138, 180, 248, 0.1);
+  --glow: 0 0 0 1px rgba(138, 180, 248, 0.35), 0 10px 30px -8px rgba(66, 133, 244, 0.75);
+  --ok: #81c995;
+  --ok-soft: rgba(129, 201, 149, 0.16);
+  --warn: #fdd663;
+  --bad: #f28b82;
+  --bad-soft: rgba(242, 139, 130, 0.16);
+  --focus: 0 0 0 3px rgba(138, 180, 248, 0.5);
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.04), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --float: 0 1px 1px rgba(0, 0, 0, 0.35), 0 20px 50px -20px rgba(0, 0, 0, 0.85);
+  --float-hi: 0 2px 6px rgba(0, 0, 0, 0.4), 0 40px 90px -24px rgba(0, 0, 0, 0.9);
+  --r-xl: 30px;
+  --r-lg: 24px;
+  --r-md: 18px;
+  --r-sm: 12px;
 }
-html[data-glass='studio'] .foot-btn {
-  background: var(--s2);
+html[data-glass='studio'] body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+html[data-glass='studio'] h1,
+html[data-glass='studio'] h2,
+html[data-glass='studio'] .page-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  font-weight: 650;
+}
+html[data-glass='studio'] .page-title {
+  background: linear-gradient(100deg, #ffffff 20%, #c8dafc 60%, #a7f3e4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The canvas: deep night with three soft lights, so the glass has colour to bend. */
+html[data-glass='studio'] .canvas {
+  background:
+    radial-gradient(60% 55% at 0% 0%, var(--wash-a), transparent 70%),
+    radial-gradient(45% 45% at 100% 0%, var(--wash-b), transparent 72%),
+    radial-gradient(55% 50% at 85% 105%, var(--wash-c), transparent 72%),
+    radial-gradient(40% 40% at 30% 75%, rgba(66, 133, 244, 0.18), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%),
+    rgb(var(--canvas) / var(--canvas-alpha));
+}
+
+/* Glass: thick frost, a bright rim, a sheen across the top, deep shadow. */
+html[data-glass='studio'] .glass,
+html[data-glass='studio'] .panel,
+html[data-glass='studio'] .group,
+html[data-glass='studio'] .sidebar,
+html[data-glass='studio'] .main,
+html[data-glass='studio'] .card,
+html[data-glass='studio'] .ys-card,
+html[data-glass='studio'] .server-card {
+  background:
+    linear-gradient(180deg, var(--glass-sheen), transparent 38%),
+    var(--glass);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--rim), var(--float);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+html[data-glass='studio'] .main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 25%),
+    rgba(12, 15, 24, 0.2);
+}
+html[data-glass='studio'] .sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 30%),
+    rgba(18, 22, 34, 0.5);
+}
+html[data-glass='studio'] .main .group,
+html[data-glass='studio'] .main .panel,
+html[data-glass='studio'] .main .glass,
+html[data-glass='studio'] .main .card,
+html[data-glass='studio'] .main .ys-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.015) 45%),
+    rgba(30, 36, 54, 0.42);
+}
+html[data-glass='studio'] .ys-card:hover,
+html[data-glass='studio'] .card:hover {
+  border-color: rgba(138, 180, 248, 0.35);
+  box-shadow: var(--rim), 0 24px 50px -22px rgba(26, 115, 232, 0.6);
+}
+
+/* Pop-ups, menus, the command bar: the thickest glass. */
+html[data-glass='studio'] .dialog,
+html[data-glass='studio'] .popover,
+html[data-glass='studio'] .palette,
+html[data-glass='studio'] .menu,
+html[data-glass='studio'] .toast {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 45%),
+    rgba(20, 24, 36, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: var(--rim), var(--float-hi);
+  backdrop-filter: saturate(200%) blur(56px);
+  -webkit-backdrop-filter: saturate(200%) blur(56px);
+}
+html[data-glass='studio'] .banner {
+  background: linear-gradient(90deg, rgba(26, 115, 232, 0.32), rgba(124, 77, 255, 0.16));
+  border-color: rgba(138, 180, 248, 0.25);
+}
+
+/* Navigation: the page you are on is a glowing blue glass pill. */
+html[data-glass='studio'] .nav-item {
+  border-radius: 999px;
+  color: var(--ink-2);
+}
+html[data-glass='studio'] .nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+}
+html[data-glass='studio'] .nav-item[aria-current='page'],
+html[data-glass='studio'][data-tone='dark'] .nav-item[aria-current='page'] {
+  background: linear-gradient(135deg, rgba(138, 180, 248, 0.95), rgba(102, 157, 246, 0.85));
+  color: var(--accent-ink);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), var(--glow);
+}
+html[data-glass='studio'] .nav-item[aria-current='page'] svg,
+html[data-glass='studio'][data-tone='dark'] .nav-item[aria-current='page'] svg {
+  color: var(--accent-ink);
+}
+html[data-glass='studio'] .nav-item[aria-current='page'] .nav-count {
+  background: rgba(4, 30, 73, 0.18);
+  color: var(--accent-ink);
+}
+html[data-glass='studio'] .foot-btn,
+html[data-glass='studio'] .sidebar-foot {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 html[data-glass='studio'] .foot-btn[aria-current='page'] {
-  background: var(--chosen);
-  color: var(--chosen-ink);
+  background: linear-gradient(135deg, #8ab4f8, #669df6);
+  color: var(--accent-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--glow);
 }
-html[data-glass='studio'] .sidebar-foot {
-  background: var(--s2);
-  border-color: transparent;
+
+/* Buttons: glass pills; the main action is lit blue glass. */
+html[data-glass='studio'] .btn,
+html[data-glass='studio'] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 6px 16px -10px rgba(0, 0, 0, 0.8);
+}
+html[data-glass='studio'] .btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07));
+  border-color: rgba(255, 255, 255, 0.22);
+}
+html[data-glass='studio'] .btn-primary,
+html[data-glass='studio'] .btn-primary:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(135deg, #8ab4f8, #4285f4);
+  color: #031a3d;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), var(--glow);
+}
+html[data-glass='studio'] .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+html[data-glass='studio'] .btn-primary:disabled {
+  filter: saturate(0.4) brightness(0.8);
   box-shadow: none;
+}
+html[data-glass='studio'] .btn-tonal,
+html[data-glass='studio'] .btn-accent {
+  background: linear-gradient(180deg, rgba(138, 180, 248, 0.3), rgba(138, 180, 248, 0.14));
+  border: 1px solid rgba(138, 180, 248, 0.35);
+  color: #d2e3fc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+html[data-glass='studio'] .btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent-text);
+  box-shadow: none;
+}
+html[data-glass='studio'] .btn-danger {
+  background: linear-gradient(180deg, rgba(242, 139, 130, 0.22), rgba(242, 139, 130, 0.08));
+  border: 1px solid rgba(242, 139, 130, 0.35);
+  color: #fad2cf;
+}
+html[data-glass='studio'] .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+}
+
+/* Fields, chips, tabs and switches. */
+html[data-glass='studio'] .input,
+html[data-glass='studio'] select.input,
+html[data-glass='studio'] textarea.input,
+html[data-glass='studio'] .searchbox {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+}
+html[data-glass='studio'] .input:focus,
+html[data-glass='studio'] textarea.input:focus {
+  border-color: rgba(138, 180, 248, 0.7) !important;
+  box-shadow: var(--focus);
+  outline: none;
+}
+html[data-glass='studio'] .tag {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink-2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+html[data-glass='studio'] .tag-accent {
+  background: var(--accent-soft);
+  color: #d2e3fc;
+}
+html[data-glass='studio'] .seg-tabs,
+html[data-glass='studio'] .seg {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+html[data-glass='studio'] .seg-tabs button[aria-selected='true'],
+html[data-glass='studio'] .dialog .seg-tabs button[aria-selected='true'],
+html[data-glass='studio'] .seg button[aria-checked='true'] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 14px -6px rgba(0, 0, 0, 0.7);
+}
+html[data-glass='studio'] .switch[aria-checked='true'] {
+  background: linear-gradient(135deg, #8ab4f8, #4285f4) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 14px rgba(66, 133, 244, 0.55);
+}
+html[data-glass='studio'] .mcp-mark {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, #8ab4f8, #4285f4 55%, #7c4dff);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 12px 28px -10px rgba(66, 133, 244, 0.8);
+}
+html[data-glass='studio'] .cs-item {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+html[data-glass='studio'] .settings-jump {
+  background: rgba(14, 18, 30, 0.88);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 999px;
+  padding: 6px 8px;
+}
+html[data-glass='studio'] .link,
+html[data-glass='studio'] a {
+  color: var(--accent-text);
+}
+html[data-glass='studio'] ::selection {
+  background: rgba(138, 180, 248, 0.35);
+}
+
+/* Its tile in Settings. */
+.gp-studio {
+  background:
+    radial-gradient(70% 70% at 0% 0%, rgba(26, 115, 232, 0.85), transparent 70%),
+    radial-gradient(60% 60% at 100% 0%, rgba(124, 77, 255, 0.6), transparent 70%),
+    radial-gradient(60% 60% at 90% 100%, rgba(0, 191, 165, 0.55), transparent 70%),
+    #070910;
+}
+.gp-studio .gp-side,
+.gp-studio .gp-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.gp-studio .gp-pop {
+  background: linear-gradient(135deg, #8ab4f8, #4285f4);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #041e49;
 }
