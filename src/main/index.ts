@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import * as phpdev from './phpdev'
-import { addShortcut, ideDetach, ideEmbed, ideEmbedBounds, ideInstalled, ideLatest, ideLookChanged, ideNavigationAllowed, ideOpenWindow, ideStatus, ideUnembed, ideVersion, installExtensions, installIde, isIdeContents, openInIde, removeShortcut, setIdeHost, stopIde, type Rect } from './ide'
+import { ideInstalled, ideLatest, ideLookChanged, ideOnStart, ideStatus, ideVersion, installApp, installExtensions, installIde, openIdeApp, openInIde } from './ide'
 import { EDITORS, isAppBundle, isEditorChoice } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
@@ -68,7 +68,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -102,7 +102,7 @@ import { shareSite, shareUrls, stopAllTunnels, unshareSite } from './share'
 import { createProject } from './creator'
 import { detectLlms, installClaudeCode, openClaudeCode, openInEditor, openTerminal, projectRoots, shellQuote, testLlm } from './integrations'
 import { assistantChat } from './ai'
-import { processEvents, tailFile } from './process'
+import { processEvents, runningProcesses, tailFile } from './process'
 import { phpmyadminInstalled } from './webconf'
 import { findOnPath, macMajor } from './platform'
 import { assertMinor, isWebUrl, sanitizeSettingsPatch, ValidationError } from './validate'
@@ -245,7 +245,6 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => {
     mainWindow = null
-    ideUnembed(true)
   })
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingIdeShow) {
@@ -258,7 +257,7 @@ function createWindow(): void {
   else mainWindow.loadFile(RENDERER_FILE)
 }
 
-/** Laramac Code shown inside Laramac's window: from "Open in editor" or the Laramac Code app. */
+/** laramac://code (from the Laramac Code app's setup screen): Laramac opens on its Laramac Code page. */
 let pendingIdeShow: { url: string | null } | null = null
 function showIde(url: string | null): void {
   const loading = !mainWindow || mainWindow.webContents.isLoading()
@@ -266,8 +265,7 @@ function showIde(url: string | null): void {
   if (loading) pendingIdeShow = { url }
   else send('ide:show', { url })
 }
-setIdeHost((url) => showIde(url))
-// laramac://code, from the Laramac Code app in Applications. Nothing else is accepted.
+// Nothing else is accepted.
 app.on('open-url', (e, url) => {
   e.preventDefault()
   if (!/^laramac:\/\/code\/?$/.test(url)) return
@@ -293,20 +291,11 @@ function isAppUrl(url: string): boolean {
 function hardenWebContents(): void {
   app.on('web-contents-created', (_e, contents) => {
     contents.on('will-navigate', (event, url) => {
-      // Laramac Code's windows may only show its own local address; links go to the browser.
-      if (isIdeContents(contents)) {
-        if (!ideNavigationAllowed(url)) {
-          event.preventDefault()
-          if (isWebUrl(url)) void shell.openExternal(url)
-        }
-        return
-      }
       if (!isAppUrl(url)) event.preventDefault()
     })
     contents.on('will-attach-webview', (event) => event.preventDefault())
     contents.setWindowOpenHandler(({ url }) => {
-      if (isIdeContents(contents)) ideOpenWindow(url)
-      else if (isWebUrl(url)) void shell.openExternal(url)
+      if (isWebUrl(url)) void shell.openExternal(url)
       return { action: 'deny' }
     })
   })
@@ -514,7 +503,7 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
-    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize) void ideLookChanged(next.accent !== before.accent)
+    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent).catch(() => undefined)
     if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' || next.appearance === 'dark' ? next.appearance : 'system'
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
@@ -682,35 +671,16 @@ function registerIpc(): void {
     return ideStatus()
   })
   handle('ide:open', async (path) => {
-    const target = typeof path === 'string' && path ? sitePath(path) : getSettings().wwwPath
     if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
-    await openInIde(target, undefined, projectRoots())
+    if (typeof path === 'string' && path) await openInIde(sitePath(path), undefined, projectRoots(), getSettings().wwwPath)
+    else await openIdeApp()
   })
-  handle('ide:stop', async () => {
-    await stopIde()
+  handle('ide:install-app', async () => {
+    if (!ideInstalled()) throw new ValidationError('Install Laramac Code first.')
+    await jobs.run('Getting the Laramac Code app', (u) => installApp(u))
     return ideStatus()
   })
-  const validRect = (r: unknown): Rect => {
-    const o = (r ?? {}) as Record<string, unknown>
-    const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= -10 && v < 20000 ? v : 0)
-    return { x: n(o.x), y: n(o.y), width: n(o.width), height: n(o.height) }
-  }
-  handle('ide:embed', async (url, rect) => {
-    if (!mainWindow) throw new ValidationError('The window is not open.')
-    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
-    return ideEmbed(mainWindow, typeof url === 'string' ? url : null, validRect(rect), getSettings().wwwPath)
-  })
-  handle('ide:embed-bounds', (rect) => ideEmbedBounds(validRect(rect)))
-  handle('ide:unembed', () => ideUnembed())
-  handle('ide:detach', () => ideDetach())
   handle('macsec:status', () => ({ installed: existsSync('/Applications/MacSec.app') || existsSync(join(homedir(), 'Applications', 'MacSec.app')) || review.hasMacsec() }))
-  handle('ide:shortcut', (on) => {
-    if (on === true) {
-      const p = addShortcut()
-      activity.push('success', 'Laramac Code is in your Applications', `Find it with Spotlight or drag it to the Dock. It is ${p.replace(process.env.HOME ?? '', '~')}.`)
-    } else removeShortcut()
-    return ideStatus()
-  })
   handle('editors:choose-app', async () => {
     if (!mainWindow) return null
     const r = await dialog.showOpenDialog(mainWindow, { title: 'Choose the app to open your code with', buttonLabel: 'Use this app', defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Apps', extensions: ['app'] }] })
@@ -1345,7 +1315,7 @@ function registerIpc(): void {
         ideLatest()
           .then((l) => {
             const cur = ideVersion()
-            if (cur && upd.isNewer(cur, l.version)) items.push({ id: 'tool:laramac-code', group: 'tool', name: 'Laramac Code', current: cur, latest: l.version, detail: 'The built-in editor (code-server). Your settings and extensions stay.', jump: upd.jumpOf(cur, l.version) })
+            if (cur && upd.isNewer(cur, l.version)) items.push({ id: 'tool:laramac-code', group: 'tool', name: 'Laramac Code', current: cur, latest: l.version, detail: 'The editor inside the Laramac Code app (code-server). Your settings and extensions stay.', jump: upd.jumpOf(cur, l.version) })
           })
           .catch(() => undefined)
       )
@@ -2863,7 +2833,17 @@ function registerIpc(): void {
   })
   handle('overview:pulse', async () => {
     const logs = [join(dirs.logs(), 'nginx-access.log'), join(dirs.logs(), 'apache-access.log')]
-    const p = tools.pulseFrom(logs.filter((f) => existsSync(f)).map((f) => tailFile(f, 20000)).join('\n'), Date.now())
+    const text = logs.filter((f) => existsSync(f)).map((f) => tailFile(f, 20000)).join('\n')
+    const now = Date.now()
+    const p = tools.pulseFrom(text, now)
+    const bySite = tools.pulseBySite(text, now)
+    // What each running service and dev server uses right now, like Activity Monitor.
+    const roots = runningProcesses()
+    let processes: OverviewPulse['processes'] = []
+    if (roots.length) {
+      const ps = await new Promise<string>((resolve) => execFile('/bin/ps', ['-axo', 'pid=,ppid=,pcpu=,rss='], { timeout: 4000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => resolve(String(out ?? ''))))
+      processes = tools.processUsage(ps, roots, now)
+    }
     let mail: number | null = null
     try {
       const r = await fetch('http://127.0.0.1:8025/api/v1/messages?limit=1', { signal: AbortSignal.timeout(1200) })
@@ -2884,7 +2864,7 @@ function registerIpc(): void {
     }
     const r = review.listReviews()[0]
     const c = (r?.counts ?? {}) as Record<string, number>
-    return { ...p, mail, lastBackup, review: r ? { title: r.title, at: r.at, critical: c.critical ?? 0, high: c.high ?? 0, medium: c.medium ?? 0, low: c.low ?? 0 } : null }
+    return { ...p, bySite, processes, mail, lastBackup, review: r ? { title: r.title, at: r.at, critical: c.critical ?? 0, high: c.high ?? 0, medium: c.medium ?? 0, low: c.low ?? 0 } : null }
   })
   handle('db:backups', () => {
     const out: { engine: string; name: string; files: { file: string; bytes: number; at: string }[] }[] = []
@@ -3169,6 +3149,8 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   ensureDirs()
   // The security teams' skill packs are part of every review by default: fetched quietly once, kept up to date with each app version.
+  // Laramac Code: the app follows Laramac's version, new extensions (Claude Code, Cline) are added once.
+  setTimeout(() => void ideOnStart(() => undefined).catch(() => undefined), 40_000)
   setTimeout(() => {
     void (async () => {
       const declined = new Set(getSettings().packsDeclined ?? [])
@@ -3244,7 +3226,7 @@ app.on('before-quit', (event) => {
   quitting = true
   ssh.disconnectAll()
   dumps.stopDumpServer()
-  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends(), stopIde()]).then(() => {
+  void Promise.allSettled([stopAllTunnels(), services.stopAll(), stopAllFpm(), stopAllDev(), stopAllWorkers(), stopAllBackends()]).then(() => {
     stopDnsServer()
     app.exit(0)
   })

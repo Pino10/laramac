@@ -15,6 +15,8 @@ export interface IdeExtension {
 /** Installed with Laramac Code, for PHP first and the front end next to it. */
 export const IDE_EXTENSIONS: IdeExtension[] = [
   { id: 'bmewburn.vscode-intelephense-client', name: 'PHP Intelephense', why: 'PHP completion, go to definition, find references, errors and formatting' },
+  { id: 'anthropic.claude-code', name: 'Claude Code', why: 'Claude in the side panel: ask, plan and edit with your Claude account' },
+  { id: 'saoudrizwan.claude-dev', name: 'Cline', why: 'An AI coding agent for any model: your local model, Free LLM API or an API key (open source)' },
   { id: 'phpactor.vscode-phpactor', name: 'Phpactor', why: 'PHP refactoring: rename, extract, import classes, generate methods (open source)' },
   { id: 'xdebug.php-debug', name: 'PHP Debug', why: 'Breakpoints and stepping through PHP with Xdebug' },
   { id: 'onecentlin.laravel-blade', name: 'Laravel Blade', why: 'Blade templates with snippets' },
@@ -126,17 +128,25 @@ export function ideSettings(o: IdeSettingsInput): { managed: Record<string, unkn
     'security.workspace.trust.enabled': false,
     ...(o.phpPath ? { 'php.validate.executablePath': o.phpPath, 'php.debug.executablePath': o.phpPath, 'phpactor.executablePath': o.phpPath } : {}),
     'phpactor.config': phpactorConfig(),
-    // Laramac's own look: the activity bar on top, no layout clutter, no built-in AI chat (Laramac's checks and Claude Code do that).
+    // Laramac's own look. The AI chat is Claude Code (and Cline) in the side panel on the right,
+    // which the layout buttons in the title bar show and hide. VS Code's built-in chat needs GitHub
+    // Copilot, which this editor cannot use, so it stays off instead of showing a broken button.
     'workbench.activity.showAccounts': false,
-    'workbench.layoutControl.enabled': false,
-    'chat.commandCenter.enabled': false,
+    'workbench.layoutControl.enabled': true,
+    'workbench.layoutControl.type': 'toggles',
     'chat.disableAIFeatures': true,
+    'claudeCode.preferredLocation': 'sidebar',
     'workbench.tips.enabled': false,
     ...(o.phpVersion ? { 'intelephense.environment.phpVersion': o.phpVersion } : {})
   }
   const defaults: Record<string, unknown> = {
     'workbench.startupEditor': 'none',
     'workbench.activityBar.location': 'top',
+    'workbench.secondarySideBar.defaultVisibility': 'visibleInWorkspace',
+    'window.title': '${rootName}${separator}${activeEditorShort}',
+    'workbench.editor.tabActionLocation': 'right',
+    'breadcrumbs.enabled': true,
+    'terminal.integrated.tabs.enabled': true,
     'workbench.tree.indent': 14,
     'workbench.tree.renderIndentGuides': 'onHover',
     'editor.minimap.enabled': false,
@@ -183,7 +193,7 @@ export function mergeSettings(current: Record<string, unknown>, s: { managed: Re
 }
 
 /** code-server's command line: localhost only, a password, its own folders, quiet. */
-export function serverArgs(o: { port: number; dataDir: string; extDir: string }): string[] {
+export function serverArgs(o: { port: number | string; dataDir: string; extDir: string }): string[] {
   return [
     '--bind-addr', `127.0.0.1:${o.port}`,
     '--auth', 'password',
@@ -237,9 +247,13 @@ export function checksPackage(version: string): Record<string, unknown> {
   }
 }
 
-/** Poppins (from Laramac) for the interface, or the Mac's own font. Code keeps a monospaced font. */
-export function workbenchCss(o: { uiFont: 'system' | 'poppins'; fonts: { weight: number; url: string }[] }): string {
-  const faces = o.uiFont === 'poppins' ? o.fonts.map((f) => `@font-face{font-family:'Laramac Poppins';font-style:normal;font-weight:${f.weight};font-display:swap;src:url(${f.url}) format('woff2')}`).join('') : ''
+/**
+ * Poppins (from Laramac) for the interface, or the Mac's own font. Code keeps a monospaced font.
+ * The editor's page only accepts fonts from itself, so the CSS names the font and the Laramac
+ * Code app loads its bytes into the page (see code-app/lib.js fontScript).
+ */
+export function workbenchCss(o: { uiFont: 'system' | 'poppins' }): string {
+  const faces = ''
   const family = o.uiFont === 'poppins' ? "'Laramac Poppins', -apple-system, BlinkMacSystemFont, sans-serif" : "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
   return `${faces}
 .monaco-workbench{font-family:${family}!important;-webkit-font-smoothing:antialiased}
@@ -259,4 +273,29 @@ export function workbenchCss(o: { uiFont: 'system' | 'poppins'; fonts: { weight:
 .monaco-workbench .command-center .command-center-center{border-radius:8px!important}
 .monaco-workbench .welcomePageContainer .welcomePage h1{font-weight:600}
 `
+}
+
+/** The Laramac Code app's zip for this Mac's chip, in Laramac's release of that version. */
+export function codeAppAsset<T extends { name: string }>(assets: T[], version: string, arch: string): T | null {
+  const want = `Laramac-Code-${version}-${arch === 'arm64' ? 'arm64' : 'x64'}.zip`
+  return assets.find((a) => a.name === want) ?? null
+}
+
+/** laramac-code://open?folder=…&file=…&line=…, for the Laramac Code app. */
+export function openRequestUrl(o: { folder: string; file?: string; line?: number }): string {
+  const q = new URLSearchParams({ folder: o.folder })
+  if (o.file) q.set('file', o.file)
+  if (o.file && o.line && o.line > 0) q.set('line', String(Math.floor(o.line)))
+  return `laramac-code://open?${q.toString()}`
+}
+
+/**
+ * The editor's environment for launch.json: Laramac's PATH and tool folders only. Nothing else
+ * from Laramac's own environment is written, so no token or key can end up in the file.
+ */
+const LAUNCH_KEYS = /^(PATH|LANG|LC_[A-Z]+|COMPOSER_HOME|NVM_DIR|BUN_INSTALL|CARGO_HOME|RUSTUP_HOME|GOPATH|GOROOT|DOTNET_ROOT|PHP_INI_SCAN_DIR|PHPRC)$/
+export function launchEnv(env: Record<string, string | undefined>, extra: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(env)) if (LAUNCH_KEYS.test(k) && typeof v === 'string') out[k] = v
+  return { ...out, ...extra }
 }

@@ -1,36 +1,38 @@
 /**
- * Laramac Code: code-server (the open-source VS Code) in a Laramac window.
+ * Laramac Code: its own Mac app (code-app/), with the editor Laramac sets up for it.
  *
- *   - Downloaded from Coder's GitHub release and checked against GitHub's SHA-256 of the file.
- *   - Runs only on 127.0.0.1, on a free port, behind a random password that only this run of
- *     Laramac knows; Laramac signs in for you. Its window has its own session, can only show that
- *     address, and opens every other link in your browser.
- *   - Its own folders (settings, extensions) inside Laramac's folder.
- *   - Its terminal has Laramac's PATH: php, composer and node follow each site, and claude,
- *     claudelm, claudefree and laramac are there.
+ * Laramac installs and updates the parts, all checked before they run:
+ *   - code-server (the open-source VS Code), from Coder's GitHub release, checked against
+ *     GitHub's SHA-256 of the file;
+ *   - the Laramac Code app, from Laramac's own release of the same version, checked against its
+ *     SHA256SUMS.txt, its signature and its bundle id;
+ *   - the extensions from Open VSX, the Studio theme and Laramac Checks (built here).
+ * It then writes ~/.laramac/code/launch.json: how to start the editor (its folders, Laramac's
+ * PATH, the look). The app reads it, runs the editor on 127.0.0.1 behind a password made for each
+ * start, and shows it in its own windows. Laramac asks it to open a folder or a file at a line.
+ * No secret is written anywhere.
  */
-import { BrowserWindow, WebContentsView, app, nativeTheme, session, shell, type WebContents } from 'electron'
+import { app } from 'electron'
 import { execFile } from 'child_process'
-import { createHash, randomBytes } from 'crypto'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
-import { homedir } from 'os'
-import { createServer } from 'net'
+import { createHash } from 'crypto'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
+import { homedir, tmpdir } from 'os'
 import { join } from 'path'
 import { dirs } from './paths'
 import { downloadFile, extract, removeQuarantine, sha256File } from './download'
-import { ManagedProcess } from './process'
 import { runtimeEnv } from './runtimes'
 import { githubApi } from './seckit/ghapi'
 import { getSettings } from './settings'
 import { defaultMinor, phpBinary } from './php'
-import { IDE_EXTENSIONS, checksPackage, folderFor, ideSettings, macAsset, mergeSettings, openUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
+import { IDE_EXTENSIONS, checksPackage, codeAppAsset, folderFor, ideSettings, launchEnv, macAsset, mergeSettings, openRequestUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
 import { ensurePlugins } from './review'
+import { openAsset, releasesApi } from './distribution'
+import { hashFor } from './versions'
 import checksSource from './idext/extension.cjs?raw'
 import { createRequire } from 'module'
 import { accentBuild, isAccent, themeJson, themePackage, vsixManifest, VSIX_CONTENT_TYPES, type Accent } from './idetheme'
 
 const REPO = 'coder/code-server'
-const PARTITION = 'persist:laramac-code'
 const home = (): string => join(dirs.root(), 'code')
 const serverDir = (): string => join(home(), 'server')
 const dataDir = (): string => join(home(), 'data')
@@ -38,11 +40,8 @@ const extDir = (): string => join(home(), 'extensions')
 const bin = (): string => join(serverDir(), 'bin', 'code-server')
 const versionFile = (): string => join(home(), 'version.txt')
 const stateFile = (): string => join(home(), 'state.json')
-
-const proc = new ManagedProcess('Laramac Code')
-let port = 0
-let password = ''
-const windows = new Set<BrowserWindow>()
+/** The app, in your own Applications folder (no password needed to put it there). */
+export const appPath = (): string => join(homedir(), 'Applications', 'Laramac Code.app')
 
 interface IdeState {
   themeBuild: number | null
@@ -62,6 +61,7 @@ const writeState = (s: IdeState): void => {
   writeFileSync(stateFile(), JSON.stringify(s, null, 2))
 }
 
+/** The editor is installed (the app comes with it). */
 export const ideInstalled = (): boolean => existsSync(bin())
 export const ideVersion = (): string | null => {
   try {
@@ -71,11 +71,15 @@ export const ideVersion = (): string | null => {
   }
 }
 
-/** Every window of Laramac Code: the only windows allowed to show its address. */
-export function isIdeContents(wc: WebContents): boolean {
-  return wc.session === session.fromPartition(PARTITION)
+/** The version of the Laramac Code app in Applications, or null. */
+export function appVersion(): string | null {
+  try {
+    const plist = readFileSync(join(appPath(), 'Contents', 'Info.plist'), 'utf8')
+    return /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(plist)?.[1] ?? null
+  } catch {
+    return null
+  }
 }
-export const ideOrigin = (): string | null => (port ? `http://127.0.0.1:${port}` : null)
 
 export interface IdeLatest {
   version: string
@@ -119,7 +123,6 @@ export async function installIde(update: (p: number | null, l?: string) => void)
   await extract(file, staging)
   const top = readdirSync(staging).find((n) => statSync(join(staging, n)).isDirectory())
   if (!top || !existsSync(join(staging, top, 'bin', 'code-server'))) throw new Error('The download did not contain code-server.')
-  await proc.stop().catch(() => undefined)
   rmSync(serverDir(), { recursive: true, force: true })
   mkdirSync(home(), { recursive: true })
   renameSync(join(staging, top), serverDir())
@@ -127,10 +130,66 @@ export async function installIde(update: (p: number | null, l?: string) => void)
   rmSync(file, { force: true })
   await removeQuarantine(serverDir())
   writeFileSync(versionFile(), latest.version)
-  await installExtensions((p, l) => update(Math.round(75 + (p ?? 0) * 0.25), l))
+  await installExtensions((p, l) => update(Math.round(72 + (p ?? 0) * 0.18), l))
+  await installApp((p, l) => update(Math.round(90 + (p ?? 0) * 0.1), l))
+  writeLaunch()
   update(100, 'Laramac Code is ready')
 }
 
+
+/**
+ * Installs (or updates) the Laramac Code app from Laramac's release of this same version: the zip
+ * for this Mac's chip, checked against the release's SHA256SUMS.txt, then its signature and that
+ * it really is Laramac Code, before it replaces the copy in ~/Applications.
+ */
+export async function installApp(update: (p: number | null, l?: string) => void): Promise<void> {
+  const version = app.getVersion()
+  if (appVersion() === version) return
+  update(2, 'Getting the Laramac Code app')
+  const release = await releasesApi<{ assets: { name: string; browser_download_url: string }[] }>(`releases/tags/v${version}`).catch(() => null)
+  const zip = release ? codeAppAsset(release.assets, version, process.arch) : null
+  const sums = release?.assets.find((a) => a.name === 'SHA256SUMS.txt')
+  if (!zip || !sums) throw new Error(`Laramac ${version} has no Laramac Code app for this Mac in its release yet. Update Laramac, then try again.`)
+  const file = join(dirs.downloads(), zip.name)
+  mkdirSync(dirs.downloads(), { recursive: true })
+  await downloadFile(zip.browser_download_url, file, (p) => update(p, 'Downloading the Laramac Code app'))
+  update(null, 'Checking the download')
+  const expected = hashFor(await (await openAsset(sums.browser_download_url)).text(), zip.name)
+  if (!expected || (await sha256File(file)) !== expected) {
+    rmSync(file, { force: true })
+    throw new Error('The Laramac Code app did not match its published checksum and was deleted.')
+  }
+  const staging = mkdtempSync(join(tmpdir(), 'laramac-code-app-'))
+  try {
+    // ditto keeps the app's links and signature intact.
+    await run('/usr/bin/ditto', ['-x', '-k', file, staging])
+    const fresh = join(staging, 'Laramac Code.app')
+    if (!existsSync(fresh)) throw new Error('The download does not contain Laramac Code.app.')
+    await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', fresh])
+    const id = (await run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(fresh, 'Contents', 'Info.plist')])).trim()
+    if (id !== 'dev.laramac.code') throw new Error('The download is not Laramac Code.')
+    update(null, 'Putting Laramac Code in Applications')
+    mkdirSync(join(homedir(), 'Applications'), { recursive: true })
+    const target = appPath()
+    const previous = `${target}.old`
+    rmSync(previous, { recursive: true, force: true })
+    if (existsSync(target)) renameSync(target, previous)
+    try {
+      await run('/usr/bin/ditto', [fresh, target])
+    } catch (e) {
+      if (existsSync(previous)) renameSync(previous, target)
+      throw e
+    }
+    rmSync(previous, { recursive: true, force: true })
+    await removeQuarantine(target)
+    // So macOS knows it opens laramac-code:// addresses straight away.
+    await run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', target]).catch(() => '')
+  } finally {
+    rmSync(staging, { recursive: true, force: true })
+    rmSync(file, { force: true })
+  }
+  update(100, 'Laramac Code is in your Applications')
+}
 /** The PHP and front-end extensions, from Open VSX. One that fails does not stop the others. */
 export async function installExtensions(update: (p: number | null, l?: string) => void, only?: string[]): Promise<IdeState['extensions']> {
   const state = readState()
@@ -221,254 +280,85 @@ function writeSettings(): void {
   writeFileSync(file, JSON.stringify(mergeSettings(current, s), null, 2) + '\n')
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer()
-    srv.once('error', reject)
-    srv.listen(0, '127.0.0.1', () => {
-      const p = (srv.address() as { port: number }).port
-      srv.close(() => resolve(p))
-    })
-  })
-}
 
-async function start(): Promise<void> {
-  if (proc.running && port) return
-  writeSettings()
-  await ensureTheme().catch(() => undefined)
-  await ensureChecks().catch(() => undefined)
-  port = await freePort()
-  password = randomBytes(24).toString('hex')
-  let skillDirs: string[] = []
-  try {
-    skillDirs = ensurePlugins()
-  } catch {
-    // Reviews in the editor then use Claude Code's own skills.
-  }
-  const env: NodeJS.ProcessEnv = { ...process.env, ...runtimeEnv(), PASSWORD: password, LARAMAC_CODE: '1', LARAMAC_SKILL_DIRS: skillDirs.join(':'), LARAMAC_COMPOSER_BIN: join(dirs.root(), 'composer', 'vendor', 'bin') }
-  delete env.ELECTRON_RUN_AS_NODE
-  mkdirSync(dirs.logs(), { recursive: true })
-  await proc.start({ command: bin(), args: serverArgs({ port, dataDir: dataDir(), extDir: extDir() }), env, logFile: join(dirs.logs(), 'laramac-code.log') }, port, 40_000)
-}
-
-export async function stopIde(): Promise<void> {
-  for (const w of windows) if (!w.isDestroyed()) w.close()
-  ideUnembed(true)
-  await proc.stop().catch(() => undefined)
-  port = 0
-}
-
-let sessionReady = false
-function ideSession(): Electron.Session {
-  const s = session.fromPartition(PARTITION)
-  if (!sessionReady) {
-    sessionReady = true
-    // Copy and paste work in the editor; nothing else is granted.
-    s.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-read' || permission === 'clipboard-sanitized-write'))
-    s.setPermissionCheckHandler((_wc, permission) => permission === 'clipboard-read' || permission === 'clipboard-sanitized-write')
-  }
-  return s
-}
-
-function openWindow(url: string, title: string): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 760,
-    minHeight: 480,
-    title,
-    show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0e15' : '#f5f7fb',
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, session: ideSession() }
-  })
-  windows.add(win)
-  win.on('closed', () => windows.delete(win))
-  win.once('ready-to-show', () => win.show())
-  win.on('page-title-updated', (e) => {
-    e.preventDefault()
-    win.setTitle(title)
-  })
-  dress(win.webContents)
-  void win.loadURL(url)
-  return win
-}
-
-/** Poppins, from the copy Laramac ships, as data addresses for Laramac Code's interface. */
-let poppins: { weight: number; url: string }[] | null = null
-function poppinsFonts(): { weight: number; url: string }[] {
+/** Poppins, from the copy Laramac ships, for Laramac Code's interface (the app loads it into the page). */
+let poppins: { family: string; weight: number; data: string }[] | null = null
+function poppinsFonts(): { family: string; weight: number; data: string }[] {
   if (poppins) return poppins
   try {
     const req = createRequire(__filename)
-    poppins = [400, 500, 600].map((weight) => ({ weight, url: `data:font/woff2;base64,${readFileSync(req.resolve(`@fontsource/poppins/files/poppins-latin-${weight}-normal.woff2`)).toString('base64')}` }))
+    poppins = [400, 500, 600].map((weight) => ({ family: 'Laramac Poppins', weight, data: readFileSync(req.resolve(`@fontsource/poppins/files/poppins-latin-${weight}-normal.woff2`)).toString('base64') }))
   } catch {
     poppins = []
   }
   return poppins
 }
 
-/** Signs in with this run's password (it never leaves this Mac) and adds Laramac's look. */
-function dress(wc: WebContents): void {
-  wc.on('did-finish-load', () => {
-    if (new URL(wc.getURL()).pathname.endsWith('/login')) {
-      void wc.executeJavaScript(`(() => { const i = document.querySelector('input[name=password]'); const f = document.querySelector('form'); if (i && f) { i.value = ${JSON.stringify(password)}; f.submit() } })()`)
-      return
-    }
-    void wc.insertCSS(workbenchCss({ uiFont: getSettings().uiFont === 'poppins' ? 'poppins' : 'system', fonts: poppinsFonts() }))
-  })
+/**
+ * launch.json: how the Laramac Code app starts the editor. Laramac's PATH and folders, the look,
+ * the skills for AI reviews. No password or token: the app makes a password for each start.
+ */
+export function writeLaunch(): void {
+  if (!ideInstalled()) return
+  writeSettings()
+  let skillDirs: string[] = []
+  try {
+    skillDirs = ensurePlugins()
+  } catch {
+    // Reviews in the editor then use Claude Code's own skills.
+  }
+  const launch = {
+    version: 1,
+    laramac: app.getVersion(),
+    bin: bin(),
+    args: serverArgs({ port: '{port}', dataDir: dataDir(), extDir: extDir() }),
+    env: launchEnv({ ...process.env, ...runtimeEnv() }, { LARAMAC_SKILL_DIRS: skillDirs.join(':'), LARAMAC_COMPOSER_BIN: join(dirs.root(), 'composer', 'vendor', 'bin') }),
+    css: workbenchCss({ uiFont: getSettings().uiFont === 'poppins' ? 'poppins' : 'system' }),
+    fonts: getSettings().uiFont === 'poppins' ? poppinsFonts() : [],
+    home: getSettings().wwwPath,
+    background: { dark: '#0d1017', light: '#f6f7fb' }
+  }
+  mkdirSync(home(), { recursive: true })
+  writeFileSync(join(home(), 'launch.json'), JSON.stringify(launch), { mode: 0o600 })
 }
 
-// ---------------------------------------------------------------- Inside Laramac's own window
-
-let view: WebContentsView | null = null
-let viewHost: BrowserWindow | null = null
-let viewUrl = ''
-export interface Rect {
-  x: number
-  y: number
-  width: number
-  height: number
+/** Gets everything ready: the theme and checks built, the app in Applications, launch.json written. */
+async function prepare(): Promise<void> {
+  await ensureTheme().catch(() => undefined)
+  await ensureChecks().catch(() => undefined)
+  writeLaunch()
 }
-const clean = (r: Rect): Rect => ({ x: Math.max(0, Math.round(r.x)), y: Math.max(0, Math.round(r.y)), width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) })
 
-/** The address to open: a folder or file, or the www folder when there is nothing yet. */
-export async function ideUrl(path: string | null, line: number | undefined, roots: string[], fallback: string): Promise<string> {
+/**
+ * Opens a folder, or a file at a line, in the Laramac Code app. `roots` are the site and project
+ * folders, so a file opens inside its project with the file tree and terminal there.
+ */
+export async function openInIde(path: string | null, line: number | undefined, roots: string[], fallback: string): Promise<void> {
   if (!ideInstalled()) throw new Error('Laramac Code is not installed yet.')
-  await start()
+  if (appVersion() !== app.getVersion()) await installApp(() => undefined)
+  await prepare()
   const target = path ?? fallback
   const isDir = existsSync(target) && statSync(target).isDirectory()
-  return openUrl(port, folderFor(target, roots, isDir), isDir ? undefined : target, line)
+  const folder = folderFor(target, roots, isDir)
+  const request = { folder, file: isDir ? undefined : target, line: isDir ? undefined : line }
+  // The request file reaches the app when it is already running; the address when it starts.
+  writeFileSync(join(home(), 'open.json'), JSON.stringify({ ...request, at: Date.now() }), { mode: 0o600 })
+  await run('/usr/bin/open', ['-a', appPath(), openRequestUrl(request)], 20_000)
 }
 
-/** Shows Laramac Code inside Laramac's window, over the Laramac Code page. */
-export async function ideEmbed(host: BrowserWindow, url: string | null, rect: Rect, fallback: string): Promise<{ url: string }> {
-  const target = url && ideNavigationAllowed(url) ? url : viewUrl || (await ideUrl(null, undefined, [], fallback))
-  if (!view || view.webContents.isDestroyed()) {
-    view = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, session: ideSession() } })
-    view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0b0e15' : '#f5f7fb')
-    view.setBorderRadius?.(14)
-    dress(view.webContents)
-    viewUrl = ''
-  }
-  if (viewHost !== host) {
-    if (viewHost && !viewHost.isDestroyed()) viewHost.contentView.removeChildView(view)
-    host.contentView.addChildView(view)
-    viewHost = host
-  }
-  view.setBounds(clean(rect))
-  view.setVisible(true)
-  if (target !== viewUrl) {
-    viewUrl = target
-    void view.webContents.loadURL(target)
-  }
-  view.webContents.focus()
-  return { url: viewUrl }
-}
-
-export function ideEmbedBounds(rect: Rect): void {
-  if (view && !view.webContents.isDestroyed()) view.setBounds(clean(rect))
-}
-
-/** Hides it (leaving the page) or closes it (stopping Laramac Code). */
-export function ideUnembed(close = false): void {
-  if (!view) return
-  if (close) {
-    if (viewHost && !viewHost.isDestroyed()) viewHost.contentView.removeChildView(view)
-    if (!view.webContents.isDestroyed()) view.webContents.close()
-    view = null
-    viewHost = null
-    viewUrl = ''
-  } else view.setVisible(false)
-}
-
-/** The page shown inside Laramac, to open in its own window instead. */
-export function ideDetach(): void {
-  const url = viewUrl
-  ideUnembed(true)
-  if (url) openWindow(url, 'Laramac Code')
-}
-
-// ---------------------------------------------------------------- A Laramac Code app in Applications
-
-export const shortcutPath = (): string => join(homedir(), 'Applications', 'Laramac Code.app')
-export const hasShortcut = (): boolean => existsSync(shortcutPath())
-
-/**
- * A small app in ~/Applications (for Spotlight, Launchpad and the Dock) that opens Laramac Code
- * in Laramac. It only runs: open laramac://code.
- */
-export function addShortcut(): string {
-  const appDir = shortcutPath()
-  rmSync(appDir, { recursive: true, force: true })
-  mkdirSync(join(appDir, 'Contents', 'MacOS'), { recursive: true })
-  mkdirSync(join(appDir, 'Contents', 'Resources'), { recursive: true })
-  const icon = join(process.resourcesPath ?? '', 'icon.icns')
-  const hasIcon = existsSync(icon)
-  if (hasIcon) copyFileSync(icon, join(appDir, 'Contents', 'Resources', 'icon.icns'))
-  writeFileSync(
-    join(appDir, 'Contents', 'Info.plist'),
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleName</key><string>Laramac Code</string>
-<key>CFBundleDisplayName</key><string>Laramac Code</string>
-<key>CFBundleIdentifier</key><string>dev.laramac.code</string>
-<key>CFBundleExecutable</key><string>launch</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleVersion</key><string>${app.getVersion()}</string>
-<key>CFBundleShortVersionString</key><string>${app.getVersion()}</string>
-${hasIcon ? '<key>CFBundleIconFile</key><string>icon</string>' : ''}
-<key>LSUIElement</key><true/>
-</dict></plist>
-`
-  )
-  const launcher = join(appDir, 'Contents', 'MacOS', 'launch')
-  writeFileSync(launcher, '#!/bin/sh\nexec /usr/bin/open "laramac://code"\n')
-  chmodSync(launcher, 0o755)
-  return appDir
-}
-
-export function removeShortcut(): void {
-  rmSync(shortcutPath(), { recursive: true, force: true })
-}
-
-/** The window rules for Laramac Code's windows, used by the app's general hardening. */
-export function ideNavigationAllowed(url: string): boolean {
-  const origin = ideOrigin()
-  return !!origin && (url === origin || url.startsWith(`${origin}/`))
-}
-export function ideOpenWindow(url: string): void {
-  if (ideNavigationAllowed(url)) openWindow(url, 'Laramac Code')
-  else if (/^https?:\/\//.test(url)) void shell.openExternal(url)
-}
-
-/**
- * Opens a folder, or a file at a line, in Laramac Code. `roots` are the site and project folders,
- * so a file opens inside its project with the file tree and terminal there.
- */
-let showInApp: ((url: string) => void) | null = null
-/** Laramac's window registers here, so "Open in editor" shows Laramac Code inside it. */
-export function setIdeHost(fn: (url: string) => void): void {
-  showInApp = fn
-}
-
-export async function openInIde(path: string, line: number | undefined, roots: string[]): Promise<void> {
+/** Opens the app without a folder: it shows the last one, or your www folder. */
+export async function openIdeApp(): Promise<void> {
   if (!ideInstalled()) throw new Error('Laramac Code is not installed yet.')
-  if (showInApp) {
-    showInApp(await ideUrl(path, line, roots, path))
-    return
-  }
-  await start()
-  const isDir = existsSync(path) && statSync(path).isDirectory()
-  const folder = folderFor(path, roots, isDir)
-  const name = folder.split('/').pop() || folder
-  openWindow(openUrl(port, folder, isDir ? undefined : path, line), `Laramac Code: ${name}`)
+  if (appVersion() !== app.getVersion()) await installApp(() => undefined)
+  await prepare()
+  await run('/usr/bin/open', ['-a', appPath()], 20_000)
 }
 
 export interface IdeStatus {
   installed: boolean
   version: string | null
-  running: boolean
-  shortcut: boolean
+  appInstalled: boolean
+  appVersion: string | null
   extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
 }
 
@@ -477,18 +367,25 @@ export function ideStatus(): IdeStatus {
   return {
     installed: ideInstalled(),
     version: ideVersion(),
-    running: proc.running,
-    shortcut: hasShortcut(),
+    appInstalled: existsSync(appPath()),
+    appVersion: appVersion(),
     extensions: IDE_EXTENSIONS.map((e) => ({ ...e, state: st.extensions[e.id] ?? 'missing' }))
   }
 }
 
-/** Font, size or accent changed in Laramac: Laramac Code follows straight away (it reads its settings live). */
+/** Font, size, accent or interface font changed in Laramac: Laramac Code follows (it reads its settings live). */
 export async function ideLookChanged(accentChanged: boolean): Promise<void> {
   if (!ideInstalled()) return
-  writeSettings()
-  if (accentChanged) {
-    writeState({ ...readState(), themeBuild: null })
-    if (proc.running) await ensureTheme(true).catch(() => undefined)
-  }
+  if (accentChanged) writeState({ ...readState(), themeBuild: null })
+  await prepare()
+}
+
+/** When Laramac starts: a Laramac Code app from an older Laramac is replaced, and the new extensions are added. */
+export async function ideOnStart(update: (p: number | null, l?: string) => void): Promise<void> {
+  if (!ideInstalled()) return
+  const st = readState()
+  const missing = IDE_EXTENSIONS.filter((e) => !st.extensions[e.id]).map((e) => e.id)
+  if (missing.length) await installExtensions(update, missing)
+  if (existsSync(appPath()) && appVersion() !== app.getVersion()) await installApp(update).catch(() => undefined)
+  await prepare()
 }

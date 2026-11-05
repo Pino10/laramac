@@ -88,7 +88,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         break
       }
       case 'glassStyle':
-        out.glassStyle = oneOf(value, ['studio', 'smoke', 'frost', 'aurora', 'prism'] as const, 'The look')
+        out.glassStyle = oneOf(value, ['studio', 'smoke', 'frost', 'aurora', 'prism', 'ion'] as const, 'The look')
         break
       case 'appearance':
         out.appearance = oneOf(value, ['auto', 'light', 'dark'] as const, 'Light or dark')

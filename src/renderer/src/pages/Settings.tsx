@@ -344,6 +344,7 @@ export default function Settings(): React.JSX.Element {
             [
               ['studio', 'Studio', 'Clear Liquid Glass lit in your accent colour. The default.'],
               ['prism', 'Prism', 'Glass with a rainbow edge over slowly moving light, like a lens catching the sun.'],
+              ['ion', 'Ion', 'MacSec’s look: deep space lit in ion blue and violet, over a faint grid.'],
               ['aurora', 'Aurora', 'Glass soaked in purple, pink and cyan.'],
               ['smoke', 'Smoked', 'Tinted glass over soft violet light.'],
               ['frost', 'Frosted', 'Quiet, neutral frosted glass.']

@@ -106,12 +106,12 @@ describe('Laramac Code setup', () => {
     expect(vsixManifest('1.0.7', { id: 'laramac-checks', name: 'Laramac Checks', description: 'x', category: 'Linters' })).toMatch(/Id="laramac-checks" Version="1.0.7"/)
   })
   it('gives the editor Laramac’s look, with Poppins only when chosen', () => {
-    const fonts = [{ weight: 400, url: 'data:font/woff2;base64,AAAA' }]
-    const p = workbenchCss({ uiFont: 'poppins', fonts })
-    expect(p).toMatch(/@font-face\{font-family:'Laramac Poppins'/)
+    const p = workbenchCss({ uiFont: 'poppins' })
     expect(p).toMatch(/\.monaco-workbench\{font-family:'Laramac Poppins'/)
-    const sys = workbenchCss({ uiFont: 'system', fonts })
-    expect(sys).not.toMatch(/@font-face/)
+    // The editor's page refuses font addresses, so the app loads the font itself (code-app/lib.js).
+    expect(p).not.toMatch(/@font-face|data:font/)
+    const sys = workbenchCss({ uiFont: 'system' })
+    expect(sys).not.toMatch(/Poppins/)
     // Only the interface: the code itself keeps its monospaced font.
     expect(sys).not.toMatch(/\.view-lines/)
   })

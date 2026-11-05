@@ -30,8 +30,8 @@ export default function LaramacCode(): React.JSX.Element {
       <div className="mcp-body">
         <strong>{s.installed ? `Laramac Code ${s.version ?? ''}`.trim() : 'Laramac Code'}</strong>
         <span>
-          The built-in editor: the open-source VS Code, in a Laramac window, set up for PHP first. Deep PHP intelligence (Intelephense), breakpoints with Xdebug, Blade, and a terminal where php, composer, node,
-          claude, claudelm and claudefree just work. It opens from every site’s code button; “Open with…” picks another editor.
+          Its own app, with its own icon in the Dock, set up for PHP first: Intelephense and Phpactor, breakpoints with Xdebug, Blade, Claude Code and Cline in the side panel, and a terminal where php, composer, node and claude
+          just work. It opens from every site’s code button; “Open with…” picks another editor.
         </span>
         {job && (
           <div className="ide-progress">
@@ -81,16 +81,11 @@ export default function LaramacCode(): React.JSX.Element {
           {s.installed ? (
             <>
               <button className="btn btn-primary" onClick={() => act('ide-open', () => api.invoke('ide:open', null))}>
-                <Code2 size={14} /> Open Laramac Code
+                <Code2 size={14} /> {s.appInstalled ? 'Open Laramac Code' : 'Get the app and open'}
               </button>
               {failed.length > 0 && (
                 <button className="btn" disabled={!!job || busy.has('ide-ext')} onClick={async () => setS((await act('ide-ext', () => api.invoke('ide:extensions'))) ?? s)}>
                   <RefreshCw size={14} /> Retry {failed.length} {failed.length === 1 ? 'extension' : 'extensions'}
-                </button>
-              )}
-              {s.running && (
-                <button className="btn btn-quiet" onClick={async () => setS((await act('ide-stop', () => api.invoke('ide:stop'))) ?? s)}>
-                  Stop
                 </button>
               )}
             </>

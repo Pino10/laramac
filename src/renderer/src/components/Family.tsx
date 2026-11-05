@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AppWindow, Check, Code2, ExternalLink, ShieldHalf } from 'lucide-react'
+import { Check, ExternalLink, ShieldHalf } from 'lucide-react'
+import codeIcon from '../assets/code-icon.png'
 import type { IdeStatus } from '@shared/types'
 import { useApp } from '../store'
 
@@ -16,20 +17,19 @@ export default function Family(): React.JSX.Element {
   return (
     <div className="family">
       <div className="family-card" style={{ ['--g1' as string]: '#60a5fa', ['--g2' as string]: '#7c3aed' }}>
-        <span className="family-icon">
-          <Code2 size={22} />
-        </span>
+        <img className="family-logo" src={codeIcon} alt="" width={46} height={46} />
         <div className="family-text">
           <strong>Laramac Code</strong>
-          <span>A code editor inside Laramac, set up for PHP and Laravel: smart completion, refactoring, Xdebug, checks when you save and AI reviews with skills. Free.</span>
+          <span>Its own app, set up for PHP and Laravel: smart completion, refactoring, Xdebug, Claude Code and Cline in the side panel, and checks when you save. Free.</span>
         </div>
         <div className="family-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => setPage('code')}>
-            {ide?.installed ? 'Open' : 'Install'}
-          </button>
-          {ide?.installed && (
-            <button className="btn btn-sm" disabled={busy.has('ide-shortcut')} onClick={async () => setIde((await act('ide-shortcut', () => api.invoke('ide:shortcut', !ide.shortcut))) ?? ide)}>
-              {ide.shortcut ? <Check size={13} /> : <AppWindow size={13} />} {ide.shortcut ? 'In Applications' : 'Add to Applications'}
+          {ide?.installed ? (
+            <button className="btn btn-primary btn-sm" disabled={busy.has('ide-open-app')} onClick={() => act('ide-open-app', () => api.invoke('ide:open', null))}>
+              Open
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-sm" onClick={() => setPage('code')}>
+              Install
             </button>
           )}
         </div>

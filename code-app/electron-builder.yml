@@ -1,0 +1,36 @@
+# Laramac Code, its own Mac app. Built in the same release as Laramac (see .github/workflows/release.yml)
+# and installed by Laramac from that release, checked against SHA256SUMS.txt.
+appId: dev.laramac.code
+productName: Laramac Code
+directories:
+  buildResources: build
+  output: dist
+files:
+  - main.js
+  - lib.js
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: Laramac-Code-${version}-${arch}.zip
+# Run electron-builder from the repository root: this path is relative to it.
+afterSign: scripts/adhoc-sign.cjs
+# laramac-code://open?folder=…&file=…&line=…, from Laramac.
+protocols:
+  - name: Laramac Code
+    schemes:
+      - laramac-code
+npmRebuild: false
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableCookieEncryption: true
+  onlyLoadAppFromAsar: true

@@ -48,14 +48,23 @@ export interface ProcessSpec {
   group?: boolean
 }
 
+/** Every managed process Laramac has, for the Overview's live list. */
+const ALL = new Set<ManagedProcess>()
+export function runningProcesses(): { name: string; pid: number; since: number }[] {
+  return [...ALL].filter((p) => p.running && p.pid).map((p) => ({ name: p.name, pid: p.pid as number, since: p.startedAt }))
+}
+
 /** A long-running child process with log capture, readiness checks and graceful shutdown. */
 export class ManagedProcess extends EventEmitter {
   private child: ChildProcess | null = null
   private stopping = false
   private group = false
+  /** When it last started, for its uptime. */
+  startedAt = 0
 
   constructor(public readonly name: string) {
     super()
+    ALL.add(this)
   }
 
   get running(): boolean {
@@ -81,6 +90,7 @@ export class ManagedProcess extends EventEmitter {
     })
     this.group = !!spec.group
     this.child = child
+    this.startedAt = Date.now()
     child.stdout?.pipe(log, { end: false })
     child.stderr?.pipe(log, { end: false })
 

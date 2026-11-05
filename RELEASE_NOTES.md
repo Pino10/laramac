@@ -1,3 +1,18 @@
+## New in 0.27
+
+### Laramac Code is its own app
+- **A real Mac app, with its own icon** in the Dock, Spotlight and Launchpad. "Open Laramac Code", a site's code button and "Open in editor" all open it, straight into the right folder or file. It is no longer squeezed inside Laramac's window.
+- **Its own windows**: no browser, no address bar. The title bar works like a Mac app's, File, Open Folder and Open Recent are in the menu bar, and each folder opens in its own window.
+- **AI in the side panel on the right**, like Cursor: **Claude Code** with your Claude account opens there by default, and **Cline** works with your local model, Free LLM API or a key. The buttons at the top right show and hide the side panels.
+- **Poppins really is used now** for the editor's interface when you choose it. Before, the editor refused the font quietly and fell back.
+- Installed from Laramac's own release of the same version, checked against its published checksum, its signature and that it really is Laramac Code. It updates with Laramac.
+
+### The Overview, measured
+- **Live on this Mac** now shows real numbers instead of a picture: every service and dev server with its CPU, memory and how long it has been running (counting everything it started, like PHP's workers), and each site's own traffic over the last half hour.
+
+### Ion
+- **A new look, Ion**: MacSec's deep space lit in ion blue and violet, over a faint grid, with a light side too.
+
 ## New in 0.26
 
 ### Laramac Code, inside Laramac

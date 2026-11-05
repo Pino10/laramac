@@ -39,6 +39,32 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
+      # Laramac Code, its own app, built from code-app/ with the same version and Electron.
+      - name: Build Laramac Code
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('code-app/package.json'));p.version=require('./package.json').version;fs.writeFileSync('code-app/package.json',JSON.stringify(p,null,2)+'\n')"
+          npx electron-builder --mac --projectDir code-app --publish never -c.electronVersion=$(node -p "require('./node_modules/electron/package.json').version")
+          cp code-app/dist/*.zip dist/
+          ls -la dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Check Laramac Code's signature and that it starts
+        run: |
+          rm -rf /tmp/lc && mkdir -p /tmp/lc
+          ditto -x -k dist/Laramac-Code-*-arm64.zip /tmp/lc
+          APP="/tmp/lc/Laramac Code.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = "dev.laramac.code"
+          "$APP/Contents/MacOS/Laramac Code" > code.log 2>&1 &
+          PID=$!
+          sleep 15
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "Laramac Code exited during startup:"; cat code.log; exit 1
+          fi
+          kill $PID || true
+          echo "Laramac Code started and stayed running."
+
       - name: Check the signature and that the app starts
         run: |
           APP="dist/mac-arm64/Laramac.app"
@@ -56,13 +82,14 @@ jobs:
 
       # The in-app updater only installs a DMG whose hash matches this list.
       - name: Checksums
-        run: cd dist && shasum -a 256 *.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: cd dist && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: laramac-dmg
           path: |
             dist/*.dmg
+            dist/*.zip
             dist/SHA256SUMS.txt
 
       # A release created in the GitHub UI (tag push): just attach the files.
@@ -72,6 +99,7 @@ jobs:
         with:
           files: |
             dist/*.dmg
+            dist/*.zip
             dist/SHA256SUMS.txt
 
       # Started from the Actions tab with a tag: publish the release.
@@ -86,7 +114,7 @@ jobs:
           awk '/^## /{n++} n==1' RELEASE_NOTES.md > notes.md
           target=""
           [ "$REPO" = "$GITHUB_REPOSITORY" ] && target="--target $GITHUB_SHA"
-          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt --repo "$REPO" $target \
+          gh release create "$TAG" dist/*.dmg dist/*.zip dist/SHA256SUMS.txt --repo "$REPO" $target \
             --title "Laramac $TAG" --notes-file notes.md --latest
           echo "Published $TAG to $REPO"
 
@@ -97,5 +125,5 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           awk '/^## /{n++} n==1' RELEASE_NOTES.md > notes.md
-          gh release create "$TAG" dist/*.dmg dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          gh release create "$TAG" dist/*.dmg dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Laramac $TAG" --notes-file notes.md --latest

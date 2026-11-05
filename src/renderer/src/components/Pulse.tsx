@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Activity, Archive, Mail, ShieldCheck, Timer } from 'lucide-react'
-import type { OverviewPulse, ServiceInfo, SiteInfo } from '@shared/types'
+import type { OverviewPulse } from '@shared/types'
 import { useApp } from '../store'
 
 const reduced = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -82,9 +82,9 @@ const ago = (iso: string): string => {
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`
 }
 
-/** The Overview's two live cards: today's traffic, and the orbit of your sites and services. */
+/** The Overview's two live cards: today's traffic, and what is running on this Mac now. */
 export default function Pulse(): React.JSX.Element {
-  const { setPage, services, sites } = useApp()
+  const { setPage } = useApp()
   const [p, setP] = useState<OverviewPulse | null>(null)
   useEffect(() => {
     let alive = true
@@ -139,128 +139,104 @@ export default function Pulse(): React.JSX.Element {
           </button>
         </div>
       </div>
-      <Orbit services={services} sites={sites} rate={p ? p.perMinute.slice(-3).reduce((a, b) => a + b, 0) / 3 : 0} />
+      <Live p={p} />
     </section>
   )
 }
 
-interface OrbitNode {
-  id: string
-  label: string
-  sub: string
-  x: number
-  y: number
-  live: boolean
-  kind: 'site' | 'svc'
-  onClick: () => void
+const uptime = (sec: number): string => {
+  if (!sec) return ''
+  if (sec < 60) return `${sec} s`
+  if (sec < 3600) return `${Math.floor(sec / 60)} min`
+  if (sec < 86400) return `${Math.floor(sec / 3600)} h ${Math.floor((sec % 3600) / 60)} min`
+  return `${Math.floor(sec / 86400)} d ${Math.floor((sec % 86400) / 3600)} h`
+}
+const mem = (mb: number): string => (mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`)
+
+/** A small line of one site's last half hour. */
+function Lane({ data }: { data: number[] }): React.JSX.Element {
+  const w = 120
+  const h = 26
+  const max = Math.max(1, ...data)
+  const pts = data.map((v, i) => `${((i / Math.max(1, data.length - 1)) * w).toFixed(1)},${(h - 2 - (v / max) * (h - 6)).toFixed(1)}`)
+  return (
+    <svg className="lane" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden>
+      <polyline points={`0,${h} ${pts.join(' ')} ${w},${h}`} className="lane-area" />
+      <polyline points={pts.join(' ')} className="lane-line" pathLength={1} />
+    </svg>
+  )
 }
 
 /**
- * Your stack as an orbit: this Mac in the middle, the running services around it, and your sites
- * on the outer ring. Requests travel from the sites in, faster when there is more traffic.
+ * What is running on this Mac now, measured: each service and dev server with its CPU, memory and
+ * uptime (with everything it started), and each site's own traffic over the last half hour.
  */
-function Orbit({ services, sites, rate }: { services: ServiceInfo[]; sites: SiteInfo[]; rate: number }): React.JSX.Element {
-  const { setPage, showSite } = useApp()
-  const W = 560
-  const H = 340
-  const cx = W / 2
-  const cy = H / 2
-  const motion = !reduced()
-  const { svc, site } = useMemo(() => {
-    const inst = services.filter((s) => s.status !== 'not-installed').slice(0, 7)
-    const svc: OrbitNode[] = inst.map((s, i) => {
-      const a = (i / Math.max(1, inst.length)) * Math.PI * 2 - Math.PI / 2
-      return { id: s.id, label: s.name, sub: s.status === 'running' ? (s.port ? `:${s.port}` : 'running') : s.status === 'error' ? 'stopped' : 'off', x: cx + Math.cos(a) * 112, y: cy + Math.sin(a) * 82, live: s.status === 'running', kind: 'svc', onClick: () => setPage('services') }
-    })
-    const list = [...sites].sort((a, b) => Number(!!b.dev?.running) - Number(!!a.dev?.running)).slice(0, 8)
-    const site: OrbitNode[] = list.map((s, i) => {
-      const a = (i / Math.max(1, list.length)) * Math.PI * 2 - Math.PI / 2 + Math.PI / Math.max(2, list.length)
-      return { id: s.name, label: s.name, sub: s.domain, x: cx + Math.cos(a) * 236, y: cy + Math.sin(a) * 140, live: !s.dev || !!s.dev.running, kind: 'site', onClick: () => showSite(s.name) }
-    })
-    return { svc, site }
-  }, [services, sites, cx, cy, setPage, showSite])
-  const runningSvc = svc.filter((n) => n.live).length
-  const liveSites = site.filter((n) => n.live).length
-  // Busier traffic sends more, quicker requests; a quiet Mac still shows a slow heartbeat.
-  const speed = Math.max(1.1, 3.4 - Math.min(2.3, rate / 6))
-  const curve = (a: OrbitNode, b: { x: number; y: number }): string => {
-    const mx = (a.x + b.x) / 2
-    const my = (a.y + b.y) / 2
-    const dx = b.x - a.x
-    const dy = b.y - a.y
-    return `M${a.x},${a.y} Q${mx - dy * 0.18},${my + dx * 0.18} ${b.x},${b.y}`
-  }
-  // Each site's requests reach the nearest running service, then the centre.
-  const nearest = (n: OrbitNode): OrbitNode | { x: number; y: number } => {
-    const live = svc.filter((s) => s.live)
-    if (!live.length) return { x: cx, y: cy }
-    return live.reduce((best, s) => (Math.hypot(s.x - n.x, s.y - n.y) < Math.hypot(best.x - n.x, best.y - n.y) ? s : best))
-  }
+function Live({ p }: { p: OverviewPulse | null }): React.JSX.Element {
+  const { setPage, sites, showSite } = useApp()
+  const procs = p?.processes ?? []
+  const lanes = p?.bySite ?? []
+  const totalMem = procs.reduce((n, x) => n + x.memMb, 0)
+  const totalCpu = procs.reduce((n, x) => n + x.cpu, 0)
+  const siteFor = (host: string): string | undefined => sites.find((x) => x.domain === host || host.endsWith(`.${x.domain}`) || x.aliases?.includes(host))?.name
   return (
-    <div className="ov-card ov-orbit" style={{ ['--i' as string]: 1 }}>
-      <div className="ov-orbit-head">
+    <div className="ov-card ov-live" style={{ ['--i' as string]: 1 }}>
+      <div className="ov-live-head">
         <span className="ov-label">
-          <span className="ov-live-dot" data-on={runningSvc > 0} /> Live on this Mac
+          <span className="ov-live-dot" data-on={procs.length > 0} /> Live on this Mac
         </span>
-        <span className="ov-sub">
-          {liveSites} {liveSites === 1 ? 'site' : 'sites'} · {runningSvc} {runningSvc === 1 ? 'service' : 'services'} running
-          {rate >= 0.5 ? ` · ${Math.round(rate)} requests a minute` : ''}
-        </span>
+        <span className="ov-sub">{procs.length ? `${procs.length} running · ${totalCpu.toFixed(1)}% CPU · ${mem(totalMem)}` : 'Nothing running'}</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="orbit-svg" role="img" aria-label={`${liveSites} sites and ${runningSvc} services running`}>
-        <defs>
-          <radialGradient id="orbit-core" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.9" />
-            <stop offset="60%" stopColor="var(--accent)" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <ellipse cx={cx} cy={cy} rx="236" ry="140" className="orbit-ring orbit-ring-out" />
-        <ellipse cx={cx} cy={cy} rx="112" ry="82" className="orbit-ring" />
-        {svc.map((n) => (
-          <path key={`c-${n.id}`} d={curve(n, { x: cx, y: cy })} className="orbit-link" data-live={n.live} />
-        ))}
-        {site.map((n) => {
-          const t = nearest(n)
-          return <path key={`l-${n.id}`} id={`orbit-p-${n.id}`} d={curve(n, t)} className="orbit-link orbit-link-site" data-live={n.live} />
-        })}
-        {motion &&
-          site
-            .filter((n) => n.live && runningSvc > 0)
-            .map((n, i) => (
-              <g key={`m-${n.id}`}>
-                {[0, 1].map((k) => (
-                  <circle key={k} r={k ? 2.2 : 3} className="orbit-packet" opacity={k ? 0.55 : 1}>
-                    <animateMotion dur={`${(speed + (i % 3) * 0.35).toFixed(2)}s`} begin={`${(i * 0.45 + k * speed * 0.5).toFixed(2)}s`} repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1">
-                      <mpath href={`#orbit-p-${n.id}`} />
-                    </animateMotion>
-                  </circle>
-                ))}
-              </g>
-            ))}
-        <circle cx={cx} cy={cy} r="54" fill="url(#orbit-core)" className="orbit-core-glow" />
-        {motion && runningSvc > 0 && (
-          <>
-            <circle cx={cx} cy={cy} r="26" className="orbit-wave" />
-            <circle cx={cx} cy={cy} r="26" className="orbit-wave orbit-wave-2" />
-          </>
-        )}
-        <g className="orbit-core">
-          <circle cx={cx} cy={cy} r="26" />
-          <text x={cx} y={cy + 4} textAnchor="middle">
-            Mac
-          </text>
-        </g>
-        {[...svc, ...site].map((n) => (
-          <g key={`${n.kind}-${n.id}`} className="orbit-node" data-kind={n.kind} data-live={n.live} transform={`translate(${n.x},${n.y})`} onClick={n.onClick} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && n.onClick()}>
-            <title>{`${n.label}: ${n.sub}`}</title>
-            <circle r={n.kind === 'svc' ? 7 : 9} className="orbit-dot" />
-            <text y={n.kind === 'svc' ? -13 : n.y < cy ? -16 : 24} textAnchor="middle" className="orbit-name">
-              {n.label.length > 16 ? `${n.label.slice(0, 15)}…` : n.label}
-            </text>
-          </g>
-        ))}
-      </svg>
+      <div className="live-cols">
+        <div className="live-procs" role="table" aria-label="Running services">
+          <div className="live-row live-th" role="row">
+            <span>Process</span>
+            <span>CPU</span>
+            <span>Memory</span>
+            <span>Up</span>
+          </div>
+          {procs.length === 0 && (
+            <button className="live-empty" onClick={() => setPage('services')}>
+              Start your services and they show here, with what each one uses.
+            </button>
+          )}
+          {procs.slice(0, 7).map((x, i) => (
+            <div key={x.name} className="live-row" role="row" style={{ ['--r' as string]: i }} title={x.count > 1 ? `${x.count} processes` : undefined}>
+              <span className="live-name">
+                <i className="lamp" data-s="running" /> {x.name}
+              </span>
+              <span className="live-cpu">
+                <b style={{ width: `${Math.min(100, x.cpu)}%` }} />
+                <em>{x.cpu.toFixed(1)}%</em>
+              </span>
+              <span className="live-num">{mem(x.memMb)}</span>
+              <span className="live-num live-up">{uptime(x.uptimeSec)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="live-sites">
+          <div className="live-th live-th-sites">
+            <span>Traffic, last 30 minutes</span>
+            <span>Today</span>
+          </div>
+          {lanes.length === 0 && <div className="live-empty">No requests yet today. Open one of your sites and its traffic appears here.</div>}
+          {lanes.map((l, i) => {
+            const name = siteFor(l.host)
+            return (
+              <button key={l.host} className="live-lane" style={{ ['--r' as string]: i }} onClick={() => (name ? showSite(name, 'requests') : setPage('sites'))}>
+                <span className="live-host">
+                  <strong>{l.host}</strong>
+                  <small>
+                    {l.medianMs ? `${l.medianMs} ms median` : ''}
+                    {l.errors ? <em> · {l.errors} {l.errors === 1 ? 'error' : 'errors'}</em> : null}
+                  </small>
+                </span>
+                <Lane data={l.perMinute} />
+                <span className="live-num">{l.today.toLocaleString('en')}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

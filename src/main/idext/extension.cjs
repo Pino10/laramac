@@ -304,6 +304,16 @@ function activate(context) {
     })
   )
   refreshStatus()
+
+  // The first time: Claude Code opens in the side panel on the right, so the AI chat is there
+  // straight away. After that the editor remembers where you put it.
+  const claude = vscode.extensions.getExtension('anthropic.claude-code')
+  if (claude && !context.globalState.get('laramac.sidePanel')) {
+    void context.globalState.update('laramac.sidePanel', true)
+    setTimeout(() => {
+      vscode.commands.executeCommand('claude-vscode.sidebar.open').then(undefined, () => undefined)
+    }, 1500)
+  }
 }
 
 function deactivate() {}

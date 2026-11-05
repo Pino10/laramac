@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2133"/><stop offset="1" stop-color="#07090f"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0.18" cy="0.08" r="0.75">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.55"/><stop offset="0.7" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.95" cy="1" r="0.75">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity="0.6"/><stop offset="0.75" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ink" x1="0.1" y1="0.15" x2="0.9" y2="0.85">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset="0.5" stop-color="#a5b4fc"/><stop offset="1" stop-color="#e879f9"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="26"/></filter>
+    <clipPath id="sq"><rect x="64" y="64" width="896" height="896" rx="208"/></clipPath>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#bg)"/>
+  <g clip-path="url(#sq)">
+    <rect x="64" y="64" width="896" height="896" fill="url(#glowA)"/>
+    <rect x="64" y="64" width="896" height="896" fill="url(#glowB)"/>
+    <!-- a faint editor: line numbers and code lines -->
+    <g fill="#ffffff" opacity="0.06">
+      <rect x="150" y="214" width="250" height="22" rx="11"/>
+      <rect x="150" y="268" width="380" height="22" rx="11"/>
+      <rect x="190" y="322" width="300" height="22" rx="11"/>
+      <rect x="190" y="700" width="260" height="22" rx="11"/>
+      <rect x="150" y="754" width="420" height="22" rx="11"/>
+      <rect x="150" y="808" width="220" height="22" rx="11"/>
+    </g>
+  </g>
+  <!-- the mark: chevrons with a slash, glowing -->
+  <g filter="url(#blur)" opacity="0.75">
+    <path d="M392 360 L240 512 L392 664" fill="none" stroke="url(#ink)" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M632 360 L784 512 L632 664" fill="none" stroke="url(#ink)" stroke-width="84" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M566 316 L458 708" fill="none" stroke="url(#ink)" stroke-width="72" stroke-linecap="round"/>
+  </g>
+  <path d="M392 360 L240 512 L392 664" fill="none" stroke="url(#ink)" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M632 360 L784 512 L632 664" fill="none" stroke="url(#ink)" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M566 316 L458 708" fill="none" stroke="url(#ink)" stroke-width="60" stroke-linecap="round"/>
+  <circle cx="566" cy="316" r="18" fill="#ffffff" opacity="0.9"/>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#sheen)"/>
+  <rect x="65" y="65" width="894" height="894" rx="207" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="2"/>
+</svg>

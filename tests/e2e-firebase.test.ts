@@ -16,7 +16,8 @@ run('Firebase on a real Next.js project', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'lm-fb-'))
     const dir = join(tmp, 'shop')
     // The copied app with its node_modules is over a gigabyte: remove it however the test ends.
-    onTestFinished(() => rmSync(tmp, { recursive: true, force: true }))
+    // Deleting it can take longer than a hook's usual 30 seconds on a busy disk.
+    onTestFinished(() => rmSync(tmp, { recursive: true, force: true }), 300_000)
     cpSync(APP, dir, { recursive: true, filter: (s) => !s.includes('/.next') })
     const { setupFirebase, startBackend, stopBackend } = await import('../src/main/backends')
     const lines: string[] = []

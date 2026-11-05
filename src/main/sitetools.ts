@@ -375,3 +375,80 @@ export function pulseFrom(text: string, now: number, minutes = 30): Pulse {
   times.sort((a, b) => a - b)
   return { perMinute, today, errorsToday, medianMs: times.length ? times[Math.floor(times.length / 2)] : 0 }
 }
+
+export interface SitePulse {
+  host: string
+  perMinute: number[]
+  today: number
+  errors: number
+  medianMs: number
+}
+
+/** The same traffic, per site: the busiest hosts today, each with its own last half hour. */
+export function pulseBySite(text: string, now: number, minutes = 30, max = 6): SitePulse[] {
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  const by = new Map<string, { perMinute: number[]; today: number; errors: number; times: number[] }>()
+  for (const l of text.split('\n')) {
+    const r = parseAccessLine(l)
+    if (!r) continue
+    const at = Date.parse(r.at.replace(/([+-]\d\d)(\d\d)$/, '$1:$2'))
+    if (!Number.isFinite(at)) continue
+    const host = r.host.replace(/:\d+$/, '')
+    if (!host || host === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) continue
+    let s = by.get(host)
+    if (!s) by.set(host, (s = { perMinute: new Array<number>(minutes).fill(0), today: 0, errors: 0, times: [] }))
+    if (at >= midnight.getTime() && at <= now + 60_000) {
+      s.today++
+      if (r.status >= 500) s.errors++
+      s.times.push(r.ms)
+    }
+    const ago = Math.floor((now - at) / 60_000)
+    if (ago >= 0 && ago < minutes) s.perMinute[minutes - 1 - ago]++
+  }
+  return [...by.entries()]
+    .map(([host, s]) => {
+      s.times.sort((a, b) => a - b)
+      return { host, perMinute: s.perMinute, today: s.today, errors: s.errors, medianMs: s.times.length ? s.times[Math.floor(s.times.length / 2)] : 0 }
+    })
+    .filter((s) => s.today > 0 || s.perMinute.some((n) => n > 0))
+    .sort((a, b) => b.today - a.today)
+    .slice(0, max)
+}
+
+/**
+ * CPU and memory for each process Laramac runs, with everything it started (PHP-FPM's workers,
+ * Nginx's workers, npm then Vite), from `ps -axo pid=,ppid=,pcpu=,rss=`.
+ */
+export function processUsage(ps: string, roots: { name: string; pid: number; since: number }[], now: number): { name: string; cpu: number; memMb: number; uptimeSec: number; count: number }[] {
+  const rows = ps
+    .split('\n')
+    .map((l) => l.trim().split(/\s+/))
+    .filter((p) => p.length >= 4 && /^\d+$/.test(p[0]))
+    .map((p) => ({ pid: Number(p[0]), ppid: Number(p[1]), cpu: Number(p[2]) || 0, rssKb: Number(p[3]) || 0 }))
+  const kids = new Map<number, number[]>()
+  for (const r of rows) kids.set(r.ppid, [...(kids.get(r.ppid) ?? []), r.pid])
+  const byPid = new Map(rows.map((r) => [r.pid, r]))
+  return roots
+    .filter((root) => byPid.has(root.pid))
+    .map((root) => {
+      let cpu = 0
+      let kb = 0
+      let count = 0
+      const seen = new Set<number>()
+      const stack = [root.pid]
+      while (stack.length) {
+        const pid = stack.pop() as number
+        if (seen.has(pid)) continue
+        seen.add(pid)
+        const r = byPid.get(pid)
+        if (!r) continue
+        cpu += r.cpu
+        kb += r.rssKb
+        count++
+        stack.push(...(kids.get(pid) ?? []))
+      }
+      return { name: root.name, cpu: Math.round(cpu * 10) / 10, memMb: Math.round(kb / 102.4) / 10, uptimeSec: root.since ? Math.max(0, Math.round((now - root.since) / 1000)) : 0, count }
+    })
+    .sort((a, b) => b.memMb - a.memMb)
+}

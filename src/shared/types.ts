@@ -591,6 +591,10 @@ export interface PhpToolInfo {
 }
 
 export interface OverviewPulse {
+  /** The busiest sites today, each with its own last half hour. */
+  bySite: { host: string; perMinute: number[]; today: number; errors: number; medianMs: number }[]
+  /** Each running service or dev server, with what it uses now. */
+  processes: { name: string; cpu: number; memMb: number; uptimeSec: number; count: number }[]
   perMinute: number[]
   today: number
   errorsToday: number
@@ -611,11 +615,12 @@ export interface ViewRect {
 }
 
 export interface IdeStatus {
+  /** The editor (code-server) is installed. */
   installed: boolean
   version: string | null
-  running: boolean
-  /** Whether the Laramac Code app is in ~/Applications. */
-  shortcut: boolean
+  /** The Laramac Code app is in ~/Applications, and its version. */
+  appInstalled: boolean
+  appVersion: string | null
   extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
 }
 
@@ -700,7 +705,7 @@ export interface AppSettings {
   tld: string
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
-  glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism'
+  glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism' | 'ion'
   /** Light or dark: follow the Mac, or always one. Every look has both. */
   appearance?: 'auto' | 'light' | 'dark'
   /** The first-run tour has been seen. */
@@ -1110,14 +1115,8 @@ export interface Channels {
   'ide:install': { args: []; result: IdeStatus }
   'ide:extensions': { args: []; result: IdeStatus }
   'ide:open': { args: [string | null]; result: void }
-  'ide:stop': { args: []; result: IdeStatus }
-  /** Shows Laramac Code inside the window over this rectangle; null opens what was open, or the www folder. */
-  'ide:embed': { args: [string | null, ViewRect]; result: { url: string } }
-  'ide:embed-bounds': { args: [ViewRect]; result: void }
-  'ide:unembed': { args: []; result: void }
-  'ide:detach': { args: []; result: void }
-  /** Adds (true) or removes (false) the Laramac Code app in ~/Applications. */
-  'ide:shortcut': { args: [boolean]; result: IdeStatus }
+  /** Installs or updates the Laramac Code app from this version's release. */
+  'ide:install-app': { args: []; result: IdeStatus }
   /** Whether MacSec, Laramac's security workbench, is on this Mac. */
   'macsec:status': { args: []; result: { installed: boolean } }
   'sites:open-claude': { args: [string]; result: void }

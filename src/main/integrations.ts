@@ -60,7 +60,7 @@ export async function openInEditor(editor: string, path: string, line?: number):
   const useIde = editor === 'laramac' || editor === 'auto' || !stillThere
   if (useIde) {
     if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
-    await openInIde(path, line, projectRoots())
+    await openInIde(path, line, projectRoots(), getSettings().wwwPath)
     return
   }
   await openInEditorOf({ choice: editor, customApp: getSettings().editorApp, path, line, found })

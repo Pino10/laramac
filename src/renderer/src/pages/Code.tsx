@@ -1,82 +1,90 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { AppWindow, Check, Code2, ExternalLink, FolderOpen, Settings2, ShieldCheck, Sparkles, Square, Terminal, Bug, Wand2, X } from 'lucide-react'
-import type { IdeStatus, ViewRect } from '@shared/types'
+import { useEffect, useState } from 'react'
+import { ArrowUpRight, Bug, Download, ShieldCheck, Sparkles, Terminal, Wand2 } from 'lucide-react'
+import type { IdeStatus } from '@shared/types'
 import { useApp } from '../store'
+import { Monogram } from '../ui'
 import LaramacCode from '../components/LaramacCode'
+import codeIcon from '../assets/code-icon.png'
 
 const FEATURES: { icon: React.ReactNode; title: string; text: string }[] = [
+  { icon: <Sparkles size={16} />, title: 'AI in the side panel', text: 'Claude Code with your Claude account, and Cline with your local model, Free LLM API or a key. Show or hide the panel from the title bar.' },
   { icon: <Wand2 size={16} />, title: 'PHP that understands your code', text: 'Intelephense for completion and errors as you type, Phpactor for rename, extract and generate. Both free.' },
-  { icon: <ShieldCheck size={16} />, title: 'Checks when you save', text: 'PHP’s own syntax check, PHPStan and Psalm, in the editor. Semgrep too when MacSec is installed.' },
-  { icon: <Sparkles size={16} />, title: 'Reviews with skills', text: 'Claude Code, your local model or Free LLM API reads a file or the project with Laravel’s and the security teams’ skills. It never changes your code.' },
+  { icon: <ShieldCheck size={16} />, title: 'Checks when you save', text: 'PHP’s own check, PHPStan and Psalm, with Laravel’s skills for AI reviews. Semgrep too when MacSec is installed.' },
   { icon: <Bug size={16} />, title: 'Breakpoints', text: 'Xdebug, Blade, .env, Tailwind, Vue, ESLint and Prettier are set up for you.' },
   { icon: <Terminal size={16} />, title: 'A terminal that knows Laramac', text: 'php, composer, node, artisan and claude just work, with each site’s own versions.' }
 ]
 
-/** Laramac Code, inside Laramac's window. */
+/** Laramac Code's home in Laramac: install it, open it, or open a site in it. The editor is its own app. */
 export default function Code(): React.JSX.Element {
-  const { act, busy, jobs, sites, codeUrl, paletteOpen, newProject, importOpen } = useApp()
+  const { act, busy, jobs, sites } = useApp()
   const api = window.laramac
   const [s, setS] = useState<IdeStatus | null>(null)
-  const [prefs, setPrefs] = useState(false)
-  const [current, setCurrent] = useState<string>('')
-  const area = useRef<HTMLDivElement>(null)
   useEffect(() => {
     void api.invoke('ide:status').then(setS)
   }, [api, jobs.length])
-
-  const covered = prefs || paletteOpen || newProject || importOpen
-  const show = !!s?.installed && !covered
-  const rect = (): ViewRect | null => {
-    const el = area.current
-    if (!el) return null
-    const r = el.getBoundingClientRect()
-    return { x: r.left, y: r.top, width: r.width, height: Math.max(200, window.innerHeight - r.top - 14) }
-  }
-
-  // Shows the editor over the area below the toolbar, and follows the window's size.
-  useLayoutEffect(() => {
-    if (!show) {
-      void api.invoke('ide:unembed')
-      return
-    }
-    const r = rect()
-    if (r) void act('ide-embed', () => api.invoke('ide:embed', codeUrl?.url ?? null, r)).then((v) => v && setCurrent(v.url))
-    const resize = (): void => {
-      const n = rect()
-      if (n) void api.invoke('ide:embed-bounds', n)
-    }
-    const ro = new ResizeObserver(resize)
-    if (area.current) ro.observe(area.current)
-    window.addEventListener('resize', resize)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', resize)
-    }
-    // codeUrl.at changes for every "Open in editor", even for the same folder.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, codeUrl?.at])
-  useEffect(() => () => void api.invoke('ide:unembed'), [api])
-
   if (!s) return <></>
-  const folder = (() => {
-    try {
-      return new URL(current).searchParams.get('folder') ?? ''
-    } catch {
-      return ''
-    }
-  })()
-  const site = sites.find((x) => folder && (folder === x.path || folder.startsWith(`${x.path}/`)))
+  const job = jobs.find((j) => j.status === 'running' && /Laramac Code/.test(j.label))
+  const open = (path: string | null): Promise<unknown> => act(`ide-open-${path ?? 'app'}`, () => api.invoke('ide:open', path))
 
-  if (!s.installed)
-    return (
-      <div className="code-intro">
-        <div className="code-hero">
-          <span className="code-hero-mark">
-            <Code2 size={30} />
-          </span>
+  return (
+    <div className="code-home">
+      <section className="code-hero">
+        <img className="code-hero-icon" src={codeIcon} alt="" width={112} height={112} />
+        <div className="code-hero-text">
           <h1>Laramac Code</h1>
-          <p>A code editor that lives in Laramac, set up for PHP and Laravel first, and for JavaScript, Vue, React and the rest right after. Built on the open-source VS Code, dressed in Laramac’s look.</p>
+          <p>A code editor of its own, with its own icon in the Dock, set up for PHP and Laravel first and for JavaScript, Vue and React right after. Built on the open-source VS Code.</p>
+          <div className="code-hero-actions">
+            {s.installed ? (
+              <button className="btn btn-primary btn-lg" disabled={busy.has('ide-open-app') || !!job} onClick={() => open(null)}>
+                <ArrowUpRight size={16} /> {busy.has('ide-open-app') ? 'Opening…' : 'Open Laramac Code'}
+              </button>
+            ) : (
+              <button className="btn btn-primary btn-lg" disabled={!!job || busy.has('ide-install')} onClick={async () => setS((await act('ide-install', () => api.invoke('ide:install'))) ?? s)}>
+                <Download size={16} /> {job ? 'Installing…' : 'Install Laramac Code'}
+              </button>
+            )}
+            <span className="hint">
+              {s.installed
+                ? s.appVersion
+                  ? `In your Applications, version ${s.appVersion}. Editor ${s.version}.`
+                  : 'The app is added to your Applications the first time you open it.'
+                : 'About 300 MB with the extensions. Every download is checked against its published checksum.'}
+            </span>
+          </div>
+          {job && (
+            <div className="ide-progress">
+              <span>
+                {job.label}
+                {job.percent !== null ? `, ${job.percent}%` : '…'}
+              </span>
+              <div className="upd-bar">
+                <span style={{ width: `${job.percent ?? 8}%` }} />
+              </div>
+            </div>
+          )}
         </div>
+      </section>
+
+      {s.installed && sites.length > 0 && (
+        <section>
+          <h2 className="section-title">Open a site</h2>
+          <div className="code-sites">
+            {sites.map((x) => (
+              <button key={x.name} className="code-site" disabled={busy.has(`ide-open-${x.path}`)} onClick={() => open(x.path)}>
+                <Monogram id={x.kind} />
+                <span>
+                  <strong>{x.name}</strong>
+                  <small>{x.path.replace(/^\/Users\/[^/]+/, '~')}</small>
+                </span>
+                <ArrowUpRight size={15} className="code-site-go" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h2 className="section-title">Inside</h2>
         <div className="code-features">
           {FEATURES.map((f) => (
             <div key={f.title} className="code-feature">
@@ -86,69 +94,13 @@ export default function Code(): React.JSX.Element {
             </div>
           ))}
         </div>
-        <LaramacCode />
-      </div>
-    )
+      </section>
 
-  return (
-    <div className="code-page">
-      <div className="code-bar">
-        <span className="code-bar-mark">
-          <Code2 size={16} />
-        </span>
-        <div className="code-bar-title">
-          <strong>{site ? site.name : folder ? folder.split('/').pop() : 'Laramac Code'}</strong>
-          <span>{folder ? folder.replace(/^\/Users\/[^/]+/, '~') : 'Your www folder'}</span>
-        </div>
-        <label className="code-open">
-          <FolderOpen size={14} />
-          <select
-            aria-label="Open a site"
-            value=""
-            onChange={(e) => {
-              const p = e.target.value
-              if (p) void act('ide-open-site', () => api.invoke('sites:open-with', p, 'laramac'))
-            }}
-          >
-            <option value="">Open a site…</option>
-            {sites.map((x) => (
-              <option key={x.name} value={x.path}>
-                {x.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="code-bar-actions">
-          <button className="icon-btn" data-tip="Open in its own window" aria-label="Open in its own window" onClick={() => act('ide-detach', () => api.invoke('ide:detach'))}>
-            <ExternalLink size={15} />
-          </button>
-          <button className={s.shortcut ? 'icon-btn' : 'btn btn-sm'} data-tip={s.shortcut ? 'In your Applications. Click to remove.' : undefined} aria-label={s.shortcut ? 'Remove Laramac Code from Applications' : 'Add Laramac Code to Applications'} disabled={busy.has('ide-shortcut')} onClick={async () => setS((await act('ide-shortcut', () => api.invoke('ide:shortcut', !s.shortcut))) ?? s)}>
-            {s.shortcut ? <Check size={15} /> : <AppWindow size={14} />}
-            {!s.shortcut && 'Add to Applications'}
-          </button>
-          <button className="icon-btn" data-tip={prefs ? 'Back to the editor' : 'Fonts and extensions'} aria-label="Fonts and extensions" aria-pressed={prefs} onClick={() => setPrefs(!prefs)}>
-            {prefs ? <X size={15} /> : <Settings2 size={15} />}
-          </button>
-          {s.running && (
-            <button className="icon-btn" data-tip="Stop Laramac Code" aria-label="Stop Laramac Code" onClick={async () => setS((await act('ide-stop', () => api.invoke('ide:stop'))) ?? s)}>
-              <Square size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-      {prefs ? (
-        <div className="code-prefs">
+      {s.installed && (
+        <section>
+          <h2 className="section-title">Fonts and extensions</h2>
           <LaramacCode />
-        </div>
-      ) : (
-        <div ref={area} className="code-area" aria-label="Laramac Code">
-          <div className="code-loading">
-            <span className="code-hero-mark">
-              <Code2 size={22} />
-            </span>
-            <span>{busy.has('ide-embed') ? 'Starting Laramac Code…' : covered ? '' : 'Laramac Code'}</span>
-          </div>
-        </div>
+        </section>
       )}
     </div>
   )
