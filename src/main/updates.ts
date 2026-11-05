@@ -7,6 +7,7 @@
  * first install did, checked the same way. Updating a site's packages runs that project's own
  * install scripts, so it only happens when the person agreed to it, and a snapshot is saved first.
  */
+import { GITHUB_API, githubApi } from './seckit/ghapi'
 import { execFile } from 'child_process'
 import type { OutdatedPackage, UpdateItem } from '../shared/types'
 import { compareVersions } from './versions'
@@ -69,6 +70,8 @@ export function run(cmd: string, args: string[], opts: { cwd?: string; env?: Nod
 
 export async function getJson<T>(url: string): Promise<T | null> {
   try {
+    // GitHub's API has an hourly limit: its own client keeps answers and uses your sign-in.
+    if (url.startsWith(GITHUB_API)) return await githubApi<T>(url)
     const res = await fetch(url, { headers: { 'User-Agent': 'Laramac', Accept: 'application/json' }, signal: AbortSignal.timeout(12000) })
     return res.ok ? ((await res.json()) as T) : null
   } catch {

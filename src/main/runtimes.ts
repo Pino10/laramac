@@ -2,6 +2,7 @@
  * Language runtimes for the starter store. Laramac installs its own copy of each into
  * ~/.laramac/runtimes (no admin password, nothing global), or uses one already on this Mac.
  */
+import { githubApi } from './seckit/ghapi'
 import { execFile, spawn } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
@@ -178,7 +179,7 @@ export function shaFor(sums: string, file: string): string | null {
 }
 
 async function githubLatest(repo: string): Promise<{ tag: string; assets: { name: string; url: string }[] }> {
-  const r = await getJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(`https://api.github.com/repos/${repo}/releases/latest`)
+  const r = await githubApi<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(`/repos/${repo}/releases/latest`)
   return { tag: r.tag_name, assets: r.assets.map((a) => ({ name: a.name, url: a.browser_download_url })) }
 }
 

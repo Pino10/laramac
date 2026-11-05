@@ -1,7 +1,7 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync } from 'fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
 
 // A real Next.js app (made by create-next-app in /tmp/lm/myapp) and Java are needed.
 const APP = '/tmp/lm/myapp'
@@ -13,7 +13,10 @@ run('Firebase on a real Next.js project', () => {
     process.env.JAVA_HOME = JAVA
     // This test machine sets Java proxy options that the emulators print and then choke on.
     delete process.env.JAVA_TOOL_OPTIONS
-    const dir = join(mkdtempSync(join(tmpdir(), 'lm-fb-')), 'shop')
+    const tmp = mkdtempSync(join(tmpdir(), 'lm-fb-'))
+    const dir = join(tmp, 'shop')
+    // The copied app with its node_modules is over a gigabyte: remove it however the test ends.
+    onTestFinished(() => rmSync(tmp, { recursive: true, force: true }))
     cpSync(APP, dir, { recursive: true, filter: (s) => !s.includes('/.next') })
     const { setupFirebase, startBackend, stopBackend } = await import('../src/main/backends')
     const lines: string[] = []

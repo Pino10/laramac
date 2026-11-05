@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs'
+import { assetUrl, latestRelease } from '../seckit/ghapi'
 import { join } from 'path'
 import type { ServiceImpl } from './types'
 import { dirs } from '../paths'
@@ -31,9 +32,8 @@ export const ollama: ServiceImpl = {
 
   async install() {
     await jobs.run('Installing Ollama', async (update) => {
-      const res = await fetch('https://api.github.com/repos/ollama/ollama/releases/latest', { headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(20000) })
-      if (!res.ok) throw new Error(`GitHub answered ${res.status}.`)
-      const asset = ollamaAsset(((await res.json()) as { assets: { name: string; browser_download_url: string }[] }).assets)
+      const latest = await latestRelease('ollama/ollama')
+      const asset = ollamaAsset(latest.fromWeb ? ['ollama-darwin.tgz', 'sha256sum.txt'].map((n) => ({ name: n, browser_download_url: assetUrl('ollama/ollama', latest.tag, n) })) : latest.assets.map((a) => ({ name: a.name, browser_download_url: a.url })))
       if (!asset) throw new Error('Ollama has no download for this Mac in its latest release.')
       const file = join(dirs.root(), 'downloads', asset.name)
       mkdirSync(join(dirs.root(), 'downloads'), { recursive: true })

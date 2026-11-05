@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
+import { githubApi } from '../seckit/ghapi'
 import { join } from 'path'
 import type { ServiceImpl } from './types'
 import { dirs } from '../paths'
@@ -28,9 +29,7 @@ export const rustfs: ServiceImpl = {
   async install() {
     if (process.arch !== 'arm64') throw new Error('RustFS only publishes builds for Apple Silicon Macs.')
     await jobs.run('Installing S3 storage (RustFS)', async (update) => {
-      const res = await fetch('https://api.github.com/repos/rustfs/rustfs/releases?per_page=5', { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } })
-      if (!res.ok) throw new Error(`GitHub answered ${res.status} while looking for RustFS.`)
-      const releases = (await res.json()) as { assets: { name: string; browser_download_url: string }[] }[]
+      const releases = await githubApi<{ assets: { name: string; browser_download_url: string }[] }[]>('/repos/rustfs/rustfs/releases?per_page=5')
       const asset = releases.flatMap((r) => r.assets).find((a) => /^rustfs-macos-aarch64.*\.zip$/.test(a.name))
       if (!asset) throw new Error('No RustFS build for this Mac was found.')
       const archive = join(dirs.downloads(), asset.name)

@@ -1,5 +1,9 @@
-## New in 0.23.1
+## New in 0.23.2
 
-### Studio, rich and in glass
-Studio is now dark Liquid Glass: a deep night canvas lit by soft blue, teal and violet light, thick frosted panels with a bright rim and a sheen across the top, and Google blue that glows on the page you are on, the main buttons and the switches. Titles shine from white to blue. On macOS 26 the window itself is glass too, so your desktop shows through. Still Apple's own font, and still in Settings, Look.
+### Checking for updates no longer stops with 403
+GitHub only answers about 60 questions an hour from apps that are not signed in, shared by everything on your network. Laramac's update check, the Updates page, tool installs and version lookups used them up, and then GitHub answered 403. Now:
+- When you connected GitHub on the GitHub page, Laramac uses that sign-in: 5,000 an hour.
+- Answers are kept for ten minutes and asked again in a way GitHub does not count when nothing changed.
+- When the hour is used up anyway, update checks read GitHub's release feed instead, which has no limit, and Ollama, Nuclei and subfinder installs find their files the same way.
+- If nothing works, Laramac says when GitHub's limit comes back instead of showing a number.
 

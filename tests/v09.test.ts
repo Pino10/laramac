@@ -393,7 +393,7 @@ describe('downloads while the project is private', () => {
     })
     try {
       dist.setDownloadToken(() => null)
-      await expect(dist.releasesApi('releases?per_page=50')).rejects.toThrow(/Connect your GitHub account/)
+      await expect(dist.releasesApi('releases?per_page=50')).rejects.toThrow(/could not find/)
       dist.setDownloadToken(() => 'tok')
       const rel = await dist.releasesApi<{ tag_name: string }[]>('releases?per_page=50')
       expect(rel[0].tag_name).toBe('v0.12.0')

@@ -77,6 +77,7 @@ Never paste a token into a chat, an issue or a commit. Tokens belong in GitHub s
 | `src/main/webhooks.ts` | Slack, Teams and Discord messages, and Raycast script commands. |
 | `src/main/svc/ollama.ts` | Ollama as a service. |
 | `src/main/seckit/skillpacks.ts` | Shared with MacSec: Trail of Bits, Sentry, Cloudflare and Anthropic skill packs. Slash commands become skills with `commandToSkill`. |
+| `src/main/seckit/ghapi.ts` | Shared with MacSec: every api.github.com call (sign-in, caching, rate limits, release feed fallback). Never call GitHub's API with plain fetch. |
 | `src/main/seckit/freellm.ts` | Shared with MacSec: Free LLM API addresses, keys, models and the environment for Claude Code. |
 | `src/main/nodeversions.ts` | Node.js per project: what a project asks for, installing other major versions, the node/npm/npx commands that switch by folder. |
 | `src/main/updates.ts` | Helpers for the Updates page: version jumps, Homebrew and tool version parsing. The collecting and applying is in `index.ts`. |

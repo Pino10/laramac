@@ -6,12 +6,15 @@
  * GitHub sign-in you added on Laramac's GitHub page, so updates keep working
  * for you during testing.
  */
+import { configureGitHub, githubApi, releasesWithFallback, type ApiLikeRelease } from './seckit/ghapi'
+
 export const RELEASE_REPOS = ['Pino10/laramac']
 const UA = 'Laramac (+https://github.com/Pino10/laramac)'
 
 let tokenFn: () => string | null = () => null
 export function setDownloadToken(fn: () => string | null): void {
   tokenFn = fn
+  configureGitHub({ userAgent: UA, token: fn })
 }
 
 // Browser download links of private assets map to their API address, which accepts a token.
@@ -28,26 +31,20 @@ function remember(data: unknown): void {
   for (const r of releases as { assets?: Asset[] }[]) for (const a of r.assets ?? []) if (a.url) privateAssets.set(a.browser_download_url, a.url)
 }
 
-/** GETs `repos/<repo>/<path>` from the first release repository that answers. */
+/**
+ * GETs `repos/<repo>/<path>` from the release repository, through the shared GitHub client: with
+ * your GitHub sign-in when there is one, kept for a while, and never spending GitHub's hourly
+ * limit twice on the same question.
+ */
 export async function releasesApi<T>(path: string): Promise<T> {
-  let last = 'No release repository answered.'
-  for (const repo of RELEASE_REPOS) {
-    const url = `https://api.github.com/repos/${repo}/${path}`
-    const headers: Record<string, string> = { 'User-Agent': UA, Accept: 'application/vnd.github+json' }
-    let res = await fetch(url, { headers, signal: AbortSignal.timeout(20_000) })
-    const token = res.status === 404 ? tokenFn() : null
-    if (token) res = await fetch(url, { headers: { ...headers, Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) })
-    if (res.ok) {
-      const data = (await res.json()) as T
-      if (token) remember(data)
-      return data
-    }
-    last =
-      res.status === 404
-        ? 'Laramac is being tested privately. Connect your GitHub account on the GitHub page so Laramac can see its own updates.'
-        : `GitHub answered ${res.status}.`
-  }
-  throw new Error(last)
+  const data = await githubApi<T>(`/repos/${RELEASE_REPOS[0]}/${path}`)
+  remember(data)
+  return data
+}
+
+/** Laramac's own releases, newest first. When GitHub's hourly limit is used up, they come from its release feed instead. */
+export function appReleases(): Promise<ApiLikeRelease[]> {
+  return releasesWithFallback(RELEASE_REPOS[0], (v) => [`Laramac-${v}-arm64.dmg`, `Laramac-${v}-x64.dmg`, 'SHA256SUMS.txt'])
 }
 
 /** Opens a download, using the GitHub sign-in when it belongs to a private release. */

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
 import { runtimesFor } from './importsetup'
@@ -139,7 +140,7 @@ async function starterVersions(): Promise<Record<string, string>> {
         v = list?.find((x) => /^v?\d+\.\d+(\.\d+)?$/.test(x.version))?.version
       } else if (src.pypi) v = ((await get(`https://pypi.org/pypi/${src.pypi}/json`)) as { info: { version: string } }).info.version
       else if (src.crates) v = ((await get(`https://crates.io/api/v1/crates/${src.crates}`)) as { crate: { max_stable_version: string } }).crate.max_stable_version
-      else if (src.github) v = ((await get(`https://api.github.com/repos/${src.github}/releases/latest`)) as { tag_name: string }).tag_name
+      else if (src.github) v = (await latestRelease(src.github)).tag
       if (v) data[s.id] = v.replace(/^v/, '')
     })
   )

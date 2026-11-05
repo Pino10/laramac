@@ -3,6 +3,7 @@
  * site (through the web server, as that site) or an address you are allowed to test.
  * Denial-of-service and fuzzing checks are left out, and requests are rate limited.
  */
+import { assetUrl, latestRelease } from './seckit/ghapi'
 import { execFile, spawn } from "child_process";
 import {
   chmodSync,
@@ -40,18 +41,14 @@ export function nucleiVersion(): Promise<string | null> {
 export async function installNuclei(
   update: (p: number | null, l?: string) => void,
 ): Promise<void> {
-  const res = await fetch(
-    "https://api.github.com/repos/projectdiscovery/nuclei/releases/latest",
-    { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } },
-  );
-  if (!res.ok)
-    throw new Error(`GitHub answered ${res.status} while looking for Nuclei.`);
-  const rel = (await res.json()) as {
-    tag_name: string;
-    assets: { name: string; browser_download_url: string }[];
-  };
-  const v = rel.tag_name.replace(/^v/, "");
+  const latest = await latestRelease("projectdiscovery/nuclei");
+  const v = latest.tag.replace(/^v/, "");
   const name = `nuclei_${v}_macOS_${process.arch === "arm64" ? "arm64" : "amd64"}.zip`;
+  const rel = {
+    assets: latest.fromWeb
+      ? [name, `nuclei_${v}_checksums.txt`].map((n) => ({ name: n, browser_download_url: assetUrl("projectdiscovery/nuclei", latest.tag, n) }))
+      : latest.assets.map((a) => ({ name: a.name, browser_download_url: a.url })),
+  };
   const asset = rel.assets.find((a) => a.name === name);
   const sums = rel.assets.find((a) => /checksums\.txt$/.test(a.name));
   if (!asset) throw new Error("No Nuclei build for this Mac was found.");

@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { ReleaseNote, UpdateInfo } from '../shared/types'
 import { downloadFile, sha256File } from './download'
-import { openAsset, releasesApi } from './distribution'
+import { appReleases, openAsset } from './distribution'
 import { dirs } from './paths'
 import { hashFor } from './versions'
 import { changelog, dmgArch, pickUpdate, type Release } from './updatecheck'
@@ -21,7 +21,7 @@ let pending: { info: UpdateInfo; dmg: string; sums: string } | null = null
 let lastReleases: Release[] = []
 
 async function fetchReleases(): Promise<Release[]> {
-  lastReleases = await releasesApi<Release[]>('releases?per_page=50')
+  lastReleases = await appReleases()
   return lastReleases
 }
 

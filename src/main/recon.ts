@@ -3,6 +3,7 @@
  * ~/.laramac/recon/<id> with its hosts, scripts, findings and the AI's write-up, so you can come
  * back to it. Read-only, and anything that is not on this Mac needs your confirmation.
  */
+import { assetUrl, latestRelease } from './seckit/ghapi'
 import { ensureLmContext } from './seckit/lmstudio'
 import { spawn } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
@@ -91,11 +92,11 @@ export const hasSubfinder = (): boolean => existsSync(subfinderBinary())
 
 /** ProjectDiscovery's subfinder, from its GitHub release, checked against its checksums. */
 export async function installSubfinder(update: (p: number | null, l?: string) => void): Promise<void> {
-  const res = await fetch('https://api.github.com/repos/projectdiscovery/subfinder/releases/latest', { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' } })
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} while looking for subfinder.`)
-  const rel = (await res.json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] }
-  const v = rel.tag_name.replace(/^v/, '')
+  const latest = await latestRelease('projectdiscovery/subfinder')
+  const v = latest.tag.replace(/^v/, '')
   const name = `subfinder_${v}_macOS_${process.arch === 'arm64' ? 'arm64' : 'amd64'}.zip`
+  // From the release page (GitHub's hourly limit used up), the file names are known: build their links.
+  const rel = { assets: latest.fromWeb ? [name, `subfinder_${v}_checksums.txt`].map((n) => ({ name: n, browser_download_url: assetUrl('projectdiscovery/subfinder', latest.tag, n) })) : latest.assets.map((a) => ({ name: a.name, browser_download_url: a.url })) }
   const asset = rel.assets.find((a) => a.name === name)
   const sums = rel.assets.find((a) => /checksums\.txt$/.test(a.name))
   if (!asset) throw new Error('No subfinder build for this Mac was found.')
