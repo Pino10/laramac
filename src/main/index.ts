@@ -52,7 +52,7 @@ import * as recon from './recon'
 import * as hub from './hub'
 import { installForClaude, installedForClaude, installPackSkillsForClaude, removeFromClaude, removePackSkillsFromClaude, SKILLS } from './seckit/skills'
 import { installPack, packSkillFolders, packState, removePack, SKILL_PACKS } from './seckit/skillpacks'
-import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath } from './desktop'
+import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath, repairClaudeDesktop } from './desktop'
 import * as scan from './scan'
 import * as audit from './audit'
 import * as dumps from './dumps'
@@ -1575,7 +1575,7 @@ function registerIpc(): void {
   handle('desktop:connect', () => {
     setSettings({ mcpEnabled: true })
     void startMcp()
-    const r = connectClaudeDesktop(mcpUrl(), mcpToken(), nodeBinDir())
+    const r = connectClaudeDesktop(mcpUrl(), join(dirs.root(), 'mcp-token'))
     activity.push('success', 'Claude desktop is connected to Laramac', 'Restart the Claude app, then ask it to review a site or run recon.')
     return r
   })
@@ -2431,10 +2431,6 @@ function registerIpc(): void {
   })
 
   // ---- Claude everywhere: Claude Code, claudelm, the Claude app, skills
-  const nodeBinDir = (): string | undefined => {
-    const n = locate('node')
-    return n ? dirname(n.path) : undefined
-  }
   let lastContext: ClaudeSetupStatus['context'] = null
   const claudeStatus = async (notes: string[] = []): Promise<ClaudeSetupStatus> => ({
     claudeCode: !!findCli(['claude']),
@@ -2496,8 +2492,7 @@ function registerIpc(): void {
       installForClaude('laramac')
       if (desktopAppInstalled()) {
         update(55, 'Connecting the Claude app')
-        connectClaudeDesktop(mcpUrl(), mcpToken(), nodeBinDir())
-        if (!nodeBinDir()) notes.push('The Claude app needs Node.js to reach Laramac. Install Node.js on the Languages page, then run this again.')
+        connectClaudeDesktop(mcpUrl(), join(dirs.root(), 'mcp-token'))
       } else notes.push('The Claude desktop app is not installed, so it was skipped. Get it at claude.ai/download.')
       update(70, 'Adding the commands to Terminal')
       cli.installCli(process.execPath)
@@ -3330,6 +3325,14 @@ app.whenReady().then(() => {
   refreshShims()
   refreshRuntimeShims()
   if (existsSync(cli.cliBin())) cli.installCli(process.execPath)
+  try {
+    if (desktopConnected()) {
+      mcpToken()
+      repairClaudeDesktop(mcpUrl(), join(dirs.root(), 'mcp-token'))
+    }
+  } catch {
+    // Connecting again from the Claude page fixes it.
+  }
   hardenWebContents()
   registerIpc()
   watchWww()

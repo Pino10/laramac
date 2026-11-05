@@ -7,6 +7,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'f
 import { homedir } from 'os'
 import { join } from 'path'
 import { dirs } from './paths'
+import { nodeWrapper } from './nodewrap'
 import { MCP_PORT } from './mcp'
 
 export const cliScript = (): string => join(dirs.root(), 'cli', 'laramac.js')
@@ -117,12 +118,12 @@ const dot = (s) => s === 'running' ? '\\x1b[32m●\\x1b[0m' : s === 'error' ? '\
 })()
 `
 
-/** Writes the command. `electron` is the app's own binary, run as plain Node. */
+/** Writes the command. `electron` is the app's own binary: only used while developing. */
 export function installCli(electron: string): void {
   mkdirSync(join(dirs.root(), 'cli'), { recursive: true })
   mkdirSync(dirs.bin(), { recursive: true })
   writeFileSync(cliScript(), JS(join(dirs.root(), 'mcp-token'), MCP_PORT))
-  writeFileSync(cliBin(), `#!/bin/sh\n# Written by Laramac.\nELECTRON_RUN_AS_NODE=1 exec "${electron}" "${cliScript()}" "$@"\n`)
+  writeFileSync(cliBin(), nodeWrapper(cliScript(), 'the laramac command.', electron))
   chmodSync(cliBin(), 0o755)
 }
 

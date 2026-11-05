@@ -1,3 +1,8 @@
+## Fixes in 0.28.1
+
+- **Claude app connection now works.** The Claude app starts helpers with a short PATH that often has no Node.js, so the old entry (npx and mcp-remote) could not start and showed "Server disconnected". Laramac now gives the app a small script that only needs curl, which every Mac has. The token is no longer copied into the app's config: the script reads it from Laramac's own file. If you connected before, Laramac fixes the entry by itself the next time it opens. Restart the Claude app afterwards.
+- **laramac, claudelm and claudefree work in the installed app.** They used to borrow the app as Node.js, which the installed app does not allow. They now look for a real Node.js each time (the one Laramac installs, then your own) and say plainly if there is none.
+
 ## New in 0.28
 
 ### Commands on every site

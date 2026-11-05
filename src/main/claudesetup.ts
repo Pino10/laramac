@@ -15,6 +15,7 @@ import { execFile } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { dirs } from './paths'
+import { nodeWrapper } from './nodewrap'
 import { localModelEnv } from './seckit/reviewers'
 import { CLAUDE_CODE_GOOD_CONTEXT, CLAUDE_CODE_MIN_CONTEXT } from './seckit/lmstudio'
 import { freeLlmEnv, freeLlmModel, freeLlmUrl } from './seckit/freellm'
@@ -86,14 +87,14 @@ async function post(path, body, ms) { const r = await fetch(root + path, { metho
 `
 
 /** Writes claudelm. `node` is a Node or Electron binary; Electron runs it as plain Node. */
-export function installClaudeLm(cfg: ClaudeLmConfig, node: string, electron: boolean): void {
+export function installClaudeLm(cfg: ClaudeLmConfig, node: string, _electron?: boolean): void {
   // The command was called claude-lm in 0.21; it is claudelm now.
   for (const old of [join(dirs.bin(), 'claude-lm'), join(dirs.root(), 'cli', 'claude-lm.js')]) rmSync(old, { force: true })
   mkdirSync(join(dirs.root(), 'cli'), { recursive: true })
   mkdirSync(dirs.bin(), { recursive: true })
   writeFileSync(claudeLmConfig(), JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 })
   writeFileSync(claudeLmScript(), SCRIPT(claudeLmConfig()))
-  writeFileSync(claudeLmBin(), `#!/bin/sh\n# Written by Laramac: Claude Code on your LM Studio model. claudelm --lm-help\n${electron ? 'ELECTRON_RUN_AS_NODE=1 ' : ''}exec "${node}" "${claudeLmScript()}" "$@"\n`)
+  writeFileSync(claudeLmBin(), nodeWrapper(claudeLmScript(), 'Claude Code on your LM Studio model. claudelm --lm-help', node))
   chmodSync(claudeLmBin(), 0o755)
 }
 
@@ -188,12 +189,12 @@ if (!key) fail('No Free LLM API key yet. Paste it in Laramac, AI tools, Free LLM
 })()
 `
 
-export function installClaudeFree(cfg: ClaudeFreeConfig, node: string, electron: boolean): void {
+export function installClaudeFree(cfg: ClaudeFreeConfig, node: string, _electron?: boolean): void {
   mkdirSync(join(dirs.root(), 'cli'), { recursive: true })
   mkdirSync(dirs.bin(), { recursive: true })
   writeFileSync(claudeFreeConfig(), JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 })
   writeFileSync(claudeFreeScript(), FREE_SCRIPT(claudeFreeConfig()))
-  writeFileSync(claudeFreeBin(), `#!/bin/sh\n# Written by Laramac: Claude Code through Free LLM API. claudefree --free-help\n${electron ? 'ELECTRON_RUN_AS_NODE=1 ' : ''}exec "${node}" "${claudeFreeScript()}" "$@"\n`)
+  writeFileSync(claudeFreeBin(), nodeWrapper(claudeFreeScript(), 'Claude Code through Free LLM API. claudefree --free-help', node))
   chmodSync(claudeFreeBin(), 0o755)
 }
 

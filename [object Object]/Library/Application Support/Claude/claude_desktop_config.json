@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "laramac": {
+      "command": "/tmp/laramac-root-u3FQCb/bin/laramac-mcp",
+      "args": []
+    }
+  }
+}
