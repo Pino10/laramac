@@ -240,7 +240,7 @@ export function reviewerOptions(model: string, free = false): { id: ReviewerKind
   return [
     { id: 'claude', name: 'Claude Code', installed: has('claude'), note: has('claude') ? undefined : 'Install Claude Code on the AI tools page.' },
     { id: 'claude-local', name: model ? `Claude Code on ${model.split('/').pop()}` : 'Claude Code on your model', installed: has('claude') && !!model, note: !has('claude') ? 'Install Claude Code first.' : !model ? 'Choose a model (LM Studio) in the Assistant first.' : 'Your model, through LM Studio 0.4.1 or newer. Load it with 32k context or more.' },
-    { id: 'claude-free', name: 'Claude Code on Free LLM API', installed: has('claude') && free, note: !has('claude') ? 'Install Claude Code first.' : !free ? 'Connect Free LLM API on the Tools page first.' : 'Your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) through Free LLM API.' },
+    { id: 'claude-free', name: 'Claude Code on Free LLM API', installed: has('claude') && free, note: !has('claude') ? 'Install Claude Code first.' : !free ? 'Connect Free LLM API on the AI tools page first.' : 'Your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) through Free LLM API.' },
     { id: 'codex', name: 'Codex', installed: has('codex'), note: has('codex') ? undefined : 'npm install -g @openai/codex' },
     { id: 'gemini', name: 'Gemini CLI', installed: has('gemini'), note: has('gemini') ? undefined : 'npm install -g @google/gemini-cli' },
     { id: 'coderabbit', name: 'CodeRabbit (changes only)', installed: has('coderabbit'), note: has('coderabbit') ? 'Reviews the changes in a Git project.' : 'curl -fsSL https://cli.coderabbit.ai/install.sh | sh' },

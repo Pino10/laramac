@@ -1,9 +1,17 @@
-## New in 0.23.2
+## New in 0.24
 
-### Checking for updates no longer stops with 403
-GitHub only answers about 60 questions an hour from apps that are not signed in, shared by everything on your network. Laramac's update check, the Updates page, tool installs and version lookups used them up, and then GitHub answered 403. Now:
-- When you connected GitHub on the GitHub page, Laramac uses that sign-in: 5,000 an hour.
-- Answers are kept for ten minutes and asked again in a way GitHub does not count when nothing changed.
-- When the hour is used up anyway, update checks read GitHub's release feed instead, which has no limit, and Ollama, Nuclei and subfinder installs find their files the same way.
-- If nothing works, Laramac says when GitHub's limit comes back instead of showing a number.
+### A cleaner Laramac
+- **A sidebar by task.** Run (Services, PHP, Languages, Databases), Check (Code review, Recon), Ship (Git, Remote servers, API client) and AI (Assistant, AI tools). Packages, Updates and Settings sit at the bottom.
+- **Services**, a new page: Apache, Nginx, PHP, the databases, cache and queues, storage, mail and Ollama, each group with what it is for, plus the map of how your sites connect and the mail inbox and public links.
+- **"Web servers" was really your remote machines**: it is now called Remote servers, under Ship.
+- **A calmer Overview**: your sites, your services as small tiles, and four shortcuts.
+- **Every page on one spacing scale**, with titles that match the sidebar (Code review, New project, Git, AI tools, Remote servers) and sections that line up.
+- **Sites rows** keep three everyday actions (open, editor, AI tool); the rest are named in the ⋯ menu.
+- **Narrow windows**: the sidebar slims down on its own, lists and tabs reflow, nothing runs off the edge.
+
+### Your own editor
+Laramac finds the editors and IDEs on your Mac (VS Code, Cursor, Windsurf, Zed, Sublime Text, PhpStorm, WebStorm, IntelliJ IDEA, PyCharm, GoLand, Rider, Nova, Xcode and more, including JetBrains Toolbox installs) and opens the one you choose, at the right line. If the one you chose is removed, it uses the next one it finds. "Choose another app" takes any app. It is in Settings, Terminal and editor.
+
+### Releases
+Each release now carries only its own notes, and is published as a normal (latest) release.
 

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { isAppBundle } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { cancelImport, importSql, inspect, inspectGit, runImport } from './importer'
@@ -353,7 +354,7 @@ function createTray(): void {
             sites: listSites(),
             tld: st.tld,
             phpmyadmin: phpmyadminInstalled(),
-            editor: st.editor === 'vscode' ? 'VS Code' : 'Cursor',
+            editor: st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : st.editor === 'auto' ? 'your editor' : st.editor,
             aiName: AI_LABEL[st.aiTool] ?? 'AI tool'
           })
         )
@@ -627,6 +628,14 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   handle('sites:open-editor', (path) => openInEditor(getSettings().editor, sitePath(path)))
+  handle('editors:choose-app', async () => {
+    if (!mainWindow) return null
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Choose the app to open your code with', buttonLabel: 'Use this app', defaultPath: '/Applications', properties: ['openFile'], filters: [{ name: 'Apps', extensions: ['app'] }] })
+    const app = r.canceled ? null : r.filePaths[0]
+    if (!app || !isAppBundle(app)) return null
+    setSettings({ editor: 'custom', editorApp: app.replace(/\/$/, '') })
+    return { app, name: app.split('/').pop()!.replace(/\.app$/, '') }
+  })
   handle('sites:open-claude', (path) => launchAiTool(getSettings().aiTool, sitePath(path)).catch(() => openClaudeCode(sitePath(path))))
   handle('sites:share', async (name) => {
     const site = siteByName(name)
@@ -940,7 +949,7 @@ function registerIpc(): void {
     const st = getSettings()
     if (reviewer !== 'claude-free') return { baseUrl: st.llm.baseUrl, model: st.llm.model }
     const key = await readFreeKey()
-    if (!key) throw new ValidationError('Paste your Free LLM API key on the Tools page first.')
+    if (!key) throw new ValidationError('Paste your Free LLM API key on the AI tools page first.')
     return { baseUrl: freeLlmUrl(st.freellm?.baseUrl ?? FREELLM_DEFAULT_URL), model: st.freellm?.model || 'auto', token: key }
   }
   handle('review:run', async (req) => {
@@ -2410,7 +2419,7 @@ function registerIpc(): void {
     return claudeStatus(notes)
   })
   handle('claude:open-lm', async (name) => {
-    if (!claudeLmInstalled().installed) throw new ValidationError('Set up Claude everywhere first, in Tools.')
+    if (!claudeLmInstalled().installed) throw new ValidationError('Set up Claude everywhere first, in AI tools.')
     const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
     await openTerminal(dir, 'claudelm')
   })
@@ -2466,7 +2475,7 @@ function registerIpc(): void {
     return freeInfo()
   })
   handle('claude:open-free', async (name) => {
-    if (!claudeFreeInstalled()) throw new ValidationError('Connect Free LLM API first, on the Tools page.')
+    if (!claudeFreeInstalled()) throw new ValidationError('Connect Free LLM API first, on the AI tools page.')
     const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
     await openTerminal(dir, 'claudefree')
   })

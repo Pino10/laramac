@@ -14,6 +14,7 @@ import Sites from './pages/Sites'
 import Php from './pages/Php'
 import Databases from './pages/Databases'
 import Tools from './pages/Tools'
+import Services from './pages/Services'
 import Assistant from './pages/Assistant'
 import Settings from './pages/Settings'
 import Servers from './pages/Servers'
@@ -90,6 +91,7 @@ function Shell(): React.JSX.Element {
               {page === 'php' && <Php />}
               {page === 'databases' && <Databases />}
               {page === 'servers' && <Servers />}
+              {page === 'services' && <Services />}
               {page === 'tools' && <Tools />}
               {page === 'packages' && <Packages />}
               {page === 'api' && <ApiClient />}

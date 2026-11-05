@@ -55,7 +55,7 @@ export default function Starters(): React.JSX.Element {
 
   return (
     <>
-      <PageHead title="Starters" desc="Start a project with each framework's own official setup tool, so you always get the newest version. Laramac installs what it needs, sets up the database and gives it a .test address.">
+      <PageHead title="New project" desc="Start a project with each framework's own official setup tool, so you always get the newest version. Laramac installs what it needs, sets up the database and gives it a .test address.">
         <button className="btn" onClick={() => setPage('languages')}>
           Languages
         </button>

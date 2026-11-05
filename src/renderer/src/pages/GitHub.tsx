@@ -3,7 +3,7 @@ import { Download, ExternalLink, FileArchive, GitBranch, Globe, Info, Lock, LogO
 import type { GitHubAccount, GitHubRepo, GitHubRepoDetails, SiteInfo } from '@shared/types'
 import { useAsk } from '../components/Ask'
 import { useApp } from '../store'
-import { PageHead } from '../ui'
+import { PageHead, SubPage } from '../ui'
 import Azure from './Azure'
 
 const ago = (iso: string): string => {
@@ -33,15 +33,17 @@ export default function Repositories(): React.JSX.Element {
   }
   return (
     <>
-      <div className="seg-tabs host-tabs" role="tablist" aria-label="Where your code lives">
-        <button role="tab" aria-selected={host === 'github'} onClick={() => pick('github')}>
-          GitHub
-        </button>
-        <button role="tab" aria-selected={host === 'azure'} onClick={() => pick('azure')}>
-          Azure DevOps
-        </button>
-      </div>
-      {host === 'github' ? <GitHub /> : <Azure />}
+      <PageHead title="Git" desc="Your repositories on GitHub and Azure DevOps: clone them into your projects folder, and push your sites.">
+        <div className="seg-tabs host-tabs" role="tablist" aria-label="Where your code lives">
+          <button role="tab" aria-selected={host === 'github'} onClick={() => pick('github')}>
+            GitHub
+          </button>
+          <button role="tab" aria-selected={host === 'azure'} onClick={() => pick('azure')}>
+            Azure DevOps
+          </button>
+        </div>
+      </PageHead>
+      <SubPage.Provider value={true}>{host === 'github' ? <GitHub /> : <Azure />}</SubPage.Provider>
     </>
   )
 }

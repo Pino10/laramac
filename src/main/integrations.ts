@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import { installedEditors, openInEditorOf } from './seckit/editors'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -34,18 +35,9 @@ export function openTerminal(cwd: string, command?: string): Promise<void> {
  * is there on the side. Uses the editor's own command-line launcher, which
  * opens folders reliably even when the editor is already running.
  */
-export function openInEditor(editor: 'cursor' | 'vscode', path: string, line?: number): Promise<void> {
-  const app = editor === 'cursor' ? 'Cursor' : 'Visual Studio Code'
-  const cliName = editor === 'cursor' ? 'cursor' : 'code'
-  const bundles = [join('/Applications', `${app}.app`), join(homedir(), 'Applications', `${app}.app`)]
-  const cli = bundles.map((b) => join(b, 'Contents', 'Resources', 'app', 'bin', cliName)).find((p) => existsSync(p))
-  return new Promise((resolve, reject) => {
-    const fallback = (): void => {
-      execFile('open', ['-n', '-a', app, '--args', path], (err) => (err ? reject(new Error(`${app} is not installed.`)) : resolve()))
-    }
-    if (!cli) return fallback()
-    execFile(cli, line ? ['--goto', `${path}:${line}`] : ['--new-window', path], { timeout: 15000 }, (err) => (err ? fallback() : resolve()))
-  })
+/** Opens a folder, or a file at a line, in the editor chosen in AI tools (or the first one found). */
+export async function openInEditor(editor: string, path: string, line?: number): Promise<void> {
+  await openInEditorOf({ choice: editor, customApp: getSettings().editorApp, path, line, found: await installedEditors() })
 }
 
 export function openClaudeCode(cwd: string): Promise<void> {

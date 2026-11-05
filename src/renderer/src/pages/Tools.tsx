@@ -29,7 +29,11 @@ const MODEL_APPS = new Set(['lmstudio', 'ollama', 'vmlx', 'omlx'])
 
 const AI_LETTERS: Record<string, string> = { omlx: 'oM', burp: 'Bp', claude: 'Cc', codex: 'Cx', opencode: 'Oc', vmlx: 'vM', lmstudio: 'LM', ollama: 'Ol', openclaw: 'Ow', gemini: 'Ge' }
 
-export default function Tools(): React.JSX.Element {
+/**
+ * One component, three places: the AI tools page ('ai'), the mail inbox and public links on the
+ * Services page ('mail'), and the laramac command, Composer, editor and integrations in Settings ('more').
+ */
+export default function Tools({ part = 'ai' }: { part?: 'ai' | 'mail' | 'more' }): React.JSX.Element {
   const { tools, settings, services, act, busy, setTools, updateSettings, notify, llms, refreshLlms, setPage } = useApp()
   const [tests, setTests] = useState<Record<string, LlmTest>>({})
   const [relay, setRelay] = useState<MailRelay | null>(null)
@@ -68,7 +72,9 @@ export default function Tools(): React.JSX.Element {
 
   return (
     <>
-      <PageHead title="Tools" desc="Coding agents and local models, mail, public links and Composer. Installers run in Terminal so you can see every step." />
+      {part === 'ai' && (
+      <>
+      <PageHead title="AI tools" desc="Claude Code three ways (your account, your own model, your free keys), other coding agents and local models. Installers run in Terminal so you can see every step." />
 
       <ClaudeSetup />
 
@@ -235,9 +241,14 @@ export default function Tools(): React.JSX.Element {
         })}
       </div>
 
+      </>
+      )}
+
+      {part === 'mail' && (
+      <>
       {mailOpen && <MailDelivery onClose={() => setMailOpen(false)} onSaved={setRelay} />}
 
-      <h2 className="section-title">Everything else</h2>
+      <h2 className="section-title">Mail and public links</h2>
       <div className="grid-2" style={{ marginBottom: 12 }}>
         <div className="card glass">
           <div className="card-head">
@@ -313,7 +324,11 @@ export default function Tools(): React.JSX.Element {
           </div>
         </div>
       </div>
+      </>
+      )}
 
+      {part === 'more' && (
+      <>
       <div className="panel">
         <div className="row row-icon">
           <span className="icon-chip">
@@ -371,23 +386,41 @@ export default function Tools(): React.JSX.Element {
             <div className="row-title">Editor</div>
             <div className="row-sub">Opens from the code button on each site, and for php.ini.</div>
           </div>
-          <div className="seg" role="radiogroup" aria-label="Editor">
-            {(['cursor', 'vscode'] as const).map((e) => (
-              <button
-                key={e}
-                role="radio"
-                aria-checked={settings.editor === e}
-                title={(e === 'cursor' ? tools.editors.cursor : tools.editors.vscode) ? undefined : 'Not found in Applications'}
-                onClick={() => updateSettings({ editor: e })}
-              >
-                {e === 'cursor' ? 'Cursor' : 'VS Code'}
-              </button>
-            ))}
+          <div className="editor-pick">
+            <select
+              className="input"
+              aria-label="Editor"
+              value={settings.editor === 'custom' || settings.editor === 'auto' || tools.editors.some((e) => e.id === settings.editor) ? settings.editor : 'auto'}
+              onChange={async (e) => {
+                if (e.target.value === 'choose') {
+                  const r = await act('editor-app', () => api.invoke('editors:choose-app'))
+                  if (r) {
+                    await updateSettings({})
+                    setTools(await api.invoke('tools:status'))
+                  }
+                  return
+                }
+                await updateSettings({ editor: e.target.value })
+                setTools(await api.invoke('tools:status'))
+              }}
+            >
+              <option value="auto">{tools.editors[0] ? `Automatic (${tools.editors[0].name})` : 'Automatic'}</option>
+              {tools.editors.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+              {settings.editor === 'custom' && settings.editorApp && <option value="custom">{settings.editorApp.split('/').pop()!.replace(/\.app$/, '')}</option>}
+              <option value="choose">Choose another app…</option>
+            </select>
+            <span className="hint">{tools.editors.length ? `${tools.editors.length} found on this Mac` : 'None found: choose an app'}</span>
           </div>
         </div>
       </div>
       <h2 className="section-title">Integrations</h2>
       <Integrations app="Laramac" />
+      </>
+      )}
     </>
   )
 }

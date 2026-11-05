@@ -1,19 +1,12 @@
 import { useState } from 'react'
 import { ArrowUpRight, Database, Info, Mail, Plus, Upload } from 'lucide-react'
-import type { ServiceGroup } from '@shared/types'
 import SiteQuickView from '../components/SiteQuickView'
 import { useApp } from '../store'
-import StackMap from '../components/StackMap'
+import { SERVICE_SECTIONS } from './Services'
 import Doctor from '../components/Doctor'
 import { Monogram } from '../ui'
 import ServiceRow from '../components/ServiceRow'
 
-const groups: { id: ServiceGroup; title: string }[] = [
-  { id: 'web', title: 'Web servers' },
-  { id: 'runtime', title: 'PHP' },
-  { id: 'database', title: 'Databases' },
-  { id: 'mail', title: 'Mail' }
-]
 
 function summary(running: number, installed: number, failing: string | null, off: string[]): { title: string; sub: string } {
   if (failing) return { title: `${failing} needs attention`, sub: 'It could not start. The reason is shown in its row below.' }
@@ -128,11 +121,11 @@ export default function Dashboard(): React.JSX.Element {
             )}
           </span>
         </div>
-        {groups.map((g) => {
-          const items = services.filter((s) => s.group === g.id)
+        {SERVICE_SECTIONS.map((g) => {
+          const items = g.ids.map((id) => services.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s)
           if (items.length === 0) return null
           return (
-            <section key={g.id}>
+            <section key={g.title}>
               <h2 className="section-title">{g.title}</h2>
               <div className="group">
                 {items.map((s) => (
@@ -189,70 +182,62 @@ export default function Dashboard(): React.JSX.Element {
         </div>
       ))}
 
-      <StackMap />
-
-      <div className="overview-split">
-        <div>
-          {groups.map((g) => {
-            const items = services.filter((s) => s.group === g.id)
-            if (items.length === 0) return null
-            return (
-              <section key={g.id}>
-                <h2 className="section-title">{g.title}</h2>
-                <div className="group">
-                  {items.map((s) => (
-                    <ServiceRow key={s.id} service={s} />
-                  ))}
-                </div>
-              </section>
-            )
-          })}
+      <section className="ov-block">
+        <div className="section-head">
+          <h2 className="section-title">Services</h2>
+          <button className="link" onClick={() => setPage('services')}>
+            Manage <ArrowUpRight size={12} />
+          </button>
         </div>
-        <aside>
-          <h2 className="section-title">Shortcuts</h2>
-          <div className="group">
-            <button className="action-row" onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
-              <Database size={16} />
-              <span>
-                <strong>phpMyAdmin</strong>
-                <small>{busy.has('tool-phpmyadmin') ? 'Installing…' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</small>
+        <div className="svc-tiles">
+          {installed.map((s) => (
+            <button key={s.id} className="svc-tile" data-s={s.status} onClick={() => setPage('services')} title={s.error ?? undefined}>
+              <span className="lamp" data-s={s.status} />
+              <span className="svc-tile-text">
+                <strong>{s.name}</strong>
+                <small>{s.status === 'running' ? (s.port ? `Port ${s.port}` : 'Running') : s.status === 'error' ? 'Could not start' : s.status === 'starting' ? 'Starting…' : 'Off'}</small>
               </span>
-              <ArrowUpRight size={14} className="action-go" />
             </button>
-            <button
-              className="action-row"
-              onClick={() =>
-                mailpit?.status === 'running'
-                  ? api.invoke('sites:open-url', 'http://127.0.0.1:8025')
-                  : notify({ kind: 'info', text: 'Start Mailpit first. It is under Mail.' })
-              }
-            >
-              <Mail size={16} />
-              <span>
-                <strong>Mail inbox</strong>
-                <small>{mailpit?.status === 'running' ? 'Catching mail on port 1025' : 'Mailpit is off'}</small>
-              </span>
-              <ArrowUpRight size={14} className="action-go" />
-            </button>
-            <button className="action-row" onClick={() => setPage('starters')}>
-              <Plus size={16} />
-              <span>
-                <strong>New project</strong>
-                <small>React, Laravel, Django, C# and 30 more</small>
-              </span>
-              <ArrowUpRight size={14} className="action-go" />
-            </button>
-            <button className="action-row" onClick={() => setImportOpen(true)}>
-              <Upload size={16} />
-              <span>
-                <strong>Import</strong>
-                <small>From Laragon, a zip or a .sql dump</small>
-              </span>
-              <span className="kbd">⌘I</span>
-            </button>
-          </div>
-        </aside>
-      </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="ov-block">
+        <h2 className="section-title">Shortcuts</h2>
+        <div className="shortcut-tiles">
+          <button className="shortcut" onClick={openPma} disabled={busy.has('tool-phpmyadmin')}>
+            <span className="shortcut-icon">
+              <Database size={18} />
+            </span>
+            <strong>phpMyAdmin</strong>
+            <small>{busy.has('tool-phpmyadmin') ? 'Installing…' : tools?.phpmyadmin ? `phpmyadmin.${tld}` : 'Install in one click'}</small>
+          </button>
+          <button
+            className="shortcut"
+            onClick={() => (mailpit?.status === 'running' ? api.invoke('sites:open-url', 'http://127.0.0.1:8025') : notify({ kind: 'info', text: 'Start Mailpit first, on the Services page.' }))}
+          >
+            <span className="shortcut-icon">
+              <Mail size={18} />
+            </span>
+            <strong>Mail inbox</strong>
+            <small>{mailpit?.status === 'running' ? 'Catching mail on port 1025' : 'Mailpit is off'}</small>
+          </button>
+          <button className="shortcut" onClick={() => setPage('starters')}>
+            <span className="shortcut-icon">
+              <Plus size={18} />
+            </span>
+            <strong>New project</strong>
+            <small>React, Laravel, Django, C# and 30 more</small>
+          </button>
+          <button className="shortcut" onClick={() => setImportOpen(true)}>
+            <span className="shortcut-icon">
+              <Upload size={18} />
+            </span>
+            <strong>Import</strong>
+            <small>From Laragon, a zip or a .sql dump</small>
+          </button>
+        </div>
+      </section>
     </>
   )
 }

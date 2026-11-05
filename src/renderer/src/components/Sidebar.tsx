@@ -14,7 +14,8 @@ import {
   Server,
   Settings as SettingsIcon,
   Terminal,
-  Wrench,
+  Layers,
+  Sparkles,
   Rocket,
   ShieldCheck,
   Code2,
@@ -27,6 +28,7 @@ type Item = { id: Page; label: string; icon: React.ReactNode }
 type Group = { id: string; label: string | null; items: Item[] }
 
 const I = 17
+/** Grouped by what you are doing: run your stack, check it, ship it, and AI. */
 export const GROUPS: Group[] = [
   {
     id: 'home',
@@ -38,45 +40,46 @@ export const GROUPS: Group[] = [
     ]
   },
   {
-    id: 'stack',
-    label: 'Your stack',
+    id: 'run',
+    label: 'Run',
     items: [
-      { id: 'servers', label: 'Web servers', icon: <Server size={I} /> },
-      { id: 'languages', label: 'Languages', icon: <Code2 size={I} /> },
+      { id: 'services', label: 'Services', icon: <Layers size={I} /> },
       { id: 'php', label: 'PHP', icon: <Terminal size={I} /> },
+      { id: 'languages', label: 'Languages', icon: <Code2 size={I} /> },
       { id: 'databases', label: 'Databases', icon: <Database size={I} /> }
     ]
   },
   {
-    id: 'security',
-    label: 'Security',
+    id: 'check',
+    label: 'Check',
     items: [
       { id: 'security', label: 'Code review', icon: <ShieldCheck size={I} /> },
       { id: 'recon', label: 'Recon', icon: <Radar size={I} /> }
     ]
   },
   {
-    id: 'build',
-    label: 'Build and ship',
+    id: 'ship',
+    label: 'Ship',
     items: [
-      { id: 'api', label: 'API client', icon: <Send size={I} /> },
-      { id: 'github', label: 'GitHub and Azure', icon: <FolderGit2 size={I} /> },
-      { id: 'packages', label: 'Packages', icon: <Package size={I} /> }
+      { id: 'github', label: 'Git', icon: <FolderGit2 size={I} /> },
+      { id: 'servers', label: 'Remote servers', icon: <Server size={I} /> },
+      { id: 'api', label: 'API client', icon: <Send size={I} /> }
     ]
   },
   {
-    id: 'extras',
-    label: 'AI and tools',
+    id: 'ai',
+    label: 'AI',
     items: [
       { id: 'assistant', label: 'Assistant', icon: <MessageSquare size={I} /> },
-      { id: 'tools', label: 'Tools', icon: <Wrench size={I} /> }
+      { id: 'tools', label: 'AI tools', icon: <Sparkles size={I} /> }
     ]
   }
 ]
 
 const FOOT: Item[] = [
-  { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> },
-  { id: 'updates', label: 'Updates', icon: <ArrowDownToLine size={16} /> }
+  { id: 'packages', label: 'Packages and disk space', icon: <Package size={16} /> },
+  { id: 'updates', label: 'Updates', icon: <ArrowDownToLine size={16} /> },
+  { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> }
 ]
 
 /** Kept for the command bar: every page, grouped. */
@@ -102,14 +105,23 @@ function store(key: string, v: unknown): void {
 
 export default function Sidebar(): React.JSX.Element {
   const { page, setPage, services, sites, update, updates } = useApp()
-  const [slim, setSlim] = useState<boolean>(() => stored('sidebar-slim', false))
+  const [chosenSlim, setSlim] = useState<boolean>(() => stored('sidebar-slim', false))
+  // Narrow windows get the slim sidebar on their own, so the page keeps its room.
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 1080px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1080px)')
+    const on = (): void => setNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  const slim = chosenSlim || narrow
   const [folded, setFolded] = useState<string[]>(() => stored('sidebar-folded', []))
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
   const failing = services.some((s) => s.status === 'error')
   const devOn = sites.filter((s) => s.dev?.running).length
 
-  useEffect(() => store('sidebar-slim', slim), [slim])
+  useEffect(() => store('sidebar-slim', chosenSlim), [chosenSlim])
   useEffect(() => store('sidebar-folded', folded), [folded])
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {

@@ -277,7 +277,7 @@ export function SiteDoctor({ site, aiName, onClose }: { site: SiteInfo; aiName: 
                     setPage('tools')
                   }}
                 >
-                  <Wrench size={13} /> Check model servers in Tools
+                  <Wrench size={13} /> Check model servers in AI tools
                 </button>
               </div>
             </div>
@@ -331,7 +331,7 @@ export default function Sites(): React.JSX.Element {
   const [query, setQuery] = useState('')
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
-  const editor = settings?.editor === 'vscode' ? 'VS Code' : 'Cursor'
+  const editor = tools?.editor ?? 'your editor'
   const aiName = AI_NAMES[settings?.aiTool ?? 'claude'] ?? 'AI tool'
   const [snapFor, setSnapFor] = useState<SiteInfo | null>(null)
   const [deployFor, setDeployFor] = useState<SiteInfo | null>(null)
@@ -355,7 +355,32 @@ export default function Sites(): React.JSX.Element {
       // Storage can be unavailable; the choice just is not remembered.
     }
   }
-  const menuFor = (s: SiteInfo): React.ReactNode => <SiteMenu site={s} onLogs={() => setSiteLogsFor(s)} onProject={() => setProjectFor(s)} onDoctor={() => setDoctorFor(s)} />
+  const share = async (s: SiteInfo): Promise<void> => {
+    if (s.shareUrl) {
+      await act(`share-${s.name}`, () => api.invoke('sites:unshare', s.name))
+      return
+    }
+    const url = await act(`share-${s.name}`, () => api.invoke('sites:share', s.name))
+    if (url) {
+      navigator.clipboard?.writeText(url).catch(() => undefined)
+      notify({ kind: 'info', text: 'Public link copied to the clipboard.' })
+    }
+  }
+  const menuFor = (s: SiteInfo): React.ReactNode => (
+    <SiteMenu
+      site={s}
+      onLogs={() => setSiteLogsFor(s)}
+      onProject={() => setProjectFor(s)}
+      onDoctor={() => setDoctorFor(s)}
+      extra={[
+        { label: 'Show in Finder', icon: <FolderOpen size={14} />, run: () => void api.invoke('sites:open-folder', s.path) },
+        { label: s.shareUrl ? 'Stop sharing' : 'Share a public link', icon: <Share2 size={14} />, run: () => void share(s) },
+        { label: 'Push to GitHub', icon: <GitBranch size={14} />, run: () => setPushFor(s) },
+        { label: 'Deploy to a server', icon: <UploadCloud size={14} />, run: () => setDeployFor(s) },
+        { label: 'Snapshots', icon: <History size={14} />, run: () => setSnapFor(s) }
+      ]}
+    />
+  )
   const [only, setOnly] = useState<'all' | 'running' | 'php' | 'js' | 'other'>('all')
   const shown = sites.filter((s) => `${s.name} ${s.domain} ${s.kind}`.toLowerCase().includes(query.toLowerCase()) && (only === 'all' || (only === 'running' ? !!s.dev?.running || !s.dev : only === 'php' ? PHP_KINDS.includes(s.kind) : only === 'js' ? s.kind === 'node' : !PHP_KINDS.includes(s.kind) && s.kind !== 'node')))
   const current = openSite ? sites.find((s) => s.name === openSite.name) : undefined
@@ -381,7 +406,7 @@ export default function Sites(): React.JSX.Element {
       </PageHead>
 
       {sites.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div className="sites-toolbar">
           <label className="searchbox">
             <Search size={14} />
             <input placeholder="Filter sites" aria-label="Filter sites" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -519,9 +544,6 @@ export default function Sites(): React.JSX.Element {
                 >
                   <ExternalLink size={18} />
                 </IconBtn>
-                <IconBtn label={`Show ${site.name} in Finder`} title="Show in Finder" onClick={() => api.invoke('sites:open-folder', site.path)}>
-                  <FolderOpen size={18} />
-                </IconBtn>
                 <IconBtn
                   label={`Open ${site.name} in ${editor}`}
                   title={`Open in ${editor}`}
@@ -536,37 +558,11 @@ export default function Sites(): React.JSX.Element {
                 >
                   <Terminal size={18} />
                 </IconBtn>
-                <IconBtn label={`Explain errors in ${site.name}`} title="Explain errors (AI)" onClick={() => setDoctorFor(site)}>
-                  <Stethoscope size={18} />
-                </IconBtn>
-                <IconBtn label={`Push ${site.name} to GitHub`} title="Push to GitHub" onClick={() => setPushFor(site)}>
-                  <GitBranch size={18} />
-                </IconBtn>
-                <IconBtn label={`Deploy ${site.name}`} title="Deploy to a server" onClick={() => setDeployFor(site)}>
-                  <UploadCloud size={18} />
-                </IconBtn>
-                <IconBtn label={`Snapshots of ${site.name}`} title="Snapshots" onClick={() => setSnapFor(site)}>
-                  <History size={18} />
-                </IconBtn>
-                <IconBtn
-                  label={site.shareUrl ? `Stop sharing ${site.name}` : `Share ${site.name}`}
-                  title={site.shareUrl ? 'Stop sharing' : 'Share a public link'}
-                  pressed={!!site.shareUrl}
-                  disabled={busy.has(`share-${site.name}`)}
-                  onClick={async () => {
-                    if (site.shareUrl) {
-                      await act(`share-${site.name}`, () => api.invoke('sites:unshare', site.name))
-                      return
-                    }
-                    const url = await act(`share-${site.name}`, () => api.invoke('sites:share', site.name))
-                    if (url) {
-                      navigator.clipboard?.writeText(url).catch(() => undefined)
-                      notify({ kind: 'info', text: 'Public link copied to the clipboard.' })
-                    }
-                  }}
-                >
-                  <Share2 size={18} />
-                </IconBtn>
+                {site.shareUrl && (
+                  <IconBtn label={`Stop sharing ${site.name}`} title="Shared: stop sharing" pressed onClick={() => act(`share-${site.name}`, () => api.invoke('sites:unshare', site.name))}>
+                    <Share2 size={18} />
+                  </IconBtn>
+                )}
                 {menuFor(site)}
               </div>
             </div>

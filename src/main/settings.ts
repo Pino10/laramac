@@ -28,7 +28,7 @@ const defaults = (): AppSettings => ({
   secondaryHttpsPort: 8443,
   shareProvider: 'cloudflare',
   ngrokToken: '',
-  editor: 'cursor',
+  editor: 'auto',
   allowLan: false,
   notifications: true,
   autoUpdateCheck: true,

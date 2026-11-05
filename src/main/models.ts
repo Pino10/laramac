@@ -246,7 +246,7 @@ export function explainLlmError(status: number, body: string, model: string): st
   const d = detail.toLowerCase()
   let hint = ''
   if (/embed/.test(d) || /embed/i.test(model)) hint = `${model} is an embedding model and cannot chat. Pick a chat model instead.`
-  else if (status === 401 || status === 403 || /api key|x-api-key|unauthori[sz]ed|authentication/.test(d)) hint = 'The key was refused. Check it in Tools › Model servers.'
+  else if (status === 401 || status === 403 || /api key|x-api-key|unauthori[sz]ed|authentication/.test(d)) hint = 'The key was refused. Check it in AI tools › Model servers.'
   else if (/credit|billing|quota|insufficient/.test(d)) hint = 'The account behind this key has no credit left.'
   else if (/context|n_ctx|too long|token/.test(d)) hint = 'The conversation is longer than the model can hold. Load the model with a larger context length, or start a new chat.'
   else if (/not (found|loaded)|no model|unknown model|does not exist/.test(d)) hint = `${model} is not loaded. Load it in your model app, or pick a loaded one.`

@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
+import { installedEditors, pickEditor } from './seckit/editors'
 import { randomBytes } from 'crypto'
 import { join } from 'path'
 import type { ToolsStatus } from '../shared/types'
@@ -150,10 +151,18 @@ export async function toolsStatus(): Promise<ToolsStatus> {
     ngrok: existsSync(ngrokBinary()),
     composer: existsSync(composerPhar()),
     homebrew: brewPrefix() !== null,
-    editors: { cursor: editorApp('Cursor'), vscode: editorApp('Visual Studio Code') },
+    ...(await editorStatus()),
     claude: claudeInstalled(),
     platform: isMac ? 'darwin' : process.platform
   }
+}
+
+/** The editors found, and the name of the one Laramac opens. */
+async function editorStatus(): Promise<{ editors: { id: string; name: string }[]; editor: string | null }> {
+  const st = getSettings()
+  const found = await installedEditors()
+  const custom = st.editor === 'custom' && st.editorApp ? st.editorApp.split('/').pop()!.replace(/\.app$/, '') : null
+  return { editors: found.map((f) => ({ id: f.id, name: f.name })), editor: custom ?? pickEditor(st.editor, found)?.name ?? null }
 }
 
 export function claudePath(): string | null {

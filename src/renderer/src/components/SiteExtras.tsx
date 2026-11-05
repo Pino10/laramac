@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Code, ExternalLink, FileCog, MoreHorizontal, RefreshCw, ScrollText, Search, Stethoscope, Terminal, X } from 'lucide-react'
 import type { ProjectFile, ProjectPlan, SiteInfo, SiteLogSource } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
 
-/** The ⋯ menu on each site: logs, the project file and the site doctor. */
-export function SiteMenu({ site, onLogs, onProject, onDoctor }: { site: SiteInfo; onLogs: () => void; onProject: () => void; onDoctor: () => void }): React.JSX.Element {
+/** The ⋯ menu on each site: the less frequent actions, logs, the project file and the site doctor. */
+export interface MenuAction {
+  label: string
+  icon: React.ReactNode
+  run: () => void
+}
+
+export function SiteMenu({ site, onLogs, onProject, onDoctor, extra = [] }: { site: SiteInfo; onLogs: () => void; onProject: () => void; onDoctor: () => void; extra?: MenuAction[] }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const { act, notify } = useApp()
   const item = (label: string, icon: React.ReactNode, fn: () => void): React.JSX.Element => (
@@ -28,6 +34,10 @@ export function SiteMenu({ site, onLogs, onProject, onDoctor }: { site: SiteInfo
         <>
           <span className="menu-catch" onClick={() => setOpen(false)} />
           <span className="menu glass" style={{ minWidth: 240 }}>
+            {extra.map((a) => (
+              <Fragment key={a.label}>{item(a.label, a.icon, a.run)}</Fragment>
+            ))}
+            {extra.length > 0 && <span className="menu-sep" />}
             {item('View logs', <ScrollText size={14} />, onLogs)}
             {item('Explain errors with AI', <Stethoscope size={14} />, onDoctor)}
             {site.projectFile

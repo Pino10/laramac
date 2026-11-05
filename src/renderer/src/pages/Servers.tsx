@@ -122,7 +122,7 @@ export default function Servers(): React.JSX.Element {
 
   return (
     <>
-      <PageHead title="Servers" desc="Your remote machines in one place: open a terminal over SSH, or browse and move files over SFTP.">
+      <PageHead title="Remote servers" desc="Your remote machines in one place: open a terminal over SSH, or browse and move files over SFTP.">
         <button
           className="btn btn-primary"
           onClick={() =>

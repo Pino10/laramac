@@ -1,4 +1,5 @@
 import { isAbsolute, normalize, sep } from 'path'
+import { isEditorChoice } from './seckit/editors'
 import type { AppSettings } from '../shared/types'
 
 /**
@@ -105,7 +106,8 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.ngrokToken = typeof value === 'string' && /^[A-Za-z0-9_-]{0,200}$/.test(value) ? value : fail('That ngrok token has unexpected characters.')
         break
       case 'editor':
-        out.editor = oneOf(value, ['cursor', 'vscode'] as const, 'Editor')
+        if (!isEditorChoice(value)) fail('Choose an editor from the list.')
+        out.editor = value as string
         break
       case 'llm': {
         const llm = value as { baseUrl?: unknown; model?: unknown }

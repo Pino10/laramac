@@ -1,5 +1,6 @@
 import type { ReleaseNote, UpdateInfo } from '../shared/types'
 import { compareVersions } from './versions'
+import { ownNotes } from './seckit/ghapi'
 
 export interface Release {
   tag_name: string
@@ -14,7 +15,7 @@ export interface Release {
 export function changelog(releases: Release[]): ReleaseNote[] {
   return releases
     .filter((r) => !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name))
-    .map((r) => ({ version: r.tag_name.slice(1), notes: r.body ?? '', publishedAt: r.published_at, url: r.html_url }))
+    .map((r) => ({ version: r.tag_name.slice(1), notes: ownNotes(r.body), publishedAt: r.published_at, url: r.html_url }))
     .sort((a, b) => compareVersions(b.version, a.version))
 }
 
@@ -36,7 +37,7 @@ export function pickUpdate(releases: Release[], current: string, arch = dmgArch(
   // Without a checksum list the download cannot be verified, so the release is not offered.
   if (!dmg || !sums) return null
   return {
-    info: { version, current, notes: best.body ?? '', publishedAt: best.published_at, url: best.html_url },
+    info: { version, current, notes: ownNotes(best.body), publishedAt: best.published_at, url: best.html_url },
     dmg: dmg.browser_download_url,
     sums: sums.browser_download_url
   }

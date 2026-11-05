@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { ServiceStatus } from '@shared/types'
 
@@ -65,6 +65,9 @@ export function ServiceIcon({ id, status }: { id: string; status: ServiceStatus 
   )
 }
 
+/** Inside a page that already has its own title (Git's GitHub and Azure tabs), PageHead becomes a section heading. */
+export const SubPage = createContext(false)
+
 export function PageHead({
   title,
   desc,
@@ -74,10 +77,11 @@ export function PageHead({
   desc?: React.ReactNode
   children?: React.ReactNode
 }): React.JSX.Element {
+  const sub = useContext(SubPage)
   return (
-    <div className="page-head">
+    <div className={sub ? 'page-head sub-head' : 'page-head'}>
       <div>
-        <h1 className="page-title">{title}</h1>
+        {sub ? <h2 className="sub-title">{title}</h2> : <h1 className="page-title">{title}</h1>}
         {desc && <p className="page-desc">{desc}</p>}
       </div>
       {children && <div className="page-actions no-drag">{children}</div>}

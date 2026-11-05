@@ -37,7 +37,7 @@ const HELP = \`laramac: control Laramac from Terminal
 Add --json to status, sites and db for machine-readable output (for scripts,
 Raycast and Apple Shortcuts).
 
-Laramac must be open, with "Let AI tools use Laramac" on in Tools.\`
+Laramac must be open, with "Let AI tools use Laramac" on in AI tools.\`
 
 async function call(name, a = {}) {
   let token
@@ -49,8 +49,8 @@ async function call(name, a = {}) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: a } })
     })
-  } catch { fail('Laramac is not answering. Open it, and turn on "Let AI tools use Laramac" in Tools.') }
-  if (res.status === 401) fail('Laramac refused the key. Turn the AI tools switch off and on in Tools.')
+  } catch { fail('Laramac is not answering. Open it, and turn on "Let AI tools use Laramac" in AI tools.') }
+  if (res.status === 401) fail('Laramac refused the key. Turn the AI tools switch off and on in AI tools.')
   const body = await res.json()
   const r = body.result
   if (!r) fail(body.error?.message || 'Laramac could not do that.')

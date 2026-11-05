@@ -44,7 +44,7 @@ const fs = require('fs')
 const { spawn, execFileSync } = require('child_process')
 const MIN = ${CLAUDE_CODE_MIN_CONTEXT}, GOOD = ${CLAUDE_CODE_GOOD_CONTEXT}
 let cfg
-try { cfg = JSON.parse(fs.readFileSync(${JSON.stringify(configFile)}, 'utf8')) } catch { fail('Set it up first: in Laramac, Tools, "Set up Claude everywhere".') }
+try { cfg = JSON.parse(fs.readFileSync(${JSON.stringify(configFile)}, 'utf8')) } catch { fail('Set it up first: in Laramac, AI tools, "Set up Claude everywhere".') }
 let args = process.argv.slice(2)
 let model = cfg.model
 const i = args.indexOf('--lm-model')
@@ -81,7 +81,7 @@ async function post(path, body, ms) { const r = await fetch(root + path, { metho
   const plugins = (cfg.plugins || []).filter((p) => fs.existsSync(p)).flatMap((p) => ['--plugin-dir', p])
   const child = spawn(cfg.claude, ['--model', e.key, ...plugins, ...args], { stdio: 'inherit', env })
   child.on('exit', (c, s) => process.exit(s ? 1 : (c ?? 0)))
-  child.on('error', () => fail('Claude Code was not found at ' + cfg.claude + '. Install it again from Laramac, Tools.'))
+  child.on('error', () => fail('Claude Code was not found at ' + cfg.claude + '. Install it again from Laramac, AI tools.'))
 })()
 `
 
@@ -157,7 +157,7 @@ const FREE_SCRIPT = (configFile: string): string => `// Written by Laramac. clau
 const fs = require('fs')
 const { spawn, execFileSync } = require('child_process')
 let cfg
-try { cfg = JSON.parse(fs.readFileSync(${JSON.stringify(configFile)}, 'utf8')) } catch { fail('Set it up first: in Laramac, Tools, Free LLM API.') }
+try { cfg = JSON.parse(fs.readFileSync(${JSON.stringify(configFile)}, 'utf8')) } catch { fail('Set it up first: in Laramac, AI tools, Free LLM API.') }
 let args = process.argv.slice(2)
 let model = cfg.model
 const i = args.indexOf('--free-model')
@@ -165,7 +165,7 @@ if (i >= 0) { model = args[i + 1]; args.splice(i, 2) }
 function fail(m) { console.error('claudefree: ' + m); process.exit(1) }
 let key = ''
 try { key = execFileSync('/usr/bin/security', ['find-generic-password', '-s', ${JSON.stringify(FREE_KEYCHAIN_SERVICE)}, '-w'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch {}
-if (!key) fail('No Free LLM API key yet. Paste it in Laramac, Tools, Free LLM API.')
+if (!key) fail('No Free LLM API key yet. Paste it in Laramac, AI tools, Free LLM API.')
 ;(async () => {
   if (args[0] === '--free-help') {
     console.log('claudefree: Claude Code through Free LLM API\\n\\n  claudefree                      start a session\\n  claudefree --resume             pick a past session\\n  claudefree --free-model auto:fast  use another model this time\\n  claudefree --free-models        list the models Free LLM API offers\\n\\nEverything else is passed to claude. Model: ' + model)
@@ -174,7 +174,7 @@ if (!key) fail('No Free LLM API key yet. Paste it in Laramac, Tools, Free LLM AP
   let list
   try {
     const r = await fetch(cfg.baseUrl + '/models', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(6000) })
-    if (r.status === 401 || r.status === 403) fail('Free LLM API did not accept the key. Paste the unified key again in Laramac, Tools.')
+    if (r.status === 401 || r.status === 403) fail('Free LLM API did not accept the key. Paste the unified key again in Laramac, AI tools.')
     list = ((await r.json().catch(() => ({}))).data || []).map((m) => m.id)
   } catch (e) {
     fail('Free LLM API is not answering at ' + cfg.baseUrl + '. Open it and make sure its server is running.')
@@ -184,7 +184,7 @@ if (!key) fail('No Free LLM API key yet. Paste it in Laramac, Tools, Free LLM AP
   const plugins = (cfg.plugins || []).filter((p) => fs.existsSync(p)).flatMap((p) => ['--plugin-dir', p])
   const child = spawn(cfg.claude, ['--model', model, ...plugins, ...args], { stdio: 'inherit', env })
   child.on('exit', (c, s) => process.exit(s ? 1 : (c ?? 0)))
-  child.on('error', () => fail('Claude Code was not found at ' + cfg.claude + '. Install it again from Laramac, Tools.'))
+  child.on('error', () => fail('Claude Code was not found at ' + cfg.claude + '. Install it again from Laramac, AI tools.'))
 })()
 `
 

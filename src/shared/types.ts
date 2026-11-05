@@ -678,7 +678,10 @@ export interface AppSettings {
   secondaryHttpsPort: number
   shareProvider: 'cloudflare' | 'ngrok' | 'localhostrun' | 'pinggy'
   ngrokToken: string
-  editor: 'cursor' | 'vscode'
+  /** 'auto' (the first editor found), an editor id from seckit/editors.ts, or 'custom' (editorApp). */
+  editor: string
+  /** The .app chosen with "Choose another app". */
+  editorApp?: string | null
   /** Let phones and other computers on the network open your sites. Off by default. */
   allowLan: boolean
   notifications: boolean
@@ -714,7 +717,9 @@ export interface ToolsStatus {
   ngrok: boolean
   composer: boolean
   homebrew: boolean
-  editors: { cursor: boolean; vscode: boolean }
+  /** The editors and IDEs found on this Mac, and the one Laramac opens. */
+  editors: { id: string; name: string }[]
+  editor: string | null
   claude: boolean
   platform: string
 }
@@ -1020,6 +1025,7 @@ export interface Channels {
   'sites:open-folder': { args: [string]; result: void }
   'sites:open-url': { args: [string]; result: void }
   'sites:open-editor': { args: [string]; result: void }
+  'editors:choose-app': { args: []; result: { app: string; name: string } | null }
   'sites:open-claude': { args: [string]; result: void }
   'sites:share': { args: [string]; result: string }
   'sites:unshare': { args: [string]; result: void }

@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 /** Everything about one site in one place. */
 export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo; tab?: string; onBack: () => void }): React.JSX.Element {
-  const { act, busy, setSites, settings } = useApp()
+  const { act, busy, setSites, settings, tools } = useApp()
   const api = window.laramac
   const [tab, setTab] = useState<Tab>((TABS.find((t) => t.id === first)?.id as Tab) ?? 'overview')
   const [facts, setFacts] = useState<SiteFacts | null>(null)
@@ -80,7 +80,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
             </button>
           )}
           <button className="btn" onClick={() => api.invoke('sites:open-editor', site.path)}>
-            <Code2 size={14} /> {settings?.editor === 'vscode' ? 'VS Code' : 'Editor'}
+            <Code2 size={14} /> {tools?.editor ?? 'Editor'}
           </button>
           <button className="btn" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={14} /> Claude Code

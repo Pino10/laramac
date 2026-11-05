@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Tools from './Tools'
 import { FolderOpen, RotateCcw, Search, X } from 'lucide-react'
 import { SETTINGS_INDEX } from '../settingsIndex'
 import type { AppSettings, ResetOptions } from '@shared/types'
@@ -142,9 +143,9 @@ export default function Settings(): React.JSX.Element {
           </button>
         )}
       </div>
-      {hits === 0 && <div className="panel pad hint">No setting matches “{q}”. Try another word, or look under Tools and Languages.</div>}
+      {hits === 0 && <div className="panel pad hint">No setting matches “{q}”. Try another word, or look under AI tools and Languages.</div>}
       <nav className="settings-jump" aria-label="Sections" style={{ display: q ? 'none' : undefined }}>
-        {['Sites', 'Addresses', 'Web servers', 'Downloads', 'Connections', 'Appearance and alerts', 'Updates', 'Start over'].map((t) => (
+        {['Sites', 'Addresses', 'Web servers', 'Downloads', 'Connections', 'Terminal and editor', 'Integrations', 'Appearance and alerts', 'Updates', 'Start over'].map((t) => (
           <button
             key={t}
             className="chip-ask"
@@ -289,12 +290,15 @@ export default function Settings(): React.JSX.Element {
         <TextRow label="ngrok authtoken" hint="Only for ngrok, which needs a free account. Cloudflare, localhost.run and Pinggy need none." value={settings.ngrokToken} secret wide onSave={(v) => updateSettings({ ngrokToken: v })} />
         <TextRow
           label="Model in use"
-          hint="The server the Assistant, site doctor and code review use. Add, test and switch servers in Tools › Model servers."
+          hint="The server the Assistant, site doctor and code review use. Add, test and switch servers in AI tools › Model servers."
           value={settings.llm.baseUrl}
           wide
           onSave={(v) => updateSettings({ llm: { ...settings.llm, baseUrl: v } })}
         />
       </div>
+
+      <h2 className="section-title">Terminal and editor</h2>
+      <Tools part="more" />
 
       <h2 className="section-title">Appearance and alerts</h2>
       <div className="panel">
