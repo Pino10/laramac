@@ -576,6 +576,18 @@ export interface SkillPackInfo {
   loaded: string[]
 }
 
+export interface FreeLlmInfo {
+  baseUrl: string
+  model: string
+  hasKey: boolean
+  /** Whether the claudefree command is written. */
+  claudefree: boolean
+  claudeCode: boolean
+  models: string[]
+  ok: boolean | null
+  note: string
+}
+
 export interface ClaudeSetupStatus {
   claudeCode: boolean
   /** Laramac's tools in Claude Code (claude and claudelm). */
@@ -645,7 +657,7 @@ export interface AppSettings {
   tld: string
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
-  glassStyle: 'smoke' | 'frost' | 'aurora' | 'midnight'
+  glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'midnight'
   /** The first-run tour has been seen. */
   tourDone: boolean
   /** Send dump() and dd() to the Dumps window instead of the page. */
@@ -677,6 +689,10 @@ export interface AppSettings {
   hostLocalhostFolders: boolean
   /** Slack, Teams, Discord or other webhook for errors (and, if chosen, finished work). The address is in the Keychain. */
   webhook?: { kind: 'slack' | 'teams' | 'discord' | 'generic'; events: 'errors' | 'all' }
+  /** The release whose look was last applied, so a new default look reaches everyone once. */
+  lookVersion?: number
+  /** Free LLM API's address and model. The key is in the Keychain. */
+  freellm?: { baseUrl: string; model: string }
   /** Databases backed up once a day. */
   dbBackups?: { engine: 'mysql' | 'mariadb'; name: string }[]
   /** How many daily backups to keep per database. */
@@ -758,7 +774,7 @@ export type ReviewFocus = 'security' | 'bugs' | 'all'
 export type ReviewSource = { kind: 'site'; site: string } | { kind: 'github'; repo: string } | { kind: 'git'; url: string; token?: string }
 
 /** Who reviews: Claude Code (your sign-in or your own model), Codex, Gemini CLI, CodeRabbit, or a model directly. */
-export type ReviewerKind = 'claude' | 'claude-local' | 'codex' | 'gemini' | 'coderabbit' | 'model'
+export type ReviewerKind = 'claude' | 'claude-local' | 'claude-free' | 'codex' | 'gemini' | 'coderabbit' | 'model'
 
 export interface ReviewRequest {
   source: ReviewSource
@@ -1083,6 +1099,10 @@ export interface Channels {
   'claude:setup': { args: [{ lmToken?: string }]; result: ClaudeSetupStatus }
   'claude:lm-context': { args: []; result: ClaudeSetupStatus }
   'claude:open-lm': { args: [string | null]; result: void }
+  'claude:open-free': { args: [string | null]; result: void }
+  'freellm:get': { args: []; result: FreeLlmInfo }
+  'freellm:check': { args: []; result: FreeLlmInfo }
+  'freellm:save': { args: [{ baseUrl: string; model: string; key?: string | null }]; result: FreeLlmInfo }
   'updates:check': { args: [boolean]; result: UpdatesReport }
   'updates:last': { args: []; result: UpdatesReport | null }
   'updates:apply': { args: [string[], boolean]; result: UpdatesApplied }

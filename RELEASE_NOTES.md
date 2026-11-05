@@ -1,33 +1,18 @@
-## New in 0.22
+## New in 0.23
 
-### claudelm
-The command for Claude Code on your LM Studio model is now **claudelm** (no hyphen). **claude** stays your normal Claude Code. Laramac moves an existing claude-lm over on its own.
+### Studio: a new look, and the default
+Solid dark surfaces in calm greys and a soft blue, like Google's dark apps, with Apple's own font, rounding and fine lines. The page you are on is a filled blue pill, the main button is filled blue, and nothing is see-through, so text is easy to read all day. Everyone gets it once with this update; Settings, Look switches back to Smoked, Aurora, Midnight or Frosted.
 
-### Site details on the Overview
-Each card under Your sites has a **details** button: address, status, kind, folder, PHP or Node version, database, dev server, HTTPS, Git, .env files and the last security review, with buttons for the editor, Claude Code, claudelm, the folder, logs and its page.
+### Free LLM API
+Connect Free LLM API on the Tools page: paste its unified key once (it goes to the Keychain) and every free key you added to it works through one address.
+- **claudefree**: a third way to run Claude Code, next to **claude** (your Claude account) and **claudelm** (LM Studio). `claudefree --free-model auto:fast` picks the fastest model for one session, `claudefree --free-models` lists them. Every other argument passes through to claude.
+- **Code reviews** can run on it: choose “Claude Code on Free LLM API”.
+- **The Assistant** gets it as a model server, with auto (your routing chain) and auto:fast.
+- A claudefree button on every site's page and in the site details.
+- Code reviews flag Free LLM API keys left in files.
 
-### A site's page does more
-- **Requests**: the site's latest requests from the web server, live, with timings, the slowest addresses, and errors highlighted.
-- **Workers**: queue workers, the Laravel scheduler, Horizon, Reverb, Symfony Messenger or your own command, each with Start, Stop and its log. Laramac suggests the ones the project needs.
-- **Tests**: runs Pest, PHPUnit, Vitest, Jest, Playwright, npm test, pytest, go test or cargo test, with passed and failed counts and what failed.
-- **Hosting** on the Ship tab: deploy to Laravel Forge or Ploi (their deploy hook, kept in the Keychain), Vercel, Netlify or Azure App Service.
-- On the overview: a **CORS** switch (pages on localhost and .test may call the site, nothing on the internet can), **Set up debugging** (Xdebug on, plus “Listen for Xdebug” in .vscode/launch.json), a **QR code** to open the site on your phone, and **Docker Compose** start and stop when the project has a compose file.
-
-### Databases
-- **Daily backups** per database (the newest 7 kept), and **Back up now**.
-- **Scramble personal data** in a local copy of production: emails, names, phone numbers, addresses, IPs and birth dates become fake ones. A backup is saved first.
-- **Compare the structure** of two databases.
-
-### Ollama
-Ollama is now a service like MySQL: Laramac installs it (checked against its published checksums), starts it on 127.0.0.1:11434 and keeps its models in its own folder.
-
-### Skills from security teams
-On the Code review page, add the **Trail of Bits** and **Sentry** security skill sets from GitHub. Every Claude Code review loads them next to Laramac's own, which are now **29**: audit context, entry points, threat model, variant analysis, false-positive checks, change review, insecure defaults, sharp edges and fix verification are new. Reviews stay read-only.
-
-### Use Laramac from everywhere
-Under Tools, Integrations:
-- **Messages to Slack, Teams or Discord** when something fails (or also when work finishes). The webhook address is kept in the Keychain.
-- **Raycast** script commands.
-- **Apple Shortcuts**: commands to paste into “Run Shell Script”.
-- The laramac command has **--json** and `laramac tool <name>` for scripts.
+### Skills from Cloudflare and Anthropic
+Two more skill sets on the Code review page:
+- **Cloudflare's security audit**: reconnaissance, hunting by attack class (web and sign-in, client side, cloud, data isolation, supply chain, AI apps, desktop and local IPC, protocols, memory safety, resource exhaustion) and checked findings with evidence.
+- **Anthropic's /security-review**: a senior engineer's review of your changes that reports only high-confidence problems. It becomes a skill for reviews and stays a /security-review command in Claude Code.
 

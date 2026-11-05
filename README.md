@@ -155,7 +155,9 @@ Each site runs on the Node.js version it asks for (.nvmrc, .node-version, .tool-
 
 ### Claude everywhere
 
-**Tools, Set up Claude everywhere** connects Claude Code and the Claude desktop app to Laramac, installs the security skills, and adds two Terminal commands: `claude` (your normal Claude Code) and `claudelm` (Claude Code on your model in LM Studio, with its context made big enough first). `claudelm --resume` and every other option work as with claude.
+**Tools, Set up Claude everywhere** connects Claude Code and the Claude desktop app to Laramac, installs the security skills, and adds Terminal commands: `claude` (your normal Claude Code) and `claudelm` (Claude Code on your model in LM Studio, with its context made big enough first). `claudelm --resume` and every other option work as with claude.
+
+**Tools, Free LLM API** connects [Free LLM API](https://github.com/tashfeenahmed/freellmapi), which keeps your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) behind one address. Paste its unified key once (it goes to the Keychain) and you get a third command, `claudefree`: Claude Code through Free LLM API. Code reviews and the Assistant can use it too.
 
 ### Starters
 

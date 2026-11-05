@@ -69,6 +69,7 @@ const SECRET_PATTERNS: [string, RegExp][] = [
   ['Private key', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
   ['AWS access key', /\bAKIA[0-9A-Z]{16}\b/],
   ['GitHub token', /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}\b/],
+  ['Free LLM API key', /\bfreellmapi-(?!admin-)[a-f0-9]{32,}\b/],
   ['Stripe live key', /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b/],
   ['Slack token', /\bxox[abpr]-[A-Za-z0-9-]{10,}\b/],
   ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
@@ -232,13 +233,14 @@ function runAgent(bin: string, args: string[], env: Record<string, string>, cwd:
   })
 }
 
-const CLI_NAMES: Record<ReviewerId, string[]> = { claude: ['claude'], 'claude-local': ['claude'], codex: ['codex'], gemini: ['gemini'], coderabbit: ['coderabbit', 'cr'] }
+const CLI_NAMES: Record<ReviewerId, string[]> = { claude: ['claude'], 'claude-local': ['claude'], 'claude-free': ['claude'], codex: ['codex'], gemini: ['gemini'], coderabbit: ['coderabbit', 'cr'] }
 
-export function reviewerOptions(model: string): { id: ReviewerKind; name: string; installed: boolean; note?: string }[] {
+export function reviewerOptions(model: string, free = false): { id: ReviewerKind; name: string; installed: boolean; note?: string }[] {
   const has = (id: ReviewerId): boolean => !!findCli(CLI_NAMES[id])
   return [
     { id: 'claude', name: 'Claude Code', installed: has('claude'), note: has('claude') ? undefined : 'Install Claude Code on the AI tools page.' },
     { id: 'claude-local', name: model ? `Claude Code on ${model.split('/').pop()}` : 'Claude Code on your model', installed: has('claude') && !!model, note: !has('claude') ? 'Install Claude Code first.' : !model ? 'Choose a model (LM Studio) in the Assistant first.' : 'Your model, through LM Studio 0.4.1 or newer. Load it with 32k context or more.' },
+    { id: 'claude-free', name: 'Claude Code on Free LLM API', installed: has('claude') && free, note: !has('claude') ? 'Install Claude Code first.' : !free ? 'Connect Free LLM API on the Tools page first.' : 'Your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) through Free LLM API.' },
     { id: 'codex', name: 'Codex', installed: has('codex'), note: has('codex') ? undefined : 'npm install -g @openai/codex' },
     { id: 'gemini', name: 'Gemini CLI', installed: has('gemini'), note: has('gemini') ? undefined : 'npm install -g @google/gemini-cli' },
     { id: 'coderabbit', name: 'CodeRabbit (changes only)', installed: has('coderabbit'), note: has('coderabbit') ? 'Reviews the changes in a Git project.' : 'curl -fsSL https://cli.coderabbit.ai/install.sh | sh' },
@@ -333,13 +335,15 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
     const id = o.reviewer as ReviewerId
     const bin = findCli(CLI_NAMES[id])
     if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed. ${reviewerOptions(o.modelName).find((r) => r.id === id)?.note ?? ''}`.trim())
-    const plugins = id === 'claude' || id === 'claude-local' ? ensurePlugins() : []
+    const viaClaude = id === 'claude' || id === 'claude-local' || id === 'claude-free'
+    const plugins = viaClaude ? ensurePlugins() : []
     // Claude Code loads the skills itself; the others get the method in the prompt.
     // Claude Code loads skills itself. Big-context reviewers get every vector; a local model gets the plan and the core method.
     const vectorSkills = ['api-security-review', 'auth-session-review', 'injection-catalog', 'client-side-review', 'business-logic-review', 'infra-config-review', 'supply-chain-review', 'cloud-baas-review', 'ai-app-review', 'electron-review', 'privacy-data-review']
+    // Free LLM API routes to big hosted models, so it gets every vector like Codex and Gemini.
     const method = id === 'claude' ? '' : `\n\nFollow this method:\n\n${skillText(['review-vectors', 'security-code-review', ...(id === 'claude-local' ? ['local-model-review'] : vectorSkills), 'secrets-triage', 'security-report'], [join(mySkillsDir(), 'skills')])}`
     const brief = scanned.length ? `\n\nScanners already ran. Check each against the code, say which are real, and add what they missed:\n${scanned.map((s) => `- ${s}`).join('\n')}` : ''
-    const prompt = `${reviewPrompt(o.focus, o.name)}${id === 'claude' || id === 'claude-local' ? '\n\nUse the laramac-security skills: start with review-vectors to plan which areas apply to this stack, then security-code-review and every vector skill that applies (api-security-review, auth-session-review, injection-catalog, client-side-review, business-logic-review, infra-config-review, supply-chain-review, cloud-baas-review, ai-app-review, electron-review, privacy-data-review), then secrets-triage, dependency-triage and security-report. Use any of your own skills too. Say which areas were not applicable.' : ''}${brief}${method}`
+    const prompt = `${reviewPrompt(o.focus, o.name)}${viaClaude ? '\n\nUse the laramac-security skills: start with review-vectors to plan which areas apply to this stack, then security-code-review and every vector skill that applies (api-security-review, auth-session-review, injection-catalog, client-side-review, business-logic-review, infra-config-review, supply-chain-review, cloud-baas-review, ai-app-review, electron-review, privacy-data-review), then secrets-triage, dependency-triage and security-report. Use any of your own skills too. Say which areas were not applicable.' : ''}${brief}${method}`
     const outFile = join(reviewsDir(), `codex-${randomBytes(4).toString('hex')}.md`)
     mkdirSync(reviewsDir(), { recursive: true })
     const run = reviewerRun(id, bin, prompt, { plugins, name: `Laramac review: ${o.name}`, local: o.local, outFile, cwd: o.root })
@@ -352,7 +356,7 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
     }
     update(30, `${REVIEWER_NAMES[id]} is reading the code`)
     try {
-      const text = await runAgent(run.bin, run.args, run.env, o.root, (l) => update(null, `${REVIEWER_NAMES[id]}: ${l}`), (id === 'claude-local' ? 60 : 30) * 60_000)
+      const text = await runAgent(run.bin, run.args, run.env, o.root, (l) => update(null, `${REVIEWER_NAMES[id]}: ${l}`), (id === 'claude-local' || id === 'claude-free' ? 60 : 30) * 60_000)
       report = id === 'codex' && existsSync(outFile) ? readFileSync(outFile, 'utf8') : text
     } catch (e) {
       throw new Error(explainFailure(id, (e as Error).message))
@@ -366,13 +370,13 @@ export async function runReview(o: { root: string; name: string; reviewer: Revie
     : ''
   const when = new Date()
   const title = `${o.name}, ${when.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`
-  const who = o.reviewer === 'model' ? o.modelName : o.reviewer === 'claude-local' ? `Claude Code on ${o.local?.model ?? o.modelName}` : REVIEWER_NAMES[o.reviewer as ReviewerId]
-  const markdown = `# Code review: ${o.name}\n\nReviewer: ${who}. Focus: ${o.focus}. ${files.length} files.${o.reviewer === 'claude' || o.reviewer === 'claude-local' ? ` Skills: ${skills.join(', ')}.` : ''}${scanned.length ? ` Scanners: ${scanned.length} results checked.` : ''}\n\n${report}${secretMd}\n`
+  const who = o.reviewer === 'model' ? o.modelName : o.reviewer === 'claude-local' ? `Claude Code on ${o.local?.model ?? o.modelName}` : o.reviewer === 'claude-free' ? `Claude Code on Free LLM API (${o.local?.model ?? 'auto'})` : REVIEWER_NAMES[o.reviewer as ReviewerId]
+  const markdown = `# Code review: ${o.name}\n\nReviewer: ${who}. Focus: ${o.focus}. ${files.length} files.${o.reviewer === 'claude' || o.reviewer === 'claude-local' || o.reviewer === 'claude-free' ? ` Skills: ${skills.join(', ')}.` : ''}${scanned.length ? ` Scanners: ${scanned.length} results checked.` : ''}\n\n${report}${secretMd}\n`
   mkdirSync(reviewsDir(), { recursive: true })
   const id = `${slugOf(o.name)}-${when.toISOString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   const reportPath = join(reviewsDir(), `${id}.md`)
   writeFileSync(reportPath, markdown)
-  const usedSkills = o.reviewer === 'claude' || o.reviewer === 'claude-local' ? skills : undefined
+  const usedSkills = o.reviewer === 'claude' || o.reviewer === 'claude-local' || o.reviewer === 'claude-free' ? skills : undefined
   writeFileSync(join(reviewsDir(), `${id}.json`), JSON.stringify({ id, title, folder: o.remote ? '' : o.root, reviewer: o.reviewer, focus: o.focus, at: when.toISOString(), counts: countFindings(report), secrets: secrets.length, remote: !!o.remote, session, skills: usedSkills }))
   return { id, title, folder: o.remote ? '' : o.root, remote: !!o.remote, reviewer: o.reviewer, markdown, secrets, files: files.length, ms: Date.now() - started, reportPath, counts: countFindings(report), session, skills: usedSkills }
 }

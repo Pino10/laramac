@@ -36,7 +36,7 @@ export function redact(text: string): string {
     .replace(/\b(bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, '$1[hidden]')
     .replace(/((?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret|app_key)\s*["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, '$1[hidden]')
     .replace(/(cookie:\s*)[^\n]+/gi, '$1[hidden]')
-    .replace(/\b(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b/g, '[hidden]')
+    .replace(/\b(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|freellmapi-[A-Za-z0-9_-]{8,}|AKIA[0-9A-Z]{16})\b/g, '[hidden]')
     .replace(/(mysql|postgres(?:ql)?|redis|mongodb(?:\+srv)?):\/\/([^:@\s/]+):([^@\s]+)@/gi, '$1://$2:[hidden]@')
 }
 

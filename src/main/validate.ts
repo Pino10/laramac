@@ -72,7 +72,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out[key] = bool(value, key)
         break
       case 'glassStyle':
-        out.glassStyle = oneOf(value, ['smoke', 'frost', 'aurora', 'midnight'] as const, 'The glass style')
+        out.glassStyle = oneOf(value, ['studio', 'smoke', 'frost', 'aurora', 'midnight'] as const, 'The look')
         break
       case 'defaultPhp':
         out.defaultPhp = value === null ? null : assertMinor(value)

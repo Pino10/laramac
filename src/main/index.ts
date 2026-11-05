@@ -20,7 +20,8 @@ import * as apiRoutes from './apiroutes'
 import * as tools from './sitetools'
 import { checkHookUrl, hookBody, raycastScripts, sendHook, type HookKind } from './webhooks'
 import { startWorker, stopAllWorkers, stopWorker, workerLogs, workerRunning } from './workers'
-import { claudeLmConfigFor, claudeLmInstalled, installClaudeLm, storeLmToken } from './claudesetup'
+import { claudeFreeConfigFor, claudeFreeInstalled, claudeLmConfigFor, claudeLmInstalled, installClaudeFree, installClaudeLm, readFreeKey, removeClaudeFree, storeFreeKey, storeLmToken } from './claudesetup'
+import { checkFreeLlm, checkFreeLlmKey, FREELLM_DEFAULT_URL, FREELLM_MODELS, freeLlmModel, freeLlmUrl } from './seckit/freellm'
 import { ensureLmContext } from './seckit/lmstudio'
 import { brewPrefix } from './platform'
 import * as snapshots from './snapshots'
@@ -63,7 +64,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { FreeLlmInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
 import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -933,12 +934,21 @@ function registerIpc(): void {
   handle('mail:test', (to) => mailrelay.sendTestMail(String(to)))
 
   // ---- Code review and web scans. Everything stays read-only on your code.
+  /** The server Claude Code talks to: LM Studio for claude-local, Free LLM API for claude-free. */
+  const reviewServer = async (reviewer: ReviewerKind): Promise<{ baseUrl: string; model: string; token?: string }> => {
+    const st = getSettings()
+    if (reviewer !== 'claude-free') return { baseUrl: st.llm.baseUrl, model: st.llm.model }
+    const key = await readFreeKey()
+    if (!key) throw new ValidationError('Paste your Free LLM API key on the Tools page first.')
+    return { baseUrl: freeLlmUrl(st.freellm?.baseUrl ?? FREELLM_DEFAULT_URL), model: st.freellm?.model || 'auto', token: key }
+  }
   handle('review:run', async (req) => {
     if (!req || typeof req !== 'object' || !req.source) throw new ValidationError('That review request is not valid.')
-    const reviewer = (['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(req.reviewer) ? req.reviewer : 'claude'
+    const reviewer = (['claude', 'claude-local', 'claude-free', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(req.reviewer) ? req.reviewer : 'claude'
     const focus = (['security', 'bugs', 'all'] as const).includes(req.focus) ? req.focus : 'security'
     const st = getSettings()
     if ((reviewer === 'model' || reviewer === 'claude-local') && !st.llm.model) throw new ValidationError('Pick a model (LM Studio) in the Assistant first.')
+    const server = await reviewServer(reviewer)
     const src = req.source
     const label = src.kind === 'site' ? src.site : src.kind === 'github' ? src.repo : src.url.replace(/^https:\/\//, '').replace(/\.git$/, '')
     const result = await jobs.run(`Reviewing ${label}`, async (update) => {
@@ -968,7 +978,7 @@ function registerIpc(): void {
       }
       const remote = src.kind !== 'site'
       try {
-        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, remote, scanners: req.scanners !== false }, update)
+        return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: server, remote, scanners: req.scanners !== false }, update)
       } finally {
         // The downloaded code exists only for this review: it vanishes as soon as the review ends.
         if (remote) review.endReviewSession(root)
@@ -980,7 +990,7 @@ function registerIpc(): void {
   const skillsStatus = (): { names: string[]; installed: boolean; desktop: boolean } => ({ names: review.skillList(), installed: installedForClaude('laramac'), desktop: desktopAppInstalled() })
   const desktopStatus = (): { app: boolean; connected: boolean; path: string } => ({ app: desktopAppInstalled(), connected: desktopConnected(), path: desktopConfigPath() })
   review.ensurePlugins()
-  handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model))
+  handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model, claudeFreeInstalled()))
   handle('review:continue', async (id, where) => {
     const info = review.listReviews().find((r) => r.id === id)
     if (!info) throw new ValidationError('That review is gone.')
@@ -2071,15 +2081,16 @@ function registerIpc(): void {
   const mcpTools: McpTool[] = [
     {
       name: 'start_code_review',
-      description: 'Starts a read-only security code review of a local site with Laramac (Claude Code, Claude Code on the local model, Codex, Gemini CLI, CodeRabbit or the local model), with MacSec scanners when installed. Returns when the report is ready; read it with read_code_review.',
-      inputSchema: { type: 'object', properties: { site: { type: 'string' }, reviewer: { type: 'string', enum: ['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] }, focus: { type: 'string', enum: ['security', 'bugs', 'all'] } }, required: ['site'] },
+      description: 'Starts a read-only security code review of a local site with Laramac (Claude Code, Claude Code on the local model, Claude Code on Free LLM API, Codex, Gemini CLI, CodeRabbit or the local model), with MacSec scanners when installed. Returns when the report is ready; read it with read_code_review.',
+      inputSchema: { type: 'object', properties: { site: { type: 'string' }, reviewer: { type: 'string', enum: ['claude', 'claude-local', 'claude-free', 'codex', 'gemini', 'coderabbit', 'model'] }, focus: { type: 'string', enum: ['security', 'bugs', 'all'] } }, required: ['site'] },
       writes: true,
       run: async (a) => {
         const site = siteByName(String(a.site))
         const st = getSettings()
-        const reviewer = (['claude', 'claude-local', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(a.reviewer as never) ? (a.reviewer as ReviewerKind) : 'claude-local'
+        const reviewer = (['claude', 'claude-local', 'claude-free', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(a.reviewer as never) ? (a.reviewer as ReviewerKind) : 'claude-local'
         const focus = (['security', 'bugs', 'all'] as const).includes(a.focus as never) ? (a.focus as ReviewFocus) : 'security'
-        const r = await jobs.run(`Reviewing ${site.name}`, (u) => review.runReview({ root: site.path, name: site.name, reviewer, focus, modelName: st.llm.model, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, scanners: true }, u))
+        const server = await reviewServer(reviewer)
+        const r = await jobs.run(`Reviewing ${site.name}`, (u) => review.runReview({ root: site.path, name: site.name, reviewer, focus, modelName: st.llm.model, local: server, scanners: true }, u))
         return { id: r.id, counts: r.counts, keysInFiles: r.secrets.length, report: r.markdown.slice(0, 60000) }
       }
     },
@@ -2401,6 +2412,62 @@ function registerIpc(): void {
     if (!claudeLmInstalled().installed) throw new ValidationError('Set up Claude everywhere first, in Tools.')
     const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
     await openTerminal(dir, 'claudelm')
+  })
+  // ---- Free LLM API: your free keys behind one address, for claudefree, reviews and the Assistant
+  let freeCheck: { ok: boolean | null; note: string; models: string[] } = { ok: null, note: '', models: [...FREELLM_MODELS] }
+  const freeInfo = async (): Promise<FreeLlmInfo> => {
+    const st = getSettings()
+    return { baseUrl: st.freellm?.baseUrl ?? FREELLM_DEFAULT_URL, model: st.freellm?.model ?? 'auto', hasKey: !!(await readFreeKey()), claudefree: claudeFreeInstalled(), claudeCode: !!findCli(['claude']), ...freeCheck }
+  }
+  const writeClaudeFree = (): void => {
+    const claude = findCli(['claude'])
+    const st = getSettings()
+    if (claude) installClaudeFree(claudeFreeConfigFor({ claude, baseUrl: st.freellm?.baseUrl ?? FREELLM_DEFAULT_URL, model: st.freellm?.model ?? 'auto', plugins: review.ensurePlugins() }), process.execPath, true)
+  }
+  const runFreeCheck = async (): Promise<void> => {
+    const key = await readFreeKey()
+    if (!key) {
+      freeCheck = { ok: false, note: 'Paste the unified key from Free LLM API’s Keys page.', models: [...FREELLM_MODELS] }
+      return
+    }
+    const r = await checkFreeLlm(getSettings().freellm?.baseUrl ?? FREELLM_DEFAULT_URL, key)
+    freeCheck = { ok: r.ok, note: r.note, models: r.ok ? r.models : [...FREELLM_MODELS] }
+  }
+  handle('freellm:get', () => freeInfo())
+  handle('freellm:check', async () => {
+    await runFreeCheck()
+    return freeInfo()
+  })
+  handle('freellm:save', async (o) => {
+    if (!o || typeof o !== 'object') throw new ValidationError('That is not a Free LLM API setting.')
+    let baseUrl: string
+    let model: string
+    let key: string | null | undefined
+    try {
+      baseUrl = freeLlmUrl(String(o.baseUrl ?? ''))
+      model = freeLlmModel(String(o.model ?? ''))
+      key = o.key === null ? null : typeof o.key === 'string' && o.key.trim() ? checkFreeLlmKey(o.key) : undefined
+    } catch (e) {
+      throw new ValidationError((e as Error).message)
+    }
+    if (key === null) await storeFreeKey('')
+    else if (key) await storeFreeKey(key)
+    setSettings({ freellm: { baseUrl, model } })
+    const saved = await readFreeKey()
+    // The Assistant and "Your model" reviews can use it as a saved server too.
+    const existing = models.listServers().find((x) => x.name === 'Free LLM API')
+    if (saved) models.saveServer({ id: existing?.id, name: 'Free LLM API', baseUrl, api: 'openai', key: saved })
+    else if (existing) models.deleteServer(existing.id)
+    if (saved) writeClaudeFree()
+    else removeClaudeFree()
+    await runFreeCheck()
+    if (freeCheck.ok) activity.push('success', 'Free LLM API is connected', 'claudefree, code reviews and the Assistant can use it.')
+    return freeInfo()
+  })
+  handle('claude:open-free', async (name) => {
+    if (!claudeFreeInstalled()) throw new ValidationError('Connect Free LLM API first, on the Tools page.')
+    const dir = typeof name === 'string' && name ? siteByName(name).path : getSettings().wwwPath
+    await openTerminal(dir, 'claudefree')
   })
   // ---- Site tools: requests, workers, tests, Compose, debugging, other devices, hosting
   const siteCmdEnv = (site: SiteInfo): NodeJS.ProcessEnv => {
@@ -2904,6 +2971,8 @@ function registerIpc(): void {
 
 app.whenReady().then(() => {
   ensureDirs()
+  // 0.23 brings the Studio look as the default; it reaches everyone once, and Settings, Look switches back.
+  if ((getSettings().lookVersion ?? 0) < 23) setSettings({ glassStyle: 'studio', lookVersion: 23 })
   ensureWww()
   refreshShims()
   refreshRuntimeShims()

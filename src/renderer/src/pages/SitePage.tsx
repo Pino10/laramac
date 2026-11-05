@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Activity, ArrowLeft, Bot, Cog, FlaskConical, Camera, Code2, Database, ExternalLink, FileCog, FolderOpen, GitBranch, Globe, Lock, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
+import { Activity, ArrowLeft, Bot, Camera, Code2, Cog, Database, ExternalLink, FileCog, FlaskConical, FolderOpen, GitBranch, Globe, Lock, Network, Package, Play, Rocket, ScrollText, Share2, ShieldCheck, Sparkles, Square, Stethoscope } from 'lucide-react'
 import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
@@ -87,6 +87,9 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           </button>
           <button className="icon-btn" aria-label="Claude Code on your model (claudelm)" data-tip="claudelm: on your model" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
             <Bot />
+          </button>
+          <button className="icon-btn" aria-label="Claude Code on Free LLM API (claudefree)" data-tip="claudefree: on Free LLM API" onClick={() => act('open-free', () => api.invoke('claude:open-free', site.name))}>
+            <Network />
           </button>
           <button className="icon-btn" aria-label="Show folder" data-tip="Show folder" onClick={() => api.invoke('sites:open-folder', site.path)}>
             <FolderOpen />

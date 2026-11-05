@@ -17,6 +17,7 @@ import { join } from 'path'
 import { dirs } from './paths'
 import { localModelEnv } from './seckit/reviewers'
 import { CLAUDE_CODE_GOOD_CONTEXT, CLAUDE_CODE_MIN_CONTEXT } from './seckit/lmstudio'
+import { freeLlmEnv, freeLlmModel, freeLlmUrl } from './seckit/freellm'
 
 export const claudeLmBin = (): string => join(dirs.bin(), 'claudelm')
 export const claudeLmScript = (): string => join(dirs.root(), 'cli', 'claudelm.js')
@@ -123,4 +124,100 @@ export function storeLmToken(token: string): Promise<void> {
     const child = execFile('/usr/bin/security', ['-i'], (err) => (err ? reject(new Error('The Keychain did not accept the token.')) : resolve()))
     child.stdin?.end(`add-generic-password -U -s "${KEYCHAIN_SERVICE}" -a lmstudio -w "${token}"\n`)
   })
+}
+
+// ---- claudefree: Claude Code through Free LLM API
+//
+//   claudefree   Claude Code talking to Free LLM API, which routes to your free keys (Google AI
+//                Studio, Groq, NVIDIA, OpenRouter and the rest). Arguments pass through to claude.
+//
+// The unified key stays in the Keychain; claudefree reads it each time it starts.
+
+export const claudeFreeBin = (): string => join(dirs.bin(), 'claudefree')
+export const claudeFreeScript = (): string => join(dirs.root(), 'cli', 'claudefree.js')
+export const claudeFreeConfig = (): string => join(dirs.root(), 'claudefree.json')
+export const FREE_KEYCHAIN_SERVICE = 'Laramac Free LLM API'
+
+export interface ClaudeFreeConfig {
+  claude: string
+  baseUrl: string
+  model: string
+  env: Record<string, string>
+  plugins: string[]
+}
+
+/** The settings claudefree reads. The key is never part of it. */
+export function claudeFreeConfigFor(o: { claude: string; baseUrl: string; model: string; plugins: string[] }): ClaudeFreeConfig {
+  const env = freeLlmEnv({ baseUrl: o.baseUrl, model: o.model }, '')
+  delete env.ANTHROPIC_AUTH_TOKEN
+  return { claude: o.claude, baseUrl: freeLlmUrl(o.baseUrl), model: freeLlmModel(o.model), env, plugins: o.plugins }
+}
+
+const FREE_SCRIPT = (configFile: string): string => `// Written by Laramac. claudefree: Claude Code through Free LLM API.
+const fs = require('fs')
+const { spawn, execFileSync } = require('child_process')
+let cfg
+try { cfg = JSON.parse(fs.readFileSync(${JSON.stringify(configFile)}, 'utf8')) } catch { fail('Set it up first: in Laramac, Tools, Free LLM API.') }
+let args = process.argv.slice(2)
+let model = cfg.model
+const i = args.indexOf('--free-model')
+if (i >= 0) { model = args[i + 1]; args.splice(i, 2) }
+function fail(m) { console.error('claudefree: ' + m); process.exit(1) }
+let key = ''
+try { key = execFileSync('/usr/bin/security', ['find-generic-password', '-s', ${JSON.stringify(FREE_KEYCHAIN_SERVICE)}, '-w'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch {}
+if (!key) fail('No Free LLM API key yet. Paste it in Laramac, Tools, Free LLM API.')
+;(async () => {
+  if (args[0] === '--free-help') {
+    console.log('claudefree: Claude Code through Free LLM API\\n\\n  claudefree                      start a session\\n  claudefree --resume             pick a past session\\n  claudefree --free-model auto:fast  use another model this time\\n  claudefree --free-models        list the models Free LLM API offers\\n\\nEverything else is passed to claude. Model: ' + model)
+    return
+  }
+  let list
+  try {
+    const r = await fetch(cfg.baseUrl + '/models', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(6000) })
+    if (r.status === 401 || r.status === 403) fail('Free LLM API did not accept the key. Paste the unified key again in Laramac, Tools.')
+    list = ((await r.json().catch(() => ({}))).data || []).map((m) => m.id)
+  } catch (e) {
+    fail('Free LLM API is not answering at ' + cfg.baseUrl + '. Open it and make sure its server is running.')
+  }
+  if (args[0] === '--free-models') { for (const m of ['auto', 'auto:fast', ...list.filter((x) => x !== 'auto' && x !== 'auto:fast')]) console.log((m === model ? '● ' : '  ') + m); return }
+  const env = { ...process.env, ...cfg.env, ANTHROPIC_MODEL: model, ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_OPUS_MODEL: model, ANTHROPIC_DEFAULT_HAIKU_MODEL: model, ANTHROPIC_SMALL_FAST_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL: model, ANTHROPIC_AUTH_TOKEN: key }
+  const plugins = (cfg.plugins || []).filter((p) => fs.existsSync(p)).flatMap((p) => ['--plugin-dir', p])
+  const child = spawn(cfg.claude, ['--model', model, ...plugins, ...args], { stdio: 'inherit', env })
+  child.on('exit', (c, s) => process.exit(s ? 1 : (c ?? 0)))
+  child.on('error', () => fail('Claude Code was not found at ' + cfg.claude + '. Install it again from Laramac, Tools.'))
+})()
+`
+
+export function installClaudeFree(cfg: ClaudeFreeConfig, node: string, electron: boolean): void {
+  mkdirSync(join(dirs.root(), 'cli'), { recursive: true })
+  mkdirSync(dirs.bin(), { recursive: true })
+  writeFileSync(claudeFreeConfig(), JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 })
+  writeFileSync(claudeFreeScript(), FREE_SCRIPT(claudeFreeConfig()))
+  writeFileSync(claudeFreeBin(), `#!/bin/sh\n# Written by Laramac: Claude Code through Free LLM API. claudefree --free-help\n${electron ? 'ELECTRON_RUN_AS_NODE=1 ' : ''}exec "${node}" "${claudeFreeScript()}" "$@"\n`)
+  chmodSync(claudeFreeBin(), 0o755)
+}
+
+export function removeClaudeFree(): void {
+  for (const f of [claudeFreeBin(), claudeFreeScript(), claudeFreeConfig()]) rmSync(f, { force: true })
+}
+
+export const claudeFreeInstalled = (): boolean => existsSync(claudeFreeBin())
+
+/** Stores (or, with '', removes) the unified key in the Keychain, through stdin so it never shows in a process list. */
+export function storeFreeKey(key: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!key) {
+      execFile('/usr/bin/security', ['delete-generic-password', '-s', FREE_KEYCHAIN_SERVICE], () => resolve())
+      return
+    }
+    if (/[\s"\\]/.test(key)) return reject(new Error('That key has characters Free LLM API keys do not use.'))
+    const child = execFile('/usr/bin/security', ['-i'], (err) => (err ? reject(new Error('The Keychain did not accept the key.')) : resolve()))
+    child.stdin?.end(`add-generic-password -U -s "${FREE_KEYCHAIN_SERVICE}" -a freellmapi -w "${key}"\n`)
+  })
+}
+
+export function readFreeKey(): Promise<string | null> {
+  return new Promise((resolve) =>
+    execFile('/usr/bin/security', ['find-generic-password', '-s', FREE_KEYCHAIN_SERVICE, '-w'], { timeout: 8000 }, (err, out) => resolve(err ? null : String(out).trim() || null))
+  )
 }

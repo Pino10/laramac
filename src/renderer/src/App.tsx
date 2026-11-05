@@ -34,7 +34,7 @@ function Shell(): React.JSX.Element {
     document.documentElement.dataset.material = appInfo?.material ?? 'none'
   }, [appInfo])
   useEffect(() => {
-    const style = settings?.glassStyle ?? 'smoke'
+    const style = settings?.glassStyle ?? 'studio'
     document.documentElement.dataset.glass = style
     document.documentElement.dataset.tone = style === 'frost' ? 'light' : 'dark'
   }, [settings?.glassStyle])

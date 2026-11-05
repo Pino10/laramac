@@ -218,7 +218,9 @@ export async function detectLlms(): Promise<LocalLlm[]> {
         const l = lookup(s.baseUrl)
         const modelsUrl = s.api === 'anthropic' ? `${s.baseUrl}/v1/models?limit=100` : `${s.baseUrl}/models`
         const data = await getJson<{ data: ListedModel[] }>(modelsUrl, isLocal(s.baseUrl) ? 1500 : 6000, headers(s.api, l?.key ?? null))
-        const models = (data?.data ?? []).map((m) => m.id).filter((m) => isChatModel(m))
+        let models = (data?.data ?? []).map((m) => m.id).filter((m) => isChatModel(m))
+        // Free LLM API picks the model itself with auto (your routing chain) or auto:fast.
+        if (s.name === 'Free LLM API') models = ['auto', 'auto:fast', ...models.filter((m) => m !== 'auto' && m !== 'auto:fast')]
         found.push({ id: s.id, provider: s.name, toolId: guessTool(s.name, s.baseUrl), baseUrl: s.baseUrl, api: s.api, models, loaded: isLocal(s.baseUrl) ? models : [], remote: !isLocal(s.baseUrl), saved: true, online: !!data })
       })()
     )

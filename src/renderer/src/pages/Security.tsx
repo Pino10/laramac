@@ -250,7 +250,9 @@ export default function Security(): React.JSX.Element {
               Run MacSec’s scanners first (Semgrep, Gitleaks, OSV-Scanner), when MacSec is installed, and have the reviewer check each result
             </label>
             <div className="hint">
-              {reviewer === 'claude-local'
+              {reviewer === 'claude-free'
+                ? 'Claude Code does the review with all its tools and Laramac’s security skills, through Free LLM API: your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) behind one address. The code goes to whichever provider your Free LLM API chain picks.'
+                : reviewer === 'claude-local'
                 ? 'Claude Code does the review with all its tools and Laramac’s security skills, but every request goes to your own model in LM Studio. Nothing leaves this Mac. Load the model with a context length of 32,000 or more.'
                 : reviewer === 'codex' || reviewer === 'gemini'
                   ? `${reviewer === 'codex' ? 'Codex' : 'Gemini CLI'} reads the project in its read-only mode, with Laramac’s review method in the prompt.`

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bot, Code2, ExternalLink, FolderOpen, ScrollText, Sparkles, X } from 'lucide-react'
+import { Bot, Code2, ExternalLink, FolderOpen, Network, ScrollText, Sparkles, X } from 'lucide-react'
 import type { SiteFacts, SiteInfo } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
@@ -63,6 +63,9 @@ export default function SiteQuickView({ site, onClose }: { site: SiteInfo; onClo
           </button>
           <button className="btn btn-sm" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
             <Bot size={13} /> claudelm
+          </button>
+          <button className="btn btn-sm" onClick={() => act('open-free', () => api.invoke('claude:open-free', site.name))}>
+            <Network size={13} /> claudefree
           </button>
           <button className="btn btn-sm" onClick={() => api.invoke('sites:open-folder', site.path)}>
             <FolderOpen size={13} /> Folder

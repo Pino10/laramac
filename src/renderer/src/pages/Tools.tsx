@@ -4,6 +4,7 @@ import type { AiTool, LlmTest, McpStatus } from '@shared/types'
 import { useApp } from '../store'
 import ModelServers from '../components/ModelServers'
 import ClaudeSetup from '../components/ClaudeSetup'
+import FreeLlm from '../components/FreeLlm'
 import Integrations from '../components/Integrations'
 import MailDelivery, { relaySummary } from '../components/MailDelivery'
 import type { MailRelay } from '@shared/types'
@@ -70,6 +71,8 @@ export default function Tools(): React.JSX.Element {
       <PageHead title="Tools" desc="Coding agents and local models, mail, public links and Composer. Installers run in Terminal so you can see every step." />
 
       <ClaudeSetup />
+
+      <FreeLlm />
 
       <div className="mcp-card glass">
         <span className="mcp-mark" aria-hidden>

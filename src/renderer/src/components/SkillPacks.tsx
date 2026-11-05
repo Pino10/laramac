@@ -16,7 +16,7 @@ export default function SkillPacks(): React.JSX.Element {
       <div className="packs-head">
         <div className="row-title">Skills from security teams</div>
         <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-          Public skill sets from Trail of Bits and Sentry, kept in Laramac’s folder and loaded into every Claude Code review next to Laramac’s own 29 skills. Reviews stay read-only whatever a skill asks for.
+          Public skill sets from Trail of Bits, Sentry, Cloudflare and Anthropic, kept in Laramac’s folder and loaded into every Claude Code review next to Laramac’s own 29 skills. Reviews stay read-only whatever a skill asks for.
         </div>
       </div>
       {packs.map((p) => (
