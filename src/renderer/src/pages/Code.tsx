@@ -47,7 +47,7 @@ export default function Code(): React.JSX.Element {
             <span className="hint">
               {s.installed
                 ? s.appVersion
-                  ? `In your Applications, version ${s.appVersion}. Editor ${s.version}.`
+                  ? `Version ${s.appVersion}, in your Applications.`
                   : 'The app is added to your Applications the first time you open it.'
                 : 'About 300 MB with the extensions. Every download is checked against its published checksum.'}
             </span>
@@ -86,7 +86,7 @@ export default function Code(): React.JSX.Element {
 
       <section>
         <h2 className="section-title">Choose a look</h2>
-        <p className="hint" style={{ margin: '0 0 12px' }}>Five looks, each with its own layout and colours. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
+        <p className="hint" style={{ margin: '0 0 12px' }}>Seven looks: each one arranges the editor differently, with its own buttons, tabs and colours. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
         <CodeLooks />
       </section>
 

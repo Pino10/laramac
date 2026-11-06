@@ -1,3 +1,20 @@
+## New in 0.35
+
+### Laramac Code: seven looks that rearrange the editor
+Each look now changes where things sit, what the tabs, buttons and status bar look like, and the colours. The features are identical.
+- **Studio**: a classic IDE feel. Narrow tool strip, grey flat panels, underlined tabs, a path bar on top.
+- **Classic**: a VS Code feel. Icon bar on the left, minimap, a bold coloured status bar.
+- **Zen**: a Zed feel. No icon bar, almost no chrome, soft tabs, a tiny status bar.
+- **Aurora**: agent-first. The AI panel stays open on the right, in floating glass cards.
+- **Sunset**: warm plum and amber glow, the icon bar along the bottom, big soft corners.
+- **Terminal**: green on near-black, monospace everywhere, block cursor, relative line numbers, side bar on the right.
+- **Mono**: pure black and white, with an inverted status bar and hairlines. Light mode is white with black.
+Changing look sets the arrangement once, so anything you move yourself afterwards stays until the next change. Paper and Carbon (0.33 and 0.34) became Zen and Studio.
+
+### Quieter editor
+- The "Initializing virtual environments" message came from Python's background search for virtual environments. That search is now off in Laramac Code, and files save automatically after a short pause so closing a window rarely has anything unsaved.
+- One version number on the Laramac Code page (the app's, the same as Laramac).
+
 ## New in 0.34
 
 ### Laramac Code: dark, light, and five looks that really differ

@@ -32,7 +32,7 @@ import { openAsset, releasesApi } from './distribution'
 import { hashFor } from './versions'
 import checksSource from './idext/extension.cjs?raw'
 import { createRequire } from 'module'
-import { isCodeLook, LOOK_BACKGROUND, type CodeLook } from './idelooks'
+import { isCodeLook, LOOK_BACKGROUND, LOOK_LAYOUT, type CodeLook } from './idelooks'
 import { accentBuild, isAccent, themeJson, themePackage, vsixManifest, VSIX_CONTENT_TYPES, type Accent } from './idetheme'
 
 const REPO = 'coder/code-server'
@@ -50,6 +50,8 @@ interface IdeState {
   themeBuild: number | null
   /** A hash of the Laramac Checks extension that is installed. */
   checksBuild?: string | null
+  /** The look whose arrangement (tool strip, minimap, side bar...) was last written to the editor's settings. */
+  layoutLook?: string
   extensions: Record<string, 'installed' | 'failed'>
 }
 const readState = (): IdeState => {
@@ -280,8 +282,15 @@ function writeSettings(): void {
     phpVersion: minor ? `${minor}.0` : null,
     appearance: modeSetting() === 'system' ? 'auto' : (modeSetting() as 'dark' | 'light')
   })
+  // Python's virtual-environment search runs in the background and shows "Initializing virtual environments" for a while.
+  Object.assign(s.managed, { 'python.useEnvironmentsExtension': false, 'python-envs.terminal.autoActivationType': 'off' })
   mkdirSync(join(dataDir(), 'User'), { recursive: true })
-  writeFileSync(file, JSON.stringify(mergeSettings(current, s), null, 2) + '\n')
+  // The arrangement is written once per change of look, so a tweak of your own stays until then.
+  const look = currentLook()
+  const arrange = readState().layoutLook !== look
+  const merged = mergeSettings(current, s)
+  writeFileSync(file, JSON.stringify(arrange ? { ...merged, ...LOOK_LAYOUT[look] } : merged, null, 2) + '\n')
+  if (arrange) writeState({ ...readState(), layoutLook: look })
 }
 
 

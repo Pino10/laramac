@@ -285,9 +285,9 @@ describe('Laramac Code: look, languages and Laravel', () => {
     expect(s.defaults['workbench.productIconTheme']).toBe('fluent-icons')
   })
   it('islands: the parts float on a deeper base', () => {
-    // Aurora (the default) floats the parts as rounded cards; Carbon keeps them as tight sharp panels.
+    // Aurora (the default) floats the parts as rounded cards; Terminal keeps them as hard-edged panels.
     expect(workbenchCss({ uiFont: 'system' })).toContain('clip-path:inset(0 7px 8px 7px round 18px)')
-    expect(workbenchCss({ uiFont: 'system', look: 'carbon' })).toContain('clip-path:inset(0 2px 2px 2px round 4px)')
+    expect(workbenchCss({ uiFont: 'system', look: 'terminal' })).toContain('clip-path:inset(0 1px 1px 1px round 0)')
     const dark = themeJson('dark', 'blue') as { colors: Record<string, string> }
     expect(dark.colors['titleBar.activeBackground']).toBe('#070913')
     expect(dark.colors['sideBar.background']).toBe(dark.colors['editor.background'])

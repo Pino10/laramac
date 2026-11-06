@@ -1,15 +1,17 @@
 import { Check } from 'lucide-react'
 import { useApp } from '../store'
 
-type Look = 'aurora' | 'paper' | 'carbon' | 'sunset' | 'terminal'
+type Look = 'studio' | 'classic' | 'zen' | 'aurora' | 'sunset' | 'terminal' | 'mono'
 type Mode = 'follow' | 'dark' | 'light' | 'auto'
 
 const LOOKS: { id: Look; name: string; about: string }[] = [
-  { id: 'aurora', name: 'Aurora', about: 'Soft floating glass cards on a glowing backdrop. Rounded and friendly.' },
-  { id: 'paper', name: 'Paper', about: 'One calm, flat page with almost no lines. Quiet and spacious.' },
-  { id: 'carbon', name: 'Carbon', about: 'Dense and sharp, with accent edges. Made for long sessions and big screens.' },
-  { id: 'sunset', name: 'Sunset', about: 'Warm plum and amber glow, big soft corners. Brings its own colours.' },
-  { id: 'terminal', name: 'Terminal', about: 'Green on near-black, monospace everywhere, hard edges. Brings its own colours.' }
+  { id: 'studio', name: 'Studio', about: 'Feels like a classic IDE: a narrow tool strip, grey panels, underlined tabs, a path bar on top.' },
+  { id: 'classic', name: 'Classic', about: 'Feels like VS Code: icon bar on the left, minimap, a bold coloured status bar.' },
+  { id: 'zen', name: 'Zen', about: 'Feels like Zed: no icon bar, almost no chrome, soft tabs, a tiny status bar.' },
+  { id: 'aurora', name: 'Aurora', about: 'Agent-first: the AI panel stays open on the right, in floating glass cards.' },
+  { id: 'sunset', name: 'Sunset', about: 'Warm plum and amber glow, icon bar along the bottom, big soft corners.' },
+  { id: 'terminal', name: 'Terminal', about: 'Green on near-black, monospace everywhere, block cursor, relative line numbers.' },
+  { id: 'mono', name: 'Mono', about: 'Pure black and white. Inverted status bar, hairlines, no colour at all.' }
 ]
 
 const MODES: [Mode, string][] = [
@@ -55,8 +57,15 @@ function Mini({ look }: { look: Look }): React.JSX.Element {
             <em style={{ width: '30%' }} />
           </div>
         </div>
+        <div className="lk-ai">
+          <u />
+          <u />
+        </div>
       </div>
-      <div className="lk-status" />
+      <div className="lk-status">
+        <i />
+        <i />
+      </div>
     </div>
   )
 }

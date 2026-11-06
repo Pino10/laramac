@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { setRoot } from '../src/main/paths'
 import { openHealth } from '../src/main/ssh'
 import { createRequire } from 'module'
-import { CODE_LOOKS, isCodeLook, lookCss, LOOK_BACKGROUND } from '../src/main/idelooks'
+import { CODE_LOOKS, isCodeLook, lookCss, LOOK_BACKGROUND, LOOK_LAYOUT } from '../src/main/idelooks'
 import { accentBuild, themeJson } from '../src/main/idetheme'
 import { workbenchCss } from '../src/main/idecore'
 import { sanitizeSettingsPatch } from '../src/main/validate'
@@ -40,10 +40,10 @@ const lib = req('../code-app/lib.js') as {
 }
 
 describe('Laramac Code looks', () => {
-  it('has five different looks, each with its own styles and window colour', () => {
-    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['aurora', 'paper', 'carbon', 'sunset', 'terminal'])
+  it('has seven different looks, each with its own styles and window colour', () => {
+    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['studio', 'classic', 'zen', 'aurora', 'sunset', 'terminal', 'mono'])
     const css = CODE_LOOKS.map((l) => lookCss(l.id))
-    expect(new Set(css).size).toBe(5)
+    expect(new Set(css).size).toBe(7)
     for (const l of CODE_LOOKS) {
       expect(isCodeLook(l.id)).toBe(true)
       expect(LOOK_BACKGROUND[l.id].dark).toMatch(/^#[0-9a-f]{6}$/i)
@@ -53,22 +53,40 @@ describe('Laramac Code looks', () => {
   })
 
   it('puts the chosen look into the workbench CSS, Aurora by default', () => {
-    expect(workbenchCss({ uiFont: 'poppins', look: 'carbon' })).toContain(lookCss('carbon'))
+    expect(workbenchCss({ uiFont: 'poppins', look: 'mono' })).toContain(lookCss('mono'))
     expect(workbenchCss({ uiFont: 'poppins' })).toContain(lookCss('aurora'))
-    expect(workbenchCss({ uiFont: 'poppins', look: 'paper' })).not.toContain(lookCss('carbon'))
+    expect(workbenchCss({ uiFont: 'poppins', look: 'zen' })).not.toContain(lookCss('mono'))
   })
 
   it('gives every look its own colours, in dark and light', () => {
     for (const kind of ['dark', 'light'] as const) {
       const bgs = CODE_LOOKS.map((l) => (themeJson(kind, 'blue', l.id) as { colors: Record<string, string> }).colors['editor.background'])
-      expect(new Set(bgs).size).toBeGreaterThanOrEqual(4)
+      expect(new Set(bgs).size).toBeGreaterThanOrEqual(kind === 'dark' ? 6 : 4)
     }
     const terminal = themeJson('dark', 'violet', 'terminal') as { colors: Record<string, string> }
     expect(terminal.colors['activityBar.foreground']).toBe('#39ff88')
     const aurora = themeJson('dark', 'violet', 'aurora') as { colors: Record<string, string> }
     expect(aurora.colors['activityBar.foreground']).toBe('#b9a4ff')
     const builds = new Set(CODE_LOOKS.map((l) => accentBuild('teal', l.id)))
-    expect(builds.size).toBe(5)
+    expect(builds.size).toBe(7)
+  })
+
+  it('arranges the editor differently in every look', () => {
+    const where = CODE_LOOKS.map((l) => `${LOOK_LAYOUT[l.id]['workbench.activityBar.location']}/${LOOK_LAYOUT[l.id]['workbench.sideBar.location']}/${LOOK_LAYOUT[l.id]['editor.minimap.enabled']}/${LOOK_LAYOUT[l.id]['editor.cursorStyle']}`)
+    expect(new Set(where).size).toBeGreaterThanOrEqual(5)
+    expect(LOOK_LAYOUT.zen['workbench.activityBar.location']).toBe('hidden')
+    expect(LOOK_LAYOUT.terminal['workbench.sideBar.location']).toBe('right')
+    expect(LOOK_LAYOUT.classic['editor.minimap.enabled']).toBe(true)
+    for (const l of CODE_LOOKS) expect(Object.keys(LOOK_LAYOUT[l.id]).sort()).toEqual(Object.keys(LOOK_LAYOUT.studio).sort())
+  })
+
+  it('mono really has no colour', () => {
+    for (const kind of ['dark', 'light'] as const) {
+      const theme = themeJson(kind, 'rose', 'mono') as { colors: Record<string, string>; tokenColors: { settings: { foreground?: string } }[] }
+      const grey = (hex: string): boolean => /^#([0-9a-f]{2})\1\1([0-9a-f]{2})?$/i.test(hex)
+      for (const k of ['editor.background', 'editor.foreground', 'activityBar.foreground', 'statusBar.background', 'button.background']) expect(grey(theme.colors[k])).toBe(true)
+      for (const t of theme.tokenColors) if (t.settings.foreground) expect(grey(t.settings.foreground)).toBe(true)
+    }
   })
 
   it('only accepts known modes from the window', () => {
@@ -77,7 +95,7 @@ describe('Laramac Code looks', () => {
   })
 
   it('only accepts known looks from the window', () => {
-    expect(sanitizeSettingsPatch({ codeLook: 'paper' })).toEqual({ codeLook: 'paper' })
+    expect(sanitizeSettingsPatch({ codeLook: 'zen' })).toEqual({ codeLook: 'zen' })
     expect(() => sanitizeSettingsPatch({ codeLook: 'url(javascript:1)' })).toThrow()
   })
 })

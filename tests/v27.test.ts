@@ -118,7 +118,6 @@ describe('Laramac sets the app up', () => {
     const s = ideSettings({ font: 'system', fontSize: 14, phpPath: null, phpVersion: null, appearance: 'auto' })
     expect(s.managed['claudeCode.preferredLocation']).toBe('sidebar')
     expect(s.managed['workbench.layoutControl.enabled']).toBe(true)
-    expect(s.defaults['workbench.secondarySideBar.defaultVisibility']).toBe('visibleInWorkspace')
   })
 })
 

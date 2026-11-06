@@ -96,6 +96,11 @@ export function migrate(loaded: Partial<AppSettings> & Record<string, unknown>):
     loaded.glassStyle = 'prism'
     changed = true
   }
+  // 0.35: Paper and Carbon (0.33 and 0.34) became Zen and Studio.
+  if ((loaded.codeLook as string) === 'paper' || (loaded.codeLook as string) === 'carbon') {
+    loaded.codeLook = (loaded.codeLook as string) === 'paper' ? 'zen' : 'studio'
+    changed = true
+  }
   // An editor that was never really chosen ('auto') means Laramac Code now.
   if (loaded.editor === 'auto') {
     loaded.editor = 'laramac'
