@@ -845,7 +845,9 @@ export interface AppSettings {
   /** The app's font: Apple's own (SF Pro) or Poppins. */
   uiFont?: 'system' | 'poppins'
   /** How Laramac Code looks: three different layouts. */
-  codeLook?: 'aurora' | 'paper' | 'carbon'
+  codeLook?: 'aurora' | 'paper' | 'carbon' | 'sunset' | 'terminal'
+  /** Dark or light in Laramac Code: follow Laramac (default), or choose. */
+  codeAppearance?: 'follow' | 'dark' | 'light' | 'auto'
   /** Laramac Code's font and size. */
   editorFont?: 'system' | 'jetbrains' | 'fira' | 'cascadia' | 'menlo'
   editorFontSize?: number

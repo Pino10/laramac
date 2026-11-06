@@ -28,7 +28,7 @@ export default function LaramacCode(): React.JSX.Element {
         <Code2 size={20} />
       </span>
       <div className="mcp-body">
-        <strong>{s.installed ? `Laramac Code ${s.version ?? ''}`.trim() : 'Laramac Code'}</strong>
+        <strong>{s.installed ? `Laramac Code ${s.appVersion ?? ''}`.trim() : 'Laramac Code'}</strong>
         <span>
           Its own app, with its own icon in the Dock, set up for PHP first: Intelephense and Phpactor, breakpoints with Xdebug, Blade, Claude Code and Cline in the side panel, and a terminal where php, composer, node and claude
           just work. It opens from every site’s code button; “Open with…” picks another editor.

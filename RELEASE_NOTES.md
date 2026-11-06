@@ -1,3 +1,13 @@
+## New in 0.34
+
+### Laramac Code: dark, light, and five looks that really differ
+- **Dark or light** for Laramac Code now follows Laramac by default. Under Laramac Code, **Dark or light** lets you choose Dark, Light or Match my Mac for the editor alone. The editor window changes with it.
+- **Five looks**, each with its own layout and its own colours, so you can see the difference at a glance: Aurora (indigo glass), Paper (warm and flat), Carbon (graphite, sharp), and the new **Sunset** (plum and amber glow) and **Terminal** (green on near-black, monospace). Sunset and Terminal bring their own accent colour; the others use yours.
+- Changing the look restarts the editor quietly and brings your windows back to their folders.
+
+### Fixes
+- One version number: the Laramac Code card now shows the app's version (the same as Laramac), not the editor engine's.
+
 ## New in 0.33
 
 ### Laramac Code: three looks to choose from

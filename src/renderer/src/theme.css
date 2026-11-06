@@ -6987,3 +6987,29 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .lk-carbon .lk-main { background: #0c1018; }
 .lk-carbon .lk-status { height: 9px; margin-top: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--lk-a) 40%, #06080c), #06080c 70%); box-shadow: inset 0 1px 0 var(--lk-a); }
 :root:root .server-card .card-foot .btn svg { flex: none; }
+
+.look-mode { margin-bottom: 14px; }
+.look-grid { grid-template-columns: repeat(auto-fit, minmax(188px, 1fr)); }
+
+/* Sunset: Aurora's layout with a warm glow and bigger corners. */
+.lk-sunset { --lk-a: #ff9a62; background: radial-gradient(75% 80% at 0% 0%, rgba(255, 122, 92, 0.7), transparent 70%), radial-gradient(65% 70% at 100% 0%, rgba(192, 76, 255, 0.55), transparent 70%), radial-gradient(70% 60% at 50% 115%, rgba(255, 184, 107, 0.45), transparent 70%), #0d070c; }
+.lk-sunset .lk-body { gap: 4px; padding: 0 5px; }
+.lk-sunset .lk-side, .lk-sunset .lk-main { background: rgba(26, 17, 24, 0.78); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+.lk-sunset .lk-tabs span { border-radius: 999px; }
+.lk-sunset .lk-tabs span.on { box-shadow: inset 0 0 0 1px rgba(255, 154, 98, 0.7); }
+.lk-sunset .lk-code em.k { background: #ff8fb1; }
+.lk-sunset .lk-code em.s { background: #ffb86b; }
+.lk-sunset .lk-status { margin: 0 14px 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); }
+
+/* Terminal: green on near-black, hard edges. */
+.lk-terminal { --lk-a: #39ff88; background: #010302; }
+.lk-terminal .lk-title i, .lk-terminal .lk-title b, .lk-terminal .lk-rail i { background: rgba(57, 255, 136, 0.28); }
+.lk-terminal .lk-rail i:first-child { background: #39ff88; }
+.lk-terminal .lk-body { gap: 1px; padding: 0 1px; }
+.lk-terminal .lk-side, .lk-terminal .lk-main { background: #050a07; border-radius: 0; box-shadow: inset 0 0 0 1px rgba(57, 255, 136, 0.28); }
+.lk-terminal .lk-side u, .lk-terminal .lk-code em { background: rgba(201, 245, 211, 0.3); border-radius: 0; }
+.lk-terminal .lk-code em.k { background: #5af78e; }
+.lk-terminal .lk-code em.s { background: #f3f99d; }
+.lk-terminal .lk-tabs span { border-radius: 0; background: rgba(57, 255, 136, 0.12); }
+.lk-terminal .lk-tabs span.on { background: #050a07; box-shadow: inset 0 2px 0 #39ff88; }
+.lk-terminal .lk-status { background: #010302; box-shadow: inset 0 1px 0 #39ff88, 0 -4px 12px -6px #39ff88; height: 9px; margin-top: 1px; }

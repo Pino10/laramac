@@ -6,6 +6,7 @@ import { setRoot } from '../src/main/paths'
 import { openHealth } from '../src/main/ssh'
 import { createRequire } from 'module'
 import { CODE_LOOKS, isCodeLook, lookCss, LOOK_BACKGROUND } from '../src/main/idelooks'
+import { accentBuild, themeJson } from '../src/main/idetheme'
 import { workbenchCss } from '../src/main/idecore'
 import { sanitizeSettingsPatch } from '../src/main/validate'
 
@@ -33,16 +34,16 @@ describe('Health on servers saved by older versions', () => {
 
 const req = createRequire(import.meta.url)
 const lib = req('../code-app/lib.js') as {
-  readLaunch: (text: string, exists?: () => boolean) => { update: { version: string; current: string } | null } | null
+  readLaunch: (text: string, exists?: () => boolean) => { appearance: string; theme: number; update: { version: string; current: string } | null } | null
   bannerScript: (u: { version: string; current: string } | null) => string
   UPDATE_MARK: string
 }
 
 describe('Laramac Code looks', () => {
-  it('has three different looks, each with its own styles and window colour', () => {
-    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['aurora', 'paper', 'carbon'])
+  it('has five different looks, each with its own styles and window colour', () => {
+    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['aurora', 'paper', 'carbon', 'sunset', 'terminal'])
     const css = CODE_LOOKS.map((l) => lookCss(l.id))
-    expect(new Set(css).size).toBe(3)
+    expect(new Set(css).size).toBe(5)
     for (const l of CODE_LOOKS) {
       expect(isCodeLook(l.id)).toBe(true)
       expect(LOOK_BACKGROUND[l.id].dark).toMatch(/^#[0-9a-f]{6}$/i)
@@ -57,6 +58,24 @@ describe('Laramac Code looks', () => {
     expect(workbenchCss({ uiFont: 'poppins', look: 'paper' })).not.toContain(lookCss('carbon'))
   })
 
+  it('gives every look its own colours, in dark and light', () => {
+    for (const kind of ['dark', 'light'] as const) {
+      const bgs = CODE_LOOKS.map((l) => (themeJson(kind, 'blue', l.id) as { colors: Record<string, string> }).colors['editor.background'])
+      expect(new Set(bgs).size).toBeGreaterThanOrEqual(4)
+    }
+    const terminal = themeJson('dark', 'violet', 'terminal') as { colors: Record<string, string> }
+    expect(terminal.colors['activityBar.foreground']).toBe('#39ff88')
+    const aurora = themeJson('dark', 'violet', 'aurora') as { colors: Record<string, string> }
+    expect(aurora.colors['activityBar.foreground']).toBe('#b9a4ff')
+    const builds = new Set(CODE_LOOKS.map((l) => accentBuild('teal', l.id)))
+    expect(builds.size).toBe(5)
+  })
+
+  it('only accepts known modes from the window', () => {
+    expect(sanitizeSettingsPatch({ codeAppearance: 'light' })).toEqual({ codeAppearance: 'light' })
+    expect(() => sanitizeSettingsPatch({ codeAppearance: 'purple' })).toThrow()
+  })
+
   it('only accepts known looks from the window', () => {
     expect(sanitizeSettingsPatch({ codeLook: 'paper' })).toEqual({ codeLook: 'paper' })
     expect(() => sanitizeSettingsPatch({ codeLook: 'url(javascript:1)' })).toThrow()
@@ -64,6 +83,12 @@ describe('Laramac Code looks', () => {
 })
 
 describe('Update notice inside Laramac Code', () => {
+  it('reads the mode and theme build, with safe fallbacks', () => {
+    const l = lib.readLaunch(JSON.stringify({ bin: '/bin/sh', args: [], appearance: 'light', theme: 104 }), () => true)
+    expect(l).toMatchObject({ appearance: 'light', theme: 104 })
+    expect(lib.readLaunch(JSON.stringify({ bin: '/bin/sh', args: [], appearance: 'x' }), () => true)).toMatchObject({ appearance: 'system', theme: 0 })
+  })
+
   const launch = (update: unknown): string => JSON.stringify({ bin: '/bin/sh', args: [], update })
 
   it('reads a valid update and ignores anything else', () => {

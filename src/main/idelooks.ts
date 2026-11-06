@@ -5,21 +5,25 @@
  * from the Laramac Studio theme and the accent chosen in Laramac.
  */
 
-export type CodeLook = 'aurora' | 'paper' | 'carbon'
+export type CodeLook = 'aurora' | 'paper' | 'carbon' | 'sunset' | 'terminal'
 
 export const CODE_LOOKS: { id: CodeLook; name: string; about: string }[] = [
   { id: 'aurora', name: 'Aurora', about: 'Soft floating glass cards on a glowing backdrop. Rounded and friendly.' },
   { id: 'paper', name: 'Paper', about: 'One calm, flat page with almost no lines. Quiet and spacious.' },
-  { id: 'carbon', name: 'Carbon', about: 'Dense and sharp, with accent edges. Made for long sessions and big screens.' }
+  { id: 'carbon', name: 'Carbon', about: 'Dense and sharp, with accent edges. Made for long sessions and big screens.' },
+  { id: 'sunset', name: 'Sunset', about: 'Warm plum and amber glow, big soft corners. Its own colours.' },
+  { id: 'terminal', name: 'Terminal', about: 'Green on near-black, monospace everywhere, hard edges. Its own colours.' }
 ]
 
-export const isCodeLook = (v: unknown): v is CodeLook => v === 'aurora' || v === 'paper' || v === 'carbon'
+export const isCodeLook = (v: unknown): v is CodeLook => typeof v === 'string' && CODE_LOOKS.some((l) => l.id === v)
 
 /** The window colour shown while the editor loads, so there is no white flash. */
 export const LOOK_BACKGROUND: Record<CodeLook, { dark: string; light: string }> = {
-  aurora: { dark: '#0a0d16', light: '#eef1f9' },
-  paper: { dark: '#0f131c', light: '#ffffff' },
-  carbon: { dark: '#06080c', light: '#e4e8ef' }
+  aurora: { dark: '#070913', light: '#eef1f9' },
+  paper: { dark: '#181613', light: '#fbf8f2' },
+  carbon: { dark: '#030304', light: '#d9dce2' },
+  sunset: { dark: '#0d070c', light: '#f6e3da' },
+  terminal: { dark: '#010302', light: '#d5e8da' }
 }
 
 const PARTS = '.monaco-workbench .part.sidebar,.monaco-workbench .part.auxiliarybar,.monaco-workbench .part.panel,.monaco-workbench .part.editor'
@@ -103,4 +107,19 @@ ${NO_TAB_LINES}
 .monaco-workbench .monaco-button{border-radius:3px!important}
 ${SHARED}`
 
-export const lookCss = (look: CodeLook): string => (look === 'paper' ? PAPER : look === 'carbon' ? CARBON : AURORA)
+// Sunset is Aurora's layout with bigger corners and its own warm glow.
+const SUNSET = `${AURORA}
+.monaco-workbench{--lc-glow:#ff8a5c;background:radial-gradient(70% 60% at 0% -6%,rgba(255,122,92,.34),transparent 70%),radial-gradient(60% 65% at 104% 0%,rgba(192,76,255,.26),transparent 70%),radial-gradient(70% 60% at 50% 112%,rgba(255,184,107,.2),transparent 70%),var(--vscode-titleBar-activeBackground)!important}
+${PARTS}{clip-path:inset(0 8px 9px 8px round 26px)}
+.monaco-workbench .part.statusbar{clip-path:inset(3px 14px 6px 14px round 999px)}
+.monaco-workbench .quick-input-widget{border-radius:24px!important}`
+
+// Terminal is Carbon's layout with monospace everywhere and phosphor-green edges.
+const TERMINAL = `${CARBON}
+.monaco-workbench,.monaco-workbench .part,.monaco-workbench .monaco-list,.monaco-workbench .monaco-menu,.monaco-workbench .quick-input-widget{font-family:ui-monospace,'SF Mono',Menlo,monospace!important;letter-spacing:0}
+${PARTS}{clip-path:inset(0 1px 1px 1px round 0)}
+${TAB}.active::before{content:'> ';opacity:.8;color:var(--lc-edge)}
+.monaco-workbench .monaco-button,.monaco-workbench .monaco-list .monaco-list-row,.monaco-workbench .quick-input-widget,.monaco-workbench .monaco-inputbox{border-radius:0!important}
+.monaco-workbench .part.statusbar{background:var(--vscode-titleBar-activeBackground)!important;box-shadow:inset 0 1px 0 var(--lc-edge),0 -6px 22px -10px var(--lc-edge)}`
+
+export const lookCss = (look: CodeLook): string => (look === 'paper' ? PAPER : look === 'carbon' ? CARBON : look === 'sunset' ? SUNSET : look === 'terminal' ? TERMINAL : AURORA)

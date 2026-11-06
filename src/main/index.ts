@@ -523,7 +523,7 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
-    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.codeLook !== before.codeLook || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent).catch(() => undefined)
+    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.codeLook !== before.codeLook || next.codeAppearance !== before.codeAppearance || next.appearance !== before.appearance || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent || next.codeLook !== before.codeLook).catch(() => undefined)
     if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' ? 'light' : next.appearance === 'auto' ? 'system' : 'dark'
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {

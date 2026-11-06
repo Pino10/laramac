@@ -79,6 +79,8 @@ function readLaunch(text, exists = fs.existsSync) {
     css: typeof l.css === 'string' ? l.css : '',
     fonts: Array.isArray(l.fonts) ? l.fonts.filter((f) => f && typeof f.family === 'string' && /^[\w ]{1,40}$/.test(f.family) && Number.isInteger(f.weight) && f.weight >= 100 && f.weight <= 900 && typeof f.data === 'string' && /^[A-Za-z0-9+/=]{100,400000}$/.test(f.data)) : [],
     home: typeof l.home === 'string' ? l.home : null,
+    appearance: ['dark', 'light', 'system'].includes(l.appearance) ? l.appearance : 'system',
+    theme: Number.isInteger(l.theme) ? l.theme : 0,
     update: l.update && /^\d+\.\d+\.\d+$/.test(l.update.version) && /^\d+\.\d+\.\d+$/.test(l.update.current) ? { version: l.update.version, current: l.update.current } : null,
     ai: readAi(l.ai),
     background: { dark: /^#[0-9a-f]{6}$/i.test(l.background?.dark) ? l.background.dark : '#0d1017', light: /^#[0-9a-f]{6}$/i.test(l.background?.light) ? l.background.light : '#f6f7fb' }

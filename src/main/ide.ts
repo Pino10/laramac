@@ -241,16 +241,17 @@ async function ensureChecks(force = false): Promise<void> {
 async function ensureTheme(force = false): Promise<void> {
   const st = getSettings()
   const accent: Accent = isAccent(st.accent) ? st.accent : 'blue'
-  const build = accentBuild(accent)
+  const look = currentLook()
+  const build = accentBuild(accent, look)
   const state = readState()
   if (!force && state.themeBuild === build) return
   const dir = join(home(), 'theme-build')
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(join(dir, 'extension', 'themes'), { recursive: true })
-  const pkg = themePackage(accent, build)
+  const pkg = themePackage(accent, build, look)
   writeFileSync(join(dir, 'extension', 'package.json'), JSON.stringify(pkg, null, 2))
-  writeFileSync(join(dir, 'extension', 'themes', 'dark.json'), JSON.stringify(themeJson('dark', accent), null, 2))
-  writeFileSync(join(dir, 'extension', 'themes', 'light.json'), JSON.stringify(themeJson('light', accent), null, 2))
+  writeFileSync(join(dir, 'extension', 'themes', 'dark.json'), JSON.stringify(themeJson('dark', accent, look), null, 2))
+  writeFileSync(join(dir, 'extension', 'themes', 'light.json'), JSON.stringify(themeJson('light', accent, look), null, 2))
   writeFileSync(join(dir, 'extension.vsixmanifest'), vsixManifest(String(pkg.version)))
   writeFileSync(join(dir, '[Content_Types].xml'), VSIX_CONTENT_TYPES)
   await installVsix(dir, 'laramac-studio-theme')
@@ -277,7 +278,7 @@ function writeSettings(): void {
     fontSize: st.editorFontSize ?? 14,
     phpPath: php && existsSync(php) ? php : null,
     phpVersion: minor ? `${minor}.0` : null,
-    appearance: 'auto'
+    appearance: modeSetting() === 'system' ? 'auto' : (modeSetting() as 'dark' | 'light')
   })
   mkdirSync(join(dataDir(), 'User'), { recursive: true })
   writeFileSync(file, JSON.stringify(mergeSettings(current, s), null, 2) + '\n')
@@ -307,6 +308,14 @@ const safeServers = (): ReturnType<typeof listServers> => {
   } catch {
     return []
   }
+}
+
+/** Dark, light or the Mac's own, for Laramac Code: it follows Laramac unless you choose otherwise. */
+export function modeSetting(): 'dark' | 'light' | 'system' {
+  const st = getSettings()
+  const pick = st.codeAppearance ?? 'follow'
+  const from = pick === 'follow' ? (st.appearance ?? 'dark') : pick
+  return from === 'light' ? 'light' : from === 'auto' ? 'system' : 'dark'
 }
 
 /** The look chosen in Laramac (Aurora until another is picked). */
@@ -341,6 +350,8 @@ export function writeLaunch(): void {
     args: serverArgs({ port: '{port}', dataDir: dataDir(), extDir: extDir() }),
     env: launchEnv({ ...process.env, ...runtimeEnv() }, { LARAMAC_SKILL_DIRS: skillDirs.join(':'), LARAMAC_COMPOSER_BIN: join(dirs.root(), 'composer', 'vendor', 'bin') }),
     look: currentLook(),
+    appearance: modeSetting(),
+    theme: accentBuild(isAccent(getSettings().accent) ? (getSettings().accent as Accent) : 'blue', currentLook()),
     update: pendingUpdate,
     css: workbenchCss({ uiFont: (getSettings().uiFont ?? 'poppins'), look: currentLook() }),
     fonts: (getSettings().uiFont ?? 'poppins') === 'poppins' ? poppinsFonts() : [],

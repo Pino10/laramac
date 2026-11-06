@@ -86,7 +86,7 @@ export default function Code(): React.JSX.Element {
 
       <section>
         <h2 className="section-title">Choose a look</h2>
-        <p className="hint" style={{ margin: '0 0 12px' }}>Three different layouts. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
+        <p className="hint" style={{ margin: '0 0 12px' }}>Five looks, each with its own layout and colours. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
         <CodeLooks />
       </section>
 

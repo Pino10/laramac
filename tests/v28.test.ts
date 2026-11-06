@@ -289,10 +289,11 @@ describe('Laramac Code: look, languages and Laravel', () => {
     expect(workbenchCss({ uiFont: 'system' })).toContain('clip-path:inset(0 7px 8px 7px round 18px)')
     expect(workbenchCss({ uiFont: 'system', look: 'carbon' })).toContain('clip-path:inset(0 2px 2px 2px round 4px)')
     const dark = themeJson('dark', 'blue') as { colors: Record<string, string> }
-    expect(dark.colors['titleBar.activeBackground']).toBe('#07090d')
+    expect(dark.colors['titleBar.activeBackground']).toBe('#070913')
     expect(dark.colors['sideBar.background']).toBe(dark.colors['editor.background'])
     expect(dark.colors['sideBar.border']).toBe('#00000000')
     expect(accentBuild('blue')).toBeGreaterThanOrEqual(30)
+    expect(accentBuild('blue', 'terminal')).not.toBe(accentBuild('blue', 'aurora'))
   })
   it('the Laravel panel reads real route:list output and finds the controller', () => {
     const routes = ext.parseRoutes(fx('route-list.json'))!

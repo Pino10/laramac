@@ -111,6 +111,7 @@ function startServer() {
   starting = (async () => {
     launch = readLaunch(fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : '')
     if (!launch) throw Object.assign(new Error('setup'), { setup: true })
+    nativeTheme.themeSource = launch.appearance
     port = await freePort()
     password = crypto.randomBytes(24).toString('hex')
     fs.mkdirSync(HOME, { recursive: true })
@@ -242,7 +243,21 @@ const signs = new WeakMap()
 async function applyLook(win, force = true) {
   if (win.isDestroyed()) return
   const fresh = readLaunch(fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : '')
-  if (fresh && launch) Object.assign(launch, { css: fresh.css, fonts: fresh.fonts, update: fresh.update, background: fresh.background })
+  if (fresh && launch) {
+    const themeChanged = fresh.theme !== launch.theme
+    Object.assign(launch, { css: fresh.css, fonts: fresh.fonts, update: fresh.update, background: fresh.background, appearance: fresh.appearance, theme: fresh.theme })
+    nativeTheme.themeSource = fresh.appearance
+    // New colours live in an extension the editor loads when it starts: restart it, windows come back to their folders.
+    if (themeChanged && server) {
+      restarts = 0
+      try {
+        server.kill('SIGTERM')
+      } catch {
+        // Already gone.
+      }
+      return
+    }
+  }
   const sign = JSON.stringify([launch?.css, launch?.update])
   if (!force && signs.get(win) === sign) return
   signs.set(win, sign)
