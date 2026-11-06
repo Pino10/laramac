@@ -1,3 +1,15 @@
+## New in 0.36
+
+### Laramac Code: ten looks, three of them new
+- **Notepad**: feels like Notepad++. Light grey chrome, coloured tab bars, a ruled status bar, no icon bar.
+- **Ember**: feels like Sublime Text. Warm dark, a minimap, no icon bar, almost no lines.
+- **Orbit**: feels like Antigravity. A wide agent panel on the right with a gradient edge, flat dark panels, gradient accents.
+
+### Fixes
+- **Rounded corners** in Aurora and Sunset no longer clip the corners of panels and icons: smaller radius, and the pill around the bottom icons is gone.
+- **Closing Laramac Code takes one try.** The editor's "something is still running" question blocked the first close; closing now just closes (files save by themselves after a short pause).
+- **Poppins in Laramac Code**: the font is now loaded in two ways and the editor page is allowed to use it. Laramac Code writes whether it loaded to its log (~/.laramac/code/app.log).
+
 ## New in 0.35
 
 ### Laramac Code: seven looks that rearrange the editor

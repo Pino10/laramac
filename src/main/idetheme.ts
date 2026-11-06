@@ -120,6 +120,21 @@ const LOOK_COLORS: Record<CodeLook, { dark: Partial<Palette>; light: Partial<Pal
     light: { bg: '#fafafa', bg2: '#f0f0f1', base: '#eaeaeb', bg3: '#eeeeef', fg: '#383a42', fg2: '#696c77', fg3: '#a0a1a7', keyword: '#a626a4', string: '#50a14f', number: '#986801', type: '#c18401', func: '#4078f2', variable: '#e45649', property: '#e45649', comment: '#a0a1a7', tag: '#e45649', attr: '#986801', constant: '#986801' },
     accent: { dark: '#74ade8', light: '#3b82f6' }
   },
+  notepad: {
+    dark: { bg: '#2b2b2b', bg2: '#3a3a3a', base: '#383838', bg3: '#333333', fg: '#e0e0e0', fg2: '#b0b0b0', fg3: '#808080', keyword: '#6aa9ff', string: '#c3c3c3', number: '#ffa040', type: '#c586ff', func: '#9cc3ff', variable: '#e0e0e0', property: '#c586ff', comment: '#6fae6f', tag: '#6aa9ff', attr: '#ff7a7a', constant: '#ffa040' },
+    light: { bg: '#ffffff', bg2: '#f0f0f0', base: '#ececec', bg3: '#f5f5f5', fg: '#000000', fg2: '#404040', fg3: '#808080', keyword: '#0000ff', string: '#808080', number: '#ff8000', type: '#8000ff', func: '#000080', variable: '#000000', property: '#8000ff', comment: '#008000', tag: '#000080', attr: '#ff0000', constant: '#ff8000', regex: '#000000' },
+    accent: { dark: '#6ab7ff', light: '#2d7ee5' }
+  },
+  ember: {
+    dark: { bg: '#272822', bg2: '#1e1f1c', base: '#1e1f1c', bg3: '#3e3d32', fg: '#f8f8f2', fg2: '#cfcfc2', fg3: '#75715e', keyword: '#f92672', string: '#e6db74', number: '#ae81ff', type: '#66d9ef', func: '#a6e22e', variable: '#f8f8f2', property: '#66d9ef', comment: '#75715e', tag: '#f92672', attr: '#a6e22e', constant: '#ae81ff' },
+    light: { bg: '#fafaf5', bg2: '#f1f1e9', base: '#eeeee6', bg3: '#ecece2', fg: '#272822', fg2: '#55564b', fg3: '#98998c', keyword: '#d6275f', string: '#8c7a00', number: '#7a4fd1', type: '#0a7fa0', func: '#5a8f00', comment: '#98998c', tag: '#d6275f', attr: '#5a8f00', constant: '#7a4fd1' },
+    accent: { dark: '#fd971f', light: '#d9720b' }
+  },
+  orbit: {
+    dark: { bg: '#0f1218', bg2: '#0b0d12', base: '#0b0d12', bg3: '#171b24', fg: '#e3e6ee', fg2: '#a4abbd', fg3: '#6b7390', keyword: '#c4a7ff', string: '#8bd5a0', number: '#ffb86b', type: '#7dc4ff', func: '#82aaff', variable: '#e3e6ee', property: '#a6c8ff', comment: '#6b7390', tag: '#c4a7ff', attr: '#ffb86b' },
+    light: { bg: '#ffffff', bg2: '#f6f7fb', base: '#f1f3f8', bg3: '#eef1f8' },
+    accent: { dark: '#6ea8ff', light: '#1a73e8' }
+  },
   aurora: { dark: { bg: '#0e1220', bg2: '#0a0d18', base: '#070913', bg3: '#171c30' }, light: { base: '#e6eaf6', bg2: '#f3f5fc' } },
   sunset: {
     dark: { bg: '#1a1118', bg2: '#140c13', base: '#0d070c', bg3: '#27181f', keyword: '#ff8fb1', string: '#ffb86b', number: '#ffd37a', type: '#ff9a8b', func: '#ffc9a0', property: '#ffa6c9', attr: '#ffcf8a' },
@@ -330,4 +345,4 @@ export const VSIX_CONTENT_TYPES = `<?xml version="1.0" encoding="utf-8"?>
 `
 
 /** A small number that changes when the accent does, for the theme's version. */
-export const accentBuild = (accent: Accent, look: CodeLook = 'aurora'): number => (Object.keys(ACCENTS).indexOf(accent) + 10) * 10 + ['studio', 'classic', 'zen', 'aurora', 'sunset', 'terminal', 'mono'].indexOf(look)
+export const accentBuild = (accent: Accent, look: CodeLook = 'aurora'): number => (Object.keys(ACCENTS).indexOf(accent) + 10) * 10 + ['studio', 'classic', 'zen', 'aurora', 'sunset', 'terminal', 'mono', 'notepad', 'ember', 'orbit'].indexOf(look)

@@ -197,6 +197,16 @@ function fontScript(fonts) {
   return `(() => { for (const f of ${JSON.stringify(safe)}) { try { const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0)); const face = new FontFace(f.family, bytes, { weight: String(f.weight), style: 'normal' }); document.fonts.add(face); void face.load() } catch (e) {} } })()`
 }
 
+/**
+ * The same font as a normal @font-face, for pages that allow data: fonts, and as the editor's
+ * default font variable. (fontScript loads it from bytes as well; whichever works, works.)
+ */
+function fontFaceCss(fonts) {
+  if (!fonts.length) return ''
+  const faces = fonts.map((f) => `@font-face{font-family:${JSON.stringify(f.family)};font-weight:${f.weight};font-style:normal;font-display:swap;src:url(data:font/woff2;base64,${f.data}) format('woff2')}`)
+  return `${faces.join('\n')}\n:root{--vscode-font-family:${JSON.stringify(fonts[0].family)},-apple-system,BlinkMacSystemFont,sans-serif!important}`
+}
+
 /** The text a click on the update banner writes to the console, which the app listens for. */
 const UPDATE_MARK = '__laramac_code_update__'
 
@@ -225,4 +235,4 @@ function remember(list, folder, exists = fs.existsSync, max = 12) {
   return [folder, ...list.filter((f) => f !== folder)].filter((f) => exists(f)).slice(0, max)
 }
 
-module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, readAi, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS, bannerScript, BANNER_CSS, UPDATE_MARK }
+module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, readAi, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS, bannerScript, BANNER_CSS, UPDATE_MARK, fontFaceCss }

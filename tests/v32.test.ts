@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
@@ -40,10 +40,10 @@ const lib = req('../code-app/lib.js') as {
 }
 
 describe('Laramac Code looks', () => {
-  it('has seven different looks, each with its own styles and window colour', () => {
-    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['studio', 'classic', 'zen', 'aurora', 'sunset', 'terminal', 'mono'])
+  it('has ten different looks, each with its own styles and window colour', () => {
+    expect(CODE_LOOKS.map((l) => l.id)).toEqual(['studio', 'classic', 'zen', 'notepad', 'ember', 'aurora', 'orbit', 'sunset', 'terminal', 'mono'])
     const css = CODE_LOOKS.map((l) => lookCss(l.id))
-    expect(new Set(css).size).toBe(7)
+    expect(new Set(css).size).toBe(10)
     for (const l of CODE_LOOKS) {
       expect(isCodeLook(l.id)).toBe(true)
       expect(LOOK_BACKGROUND[l.id].dark).toMatch(/^#[0-9a-f]{6}$/i)
@@ -61,19 +61,19 @@ describe('Laramac Code looks', () => {
   it('gives every look its own colours, in dark and light', () => {
     for (const kind of ['dark', 'light'] as const) {
       const bgs = CODE_LOOKS.map((l) => (themeJson(kind, 'blue', l.id) as { colors: Record<string, string> }).colors['editor.background'])
-      expect(new Set(bgs).size).toBeGreaterThanOrEqual(kind === 'dark' ? 6 : 4)
+      expect(new Set(bgs).size).toBeGreaterThanOrEqual(kind === 'dark' ? 8 : 5)
     }
     const terminal = themeJson('dark', 'violet', 'terminal') as { colors: Record<string, string> }
     expect(terminal.colors['activityBar.foreground']).toBe('#39ff88')
     const aurora = themeJson('dark', 'violet', 'aurora') as { colors: Record<string, string> }
     expect(aurora.colors['activityBar.foreground']).toBe('#b9a4ff')
     const builds = new Set(CODE_LOOKS.map((l) => accentBuild('teal', l.id)))
-    expect(builds.size).toBe(7)
+    expect(builds.size).toBe(10)
   })
 
   it('arranges the editor differently in every look', () => {
     const where = CODE_LOOKS.map((l) => `${LOOK_LAYOUT[l.id]['workbench.activityBar.location']}/${LOOK_LAYOUT[l.id]['workbench.sideBar.location']}/${LOOK_LAYOUT[l.id]['editor.minimap.enabled']}/${LOOK_LAYOUT[l.id]['editor.cursorStyle']}`)
-    expect(new Set(where).size).toBeGreaterThanOrEqual(5)
+    expect(new Set(where).size).toBeGreaterThanOrEqual(6)
     expect(LOOK_LAYOUT.zen['workbench.activityBar.location']).toBe('hidden')
     expect(LOOK_LAYOUT.terminal['workbench.sideBar.location']).toBe('right')
     expect(LOOK_LAYOUT.classic['editor.minimap.enabled']).toBe(true)
@@ -122,5 +122,22 @@ describe('Update notice inside Laramac Code', () => {
     expect(js).toContain(lib.UPDATE_MARK)
     expect(js).not.toContain('innerHTML')
     expect(lib.bannerScript(null)).toContain('remove()')
+  })
+})
+
+describe('Laramac Code window', () => {
+  const lib2 = req('../code-app/lib.js') as { fontFaceCss: (f: { family: string; weight: number; data: string }[]) => string }
+  it('builds a real @font-face from the font bytes, and nothing without fonts', () => {
+    const css = lib2.fontFaceCss([{ family: 'Laramac Poppins', weight: 400, data: 'AAAA' }])
+    expect(css).toContain('@font-face')
+    expect(css).toContain('font-family:"Laramac Poppins"')
+    expect(css).toContain('--vscode-font-family')
+    expect(lib2.fontFaceCss([])).toBe('')
+  })
+  it('closes at once and relaxes only the font rule of the editor page', () => {
+    const main = readFileSync(join(__dirname, '..', 'code-app', 'main.js'), 'utf8')
+    expect(main).toContain("'will-prevent-unload'")
+    expect(main).toContain('font-src')
+    expect(main).toContain('ours(details.url)')
   })
 })

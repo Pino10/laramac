@@ -286,7 +286,7 @@ describe('Laramac Code: look, languages and Laravel', () => {
   })
   it('islands: the parts float on a deeper base', () => {
     // Aurora (the default) floats the parts as rounded cards; Terminal keeps them as hard-edged panels.
-    expect(workbenchCss({ uiFont: 'system' })).toContain('clip-path:inset(0 7px 8px 7px round 18px)')
+    expect(workbenchCss({ uiFont: 'system' })).toContain('clip-path:inset(0 7px 8px 7px round 12px)')
     expect(workbenchCss({ uiFont: 'system', look: 'terminal' })).toContain('clip-path:inset(0 1px 1px 1px round 0)')
     const dark = themeJson('dark', 'blue') as { colors: Record<string, string> }
     expect(dark.colors['titleBar.activeBackground']).toBe('#070913')

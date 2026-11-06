@@ -1,14 +1,17 @@
 import { Check } from 'lucide-react'
 import { useApp } from '../store'
 
-type Look = 'studio' | 'classic' | 'zen' | 'aurora' | 'sunset' | 'terminal' | 'mono'
+type Look = 'studio' | 'classic' | 'zen' | 'notepad' | 'ember' | 'aurora' | 'orbit' | 'sunset' | 'terminal' | 'mono'
 type Mode = 'follow' | 'dark' | 'light' | 'auto'
 
 const LOOKS: { id: Look; name: string; about: string }[] = [
   { id: 'studio', name: 'Studio', about: 'Feels like a classic IDE: a narrow tool strip, grey panels, underlined tabs, a path bar on top.' },
   { id: 'classic', name: 'Classic', about: 'Feels like VS Code: icon bar on the left, minimap, a bold coloured status bar.' },
   { id: 'zen', name: 'Zen', about: 'Feels like Zed: no icon bar, almost no chrome, soft tabs, a tiny status bar.' },
+  { id: 'notepad', name: 'Notepad', about: 'Feels like Notepad++: light grey chrome, coloured tab bars, a ruled status bar, no icon bar.' },
+  { id: 'ember', name: 'Ember', about: 'Feels like Sublime Text: warm dark with a minimap, no icon bar, almost no lines.' },
   { id: 'aurora', name: 'Aurora', about: 'Agent-first: the AI panel stays open on the right, in floating glass cards.' },
+  { id: 'orbit', name: 'Orbit', about: 'Feels like Antigravity: a wide agent panel on the right, gradient accents, flat dark panels.' },
   { id: 'sunset', name: 'Sunset', about: 'Warm plum and amber glow, icon bar along the bottom, big soft corners.' },
   { id: 'terminal', name: 'Terminal', about: 'Green on near-black, monospace everywhere, block cursor, relative line numbers.' },
   { id: 'mono', name: 'Mono', about: 'Pure black and white. Inverted status bar, hairlines, no colour at all.' }

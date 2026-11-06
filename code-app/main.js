@@ -16,7 +16,7 @@ const http = require('http')
 const net = require('net')
 const os = require('os')
 const path = require('path')
-const { editorUrl, validOpen, parseOpenUrl, readLaunch, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, bannerScript, BANNER_CSS, UPDATE_MARK } = require('./lib')
+const { editorUrl, validOpen, parseOpenUrl, readLaunch, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, bannerScript, BANNER_CSS, UPDATE_MARK, fontFaceCss } = require('./lib')
 
 const HOME = path.join(os.homedir(), '.laramac', 'code')
 const LAUNCH = path.join(HOME, 'launch.json')
@@ -183,6 +183,17 @@ function editorSession() {
     sessionReady = true
     // Copy and paste work in the editor; nothing else is granted.
     s.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-read' || permission === 'clipboard-sanitized-write'))
+    // The editor's page only allows fonts from itself. Laramac's interface font comes as data, so allow that for the editor's own address (nothing else changes).
+    s.webRequest.onHeadersReceived((details, cb) => {
+      const headers = { ...details.responseHeaders }
+      if (ours(details.url)) {
+        for (const k of Object.keys(headers)) {
+          if (k.toLowerCase() !== 'content-security-policy') continue
+          headers[k] = headers[k].map((v) => (/font-src/.test(v) ? v.replace(/font-src([^;]*)/, "font-src$1 data: blob:") : `${v}; font-src 'self' data: blob:`))
+        }
+      }
+      cb({ responseHeaders: headers })
+    })
     s.setPermissionCheckHandler((_wc, permission) => permission === 'clipboard-read' || permission === 'clipboard-sanitized-write')
   }
   return s
@@ -216,6 +227,8 @@ function newWindow(url) {
     return { action: 'deny' }
   })
   win.webContents.on('will-attach-webview', (e) => e.preventDefault())
+  // The editor's page asks "are you sure?" while an extension or a terminal is busy, which made closing take two tries. Files save by themselves, so closing just closes.
+  win.webContents.on('will-prevent-unload', (e) => e.preventDefault())
   win.webContents.on('did-finish-load', () => {
     const at = win.webContents.getURL()
     if (!ours(at)) return
@@ -264,8 +277,22 @@ async function applyLook(win, force = true) {
   const wc = win.webContents
   const key = looks.get(win)
   if (key) await wc.removeInsertedCSS(key).catch(() => undefined)
-  looks.set(win, await wc.insertCSS(`${launch?.css ?? ''}\n${WINDOW_CSS}\n${BANNER_CSS}`).catch(() => undefined))
+  looks.set(win, await wc.insertCSS(`${fontFaceCss(launch?.fonts ?? [])}\n${launch?.css ?? ''}\n${WINDOW_CSS}\n${BANNER_CSS}`).catch(() => undefined))
   if (launch?.fonts.length) await wc.executeJavaScript(fontScript(launch.fonts)).catch(() => undefined)
+  if (launch?.fonts.length) {
+    const ok = await wc.executeJavaScript("document.fonts.ready.then(() => document.fonts.check(\"13px 'Laramac Poppins'\"))").catch(() => false)
+    try {
+      fs.appendFileSync(LOG, `Interface font Poppins: ${ok ? 'loaded' : 'NOT loaded'} (${launch.fonts.length} faces)\n`)
+    } catch {
+      // The log is a courtesy.
+    }
+  } else {
+    try {
+      fs.appendFileSync(LOG, 'Interface font Poppins: launch.json has no font files\n')
+    } catch {
+      // The log is a courtesy.
+    }
+  }
   await wc.executeJavaScript(bannerScript(launch?.update ?? null)).catch(() => undefined)
 }
 setInterval(() => {
