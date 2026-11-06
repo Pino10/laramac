@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import SkillPicker from '../components/SkillPicker'
 import DeepAudit from '../components/DeepAudit'
-import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Microscope, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { OwaspList, ReviewOwasp } from '../components/OwaspList'
 import SkillPacks from '../components/SkillPacks'
@@ -41,7 +41,7 @@ function Counts({ counts, secrets }: { counts: ReviewInfo['counts']; secrets: nu
 }
 
 export default function Security(): React.JSX.Element {
-  const { sites, settings, act, busy, llms, setPage, notify } = useApp()
+  const { sites, settings, act, busy, llms, setPage, notify, reviewSite, setReviewSite } = useApp()
   const api = window.laramac
   const [tab, setTab] = useState<'review' | 'scan' | 'deps'>('review')
   const [kind, setKind] = useState<SourceKind>('site')
@@ -58,6 +58,14 @@ export default function Security(): React.JSX.Element {
   const [focus, setFocus] = useState<ReviewFocus>('security')
   const [skills, setSkills] = useState<string[] | undefined>(undefined)
   const [result, setResult] = useState<ReviewResult | null>(null)
+  const [mode, setMode] = useState<'standard' | 'deep'>('standard')
+  // Arriving from "Review its code" on a repository you just cloned.
+  useEffect(() => {
+    if (!reviewSite) return
+    setKind('site')
+    setSite(reviewSite)
+    setReviewSite(null)
+  }, [reviewSite, setReviewSite])
   const [history, setHistory] = useState<ReviewInfo[]>([])
   const [opened, setOpened] = useState<{ info: ReviewInfo; md: string } | null>(null)
 
@@ -161,7 +169,7 @@ export default function Security(): React.JSX.Element {
         <>
           <div className="sec-form glass">
             <div className="field">
-              <label>What to review</label>
+              <label>1. What to review</label>
               <div className="seg" role="radiogroup" aria-label="Source">
                 <button role="radio" aria-checked={kind === 'site'} onClick={() => switchKind('site')}>
                   <Laptop size={13} /> A site in www
@@ -224,6 +232,23 @@ export default function Security(): React.JSX.Element {
               </>
             )}
             {kind !== 'site' && <div className="hint">Each review downloads its own private copy, and the copy is deleted the moment the review finishes. Only the report stays. The token is used once and not saved.</div>}
+
+            <div className="field">
+              <label>2. How to review it</label>
+              <div className="seg" role="radiogroup" aria-label="How to review">
+                <button role="radio" aria-checked={mode === 'standard'} onClick={() => setMode('standard')}>
+                  <ShieldCheck size={13} /> Standard review
+                </button>
+                <button role="radio" aria-checked={mode === 'deep'} onClick={() => setMode('deep')}>
+                  <Microscope size={13} /> Deep audit
+                </button>
+              </div>
+              <div className="hint">
+                {mode === 'standard' ? 'One careful read by the AI you pick, with Laramac’s security skills. Minutes.' : 'Cloudflare’s and Anthropic’s published security reviews. Slower and far more thorough: 5 minutes to a few hours.'}
+              </div>
+            </div>
+            {mode === 'standard' && (
+              <>
 
             <div className="sec-row">
               <div className="field">
@@ -294,8 +319,11 @@ export default function Security(): React.JSX.Element {
                 <ShieldCheck size={14} /> {busy.has('review') ? 'Reviewing… you can keep working' : 'Start review'}
               </button>
             </div>
+              </>
+            )}
           </div>
 
+          {mode === 'deep' && (
           <DeepAudit
             source={sourceNow()}
             canRun={canRun}
@@ -307,6 +335,7 @@ export default function Security(): React.JSX.Element {
               setHistory(await api.invoke('review:list'))
             }}
           />
+          )}
 
           {(result || opened) && (
             <ReportView

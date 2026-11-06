@@ -1,3 +1,9 @@
+## New in 0.30
+
+### Better flows
+- **After you clone, you know what to do.** Cloning from GitHub or Azure DevOps now shows a card with **Open it** (set it up and run it) and **Review its code**, which opens Code review already pointing at that project.
+- **Code review is two clear steps.** 1. What to review. 2. How to review it: a **Standard review** (one careful read by the AI you pick) or a **Deep audit** (Cloudflare's and Anthropic's published reviews). Only the options for the one you choose are shown, so the page is shorter and nothing is out of order.
+
 ## Fixes in 0.29.1
 
 - **Pop-ups and dialogs are readable.** Dialogs such as Import a project, the Activity panel and menus now sit on a solid, softly blurred surface, so the page behind no longer shows through the text.

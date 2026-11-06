@@ -5,6 +5,7 @@ import { useAsk } from '../components/Ask'
 import { useApp } from '../store'
 import { PageHead, SubPage } from '../ui'
 import Azure from './Azure'
+import AfterClone from '../components/AfterClone'
 
 const ago = (iso: string): string => {
   const d = (Date.now() - new Date(iso).getTime()) / 1000
@@ -59,6 +60,7 @@ function GitHub(): React.JSX.Element {
   const [editing, setEditing] = useState<GitHubRepo | null>(null)
   const [creating, setCreating] = useState(false)
   const [details, setDetails] = useState<GitHubRepo | null>(null)
+  const [cloned, setCloned] = useState<string | null>(null)
 
   const loadRepos = useCallback(async () => {
     const list = await act('gh-repos', () => api.invoke('github:repos'))
@@ -193,6 +195,7 @@ function GitHub(): React.JSX.Element {
         </div>
       </div>
 
+      {cloned && <AfterClone name={cloned} onClose={() => setCloned(null)} />}
       {repos === null ? (
         <div className="group empty-state">Loading your repositories…</div>
       ) : shown.length === 0 ? (
@@ -235,7 +238,7 @@ function GitHub(): React.JSX.Element {
                         const next = await act(`gh-clone-${r.fullName}`, () => api.invoke('github:clone', r.fullName))
                         if (next) {
                           setSites(next)
-                          notify({ kind: 'info', text: `${r.name} is in your projects folder.` })
+                          setCloned(next.find((x) => x.name.toLowerCase() === r.name.toLowerCase())?.name ?? r.name)
                         }
                       }}
                     >

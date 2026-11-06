@@ -6821,3 +6821,11 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 :root:root .seg { border-radius: 999px; }
 :root:root .seg button { border-radius: 999px; }
 @media (prefers-reduced-motion: reduce) { :root:root .btn, :root:root .icon-btn { transition: none; } :root:root .btn:active:not(:disabled) { transform: none; } }
+
+/* ---------- After a clone: the next step ---------- */
+.after-clone { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); animation: approach 0.4s var(--spring) both; flex-wrap: wrap; }
+.after-ic { display: grid; place-items: center; color: var(--ok); }
+.after-text { flex: 1; min-width: 220px; display: grid; gap: 2px; }
+.after-text strong { font-size: 14px; }
+.after-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.after-actions { display: flex; align-items: center; gap: 8px; }

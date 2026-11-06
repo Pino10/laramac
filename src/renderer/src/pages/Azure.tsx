@@ -3,6 +3,7 @@ import { CircleCheck, CircleDashed, CircleX, Download, ExternalLink, GitPullRequ
 import type { AzureAccount, AzureProject, AzureRepo, AzureRepoDetails } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
+import AfterClone from '../components/AfterClone'
 
 const ago = (iso: string | null): string => {
   if (!iso) return ''
@@ -26,6 +27,7 @@ export default function Azure(): React.JSX.Element {
   const [pat, setPat] = useState('')
   const [creating, setCreating] = useState(false)
   const [open, setOpen] = useState<AzureRepo | null>(null)
+  const [cloned, setCloned] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const [r, p] = await Promise.all([act('az-repos', () => api.invoke('azure:repos')), api.invoke('azure:projects').catch(() => [])])
@@ -120,6 +122,7 @@ export default function Azure(): React.JSX.Element {
           ))}
         </select>
       </div>
+      {cloned && <AfterClone name={cloned} onClose={() => setCloned(null)} />}
       {repos === null ? (
         <div className="group empty-state">Loading your repositories…</div>
       ) : shown.length === 0 ? (
@@ -155,7 +158,7 @@ export default function Azure(): React.JSX.Element {
                         const next = await act(`az-clone-${r.id}`, () => api.invoke('azure:clone', r.id))
                         if (next) {
                           setSites(next)
-                          notify({ kind: 'info', text: `${r.name} is in your projects folder.` })
+                          setCloned(next.find((x) => x.name.toLowerCase() === r.name.toLowerCase())?.name ?? r.name)
                         }
                       }}
                     >

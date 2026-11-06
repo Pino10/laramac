@@ -63,6 +63,9 @@ interface AppCtx {
   codeUrl: { url: string | null; at: number } | null
   /** The site page that is open, and on which tab. */
   openSite: { name: string; tab?: string } | null
+  /** A site to review: set by "Review its code", read once by Code review. */
+  reviewSite: string | null
+  setReviewSite: (name: string | null) => void
   showSite: (name: string | null, tab?: string) => void
 }
 
@@ -104,6 +107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [pendingStarter, setPendingStarter] = useState<string | null>(null)
   const [codeUrl, setCodeUrl] = useState<{ url: string | null; at: number } | null>(null)
   const [openSite, setOpenSite] = useState<{ name: string; tab?: string } | null>(null)
+  const [reviewSite, setReviewSite] = useState<string | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   const notify = useCallback((t: Toast) => {
@@ -241,12 +245,14 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       codeUrl,
       setPendingStarter,
       openSite,
+      reviewSite,
+      setReviewSite,
       showSite: (name: string | null, tab?: string) => {
         setOpenSite(name ? { name, tab } : null)
         if (name) setPage('sites')
       }
     }),
-    [tourOpen, pendingStarter, codeUrl, openSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, updates, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
+    [tourOpen, pendingStarter, codeUrl, openSite, reviewSite, page, newProject, paletteOpen, importOpen, activity, clearActivity, appInfo, update, updates, services, sites, jobs, settings, php, tools, llms, toast, busy, updateSettings, refreshAll, refreshLlms, act, notify]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
