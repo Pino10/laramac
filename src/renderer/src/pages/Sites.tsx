@@ -33,6 +33,8 @@ import {
 } from 'lucide-react'
 import type { SiteLogSource, DeployResult, GitHubRepo, GitPushOptions, GitPushResult, GitSiteStatus, SiteInfo, SnapshotInfo, SshServer, SecretHit } from '@shared/types'
 import { useApp } from '../store'
+import StatStrip from '../components/StatStrip'
+import NextLine from '../components/NextLine'
 import { formatBytes, Monogram, PageHead, Switch } from '../ui'
 import SitePage from './SitePage'
 import { useAsk } from '../components/Ask'
@@ -404,6 +406,24 @@ export default function Sites(): React.JSX.Element {
           <Plus size={14} /> New project
         </button>
       </PageHead>
+
+      {sites.length > 0 && (
+        <>
+          <StatStrip
+            stats={[
+              { label: 'Sites', value: sites.length, sub: `${sites.filter((x) => ['laravel', 'wordpress', 'symfony', 'php', 'static'].includes(x.kind)).length} PHP or static, ${sites.filter((x) => x.dev).length} with a dev server` },
+              { label: 'Dev servers running', value: sites.filter((x) => x.dev?.running).length, unit: `of ${sites.filter((x) => x.dev).length}`, tone: sites.some((x) => x.dev?.running) ? 'ok' : undefined },
+              { label: 'Secured with HTTPS', value: sites.filter((x) => x.secure).length, unit: `of ${sites.length}` },
+              { label: 'Waiting for setup', value: sites.filter((x) => x.devSuggestion && !x.dev).length, sub: 'Dev command found, not set up', tone: sites.some((x) => x.devSuggestion && !x.dev) ? 'warn' : undefined }
+            ]}
+          />
+          {sites.some((x) => x.dev && !x.dev.running) && (
+            <NextLine action="Start them" onAction={() => void Promise.all(sites.filter((x) => x.dev && !x.dev.running).map((x) => act(`dev-${x.name}`, () => api.invoke('dev:start', x.name).then(setSites))))}>
+              <strong>{sites.filter((x) => x.dev && !x.dev.running).length} dev {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'server is' : 'servers are'} stopped.</strong> Start {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'it' : 'them'} to open {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'that site' : 'those sites'} in the browser.
+            </NextLine>
+          )}
+        </>
+      )}
 
       {sites.length > 0 && (
         <div className="sites-toolbar">

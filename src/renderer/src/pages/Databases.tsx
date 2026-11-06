@@ -5,6 +5,8 @@ import { ArrowUpRight, Download, Plus, Trash2, Upload, Copy } from 'lucide-react
 import type { DatabaseInfo } from '@shared/types'
 import { useApp } from '../store'
 import { CopyField, formatBytes, PageHead } from '../ui'
+import StatStrip from '../components/StatStrip'
+import NextLine from '../components/NextLine'
 import ServiceRow from '../components/ServiceRow'
 import { useAsk } from '../components/Ask'
 
@@ -12,7 +14,7 @@ type Engine = 'mysql' | 'mariadb'
 const ENGINE_NAME: Record<Engine, string> = { mysql: 'MySQL', mariadb: 'MariaDB' }
 
 export default function Databases(): React.JSX.Element {
-  const { services, tools, settings, act, busy, setTools, setImportOpen, notify } = useApp()
+  const { services, tools, settings, act, busy, setTools, setServices, setImportOpen, notify } = useApp()
   const [browse, setBrowse] = useState<string | null>(null)
   const api = window.laramac
   const tld = settings?.tld ?? 'test'
@@ -98,6 +100,25 @@ export default function Databases(): React.JSX.Element {
         </button>
       </PageHead>
 
+      <StatStrip
+        stats={[
+          { label: 'Servers running', value: sqlRunning.length, unit: `of ${engines.length}`, tone: sqlRunning.length ? 'ok' : 'warn' },
+          { label: 'Databases', value: (dbs ?? []).length },
+          { label: 'Total size', value: (dbs ?? []).reduce((n, d) => n + d.bytes, 0), format: (n) => formatBytes(Math.round(n)) },
+          { label: 'Tables', value: (dbs ?? []).reduce((n, d) => n + d.tables, 0), sub: `${(dbs ?? []).reduce((n, d) => n + d.rows, 0).toLocaleString()} rows` }
+        ]}
+      />
+      {sqlRunning.length === 0 && engines.some((x) => x.status !== 'not-installed') && (
+        <NextLine
+          action="Start it"
+          onAction={() => {
+            const e = engines.find((x) => x.status === 'stopped' || x.status === 'error')
+            if (e) void act(`svc-${e.id}`, () => api.invoke('services:toggle', e.id as never).then(setServices))
+          }}
+        >
+          <strong>No database server is running.</strong> Start MySQL or MariaDB and your databases appear here.
+        </NextLine>
+      )}
       {sqlRunning.length === 0 ? (
         <div className="group empty-state">
           <strong>Start MySQL or MariaDB to see your databases</strong>
@@ -136,7 +157,12 @@ export default function Databases(): React.JSX.Element {
                         </button>
                         <span className="num">{d.tables}</span>
                         <span className="num">{d.rows.toLocaleString()}</span>
-                        <span className="num">{formatBytes(d.bytes)}</span>
+                        <span className="num">
+                          {formatBytes(d.bytes)}
+                          <div className="db-bar" aria-hidden>
+                            <i style={{ width: `${Math.max(3, (d.bytes / Math.max(1, ...list.map((x) => x.bytes))) * 100)}%` }} />
+                          </div>
+                        </span>
                         <span className="end">
                           <button className="icon-btn" data-tip="Open in phpMyAdmin" aria-label={`Open ${d.name} in phpMyAdmin`} onClick={() => api.invoke('db:open', d.engine, d.name)} disabled={!tools?.phpmyadmin}>
                             <ArrowUpRight />

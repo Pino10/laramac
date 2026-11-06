@@ -1,3 +1,10 @@
+## New in 0.32
+
+### A clearer start on every page
+- **Sites, Languages, Databases and Services** now open with a row of animated numbers: how many sites, dev servers running, sites on HTTPS, languages ready, PHP and JavaScript sites, database servers, total database size, services running or failed.
+- **A line that says what to do next**, with the button that does it, appears only when something is off: dev servers stopped (Start them), services off (Start all), no database server running (Start it), or JavaScript sites without Node.js (Choose a version).
+- **Databases** show each database's size as a bar next to its number, so the big ones stand out.
+
 ## New in 0.31
 
 ### Remote servers: a live Health tab

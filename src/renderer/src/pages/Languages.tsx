@@ -4,6 +4,8 @@ import type { RuntimeId, RuntimeInfo } from '@shared/types'
 import { NodeVersionsPanel } from '../components/NodeVersions'
 import { useApp } from '../store'
 import { PageHead, SubPage } from '../ui'
+import StatStrip from '../components/StatStrip'
+import NextLine from '../components/NextLine'
 
 /** Each language's colour and short mark. */
 const LOOK: Record<RuntimeId, { mark: string; color: string }> = {
@@ -22,7 +24,7 @@ const VERSIONS: Partial<Record<RuntimeId, string>> = { php: 'PHP versions', node
 
 /** Every language Laramac can run. PHP and Node.js open their versions; the others install the newest. */
 export default function Languages(): React.JSX.Element {
-  const { act, busy, setPage, php } = useApp()
+  const { act, busy, setPage, php, sites } = useApp()
   const api = window.laramac
   const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([])
   const [latest, setLatest] = useState<Partial<Record<RuntimeId, string>>>({})
@@ -46,11 +48,26 @@ export default function Languages(): React.JSX.Element {
     )
 
   const phpCount = php.filter((p) => p.installed).length
+  const PHP_KINDS = ['laravel', 'wordpress', 'symfony', 'php', 'static']
+  const usedBy = (id: string): number => sites.filter((x) => (id === 'php' ? PHP_KINDS.includes(x.kind) : id === 'node' ? !PHP_KINDS.includes(x.kind) : false)).length
   // PHP first, then what is installed, then the rest.
   const sorted = [...runtimes].sort((a, b) => Number(b.id === 'php') - Number(a.id === 'php') || Number(b.id === 'node') - Number(a.id === 'node') || Number(b.installed) - Number(a.installed))
   return (
     <>
       <PageHead title="Languages" desc="PHP, Node.js, Bun, Python, .NET, Go, Rust and Swift. Laramac keeps its own copies in its folder, so nothing else on your Mac changes; copies you installed yourself are used when present." />
+      <StatStrip
+        stats={[
+          { label: 'Languages ready', value: runtimes.filter((x) => x.installed).length, unit: `of ${runtimes.length}`, tone: runtimes.some((x) => x.installed) ? 'ok' : undefined },
+          { label: 'PHP versions', value: phpCount, sub: 'Installed side by side' },
+          { label: 'PHP sites', value: usedBy('php'), sub: 'Laravel, WordPress, Symfony, PHP, static' },
+          { label: 'JavaScript sites', value: usedBy('node'), sub: 'Next.js, Vite, Nuxt and more' }
+        ]}
+      />
+      {runtimes.length > 0 && !runtimes.some((x) => x.id === 'node' && x.installed) && usedBy('node') > 0 && (
+        <NextLine action="Choose a version" onAction={() => setView('node')}>
+          <strong>{usedBy('node')} of your sites use Node.js, and it is not installed.</strong> Install it so their dev servers can start.
+        </NextLine>
+      )}
       <div className="lang-grid">
         {sorted.map((r) => {
           const look = LOOK[r.id]

@@ -1,6 +1,8 @@
 import type { ServiceId, ServiceInfo } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
+import StatStrip from '../components/StatStrip'
+import NextLine from '../components/NextLine'
 import ServiceRow from '../components/ServiceRow'
 import StackMap from '../components/StackMap'
 import Tools from './Tools'
@@ -49,6 +51,21 @@ export default function Services(): React.JSX.Element {
         </button>
       </PageHead>
 
+      {installed.length > 0 && (
+        <StatStrip
+          stats={[
+            { label: 'Running', value: running, unit: `of ${installed.length}`, tone: running === installed.length ? 'ok' : running === 0 ? 'bad' : 'warn' },
+            { label: 'Stopped', value: installed.filter((x) => x.status === 'stopped').length },
+            { label: 'Failed', value: installed.filter((x) => x.status === 'error').length, tone: installed.some((x) => x.status === 'error') ? 'bad' : undefined },
+            { label: 'Not installed', value: services.filter((x) => x.status === 'not-installed').length, sub: 'Add them below when a project needs one' }
+          ]}
+        />
+      )}
+      {installed.length > 0 && running < installed.length && !installing && !installed.some((x) => x.status === 'error') && (
+        <NextLine action="Start all" onAction={() => void act('start-all', () => api.invoke('services:start-all').then(setServices))}>
+          <strong>{installed.length - running} {installed.length - running === 1 ? 'service is' : 'services are'} off.</strong> Sites that need {installed.length - running === 1 ? 'it' : 'them'} will not open until {installed.length - running === 1 ? 'it runs' : 'they run'}.
+        </NextLine>
+      )}
       {installed.length > 0 && <StackMap />}
 
       {sections.map((sec) => (
