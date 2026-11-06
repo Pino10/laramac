@@ -129,7 +129,7 @@ function startServer() {
       server = null
       origin = ''
       // It stopped by itself: start it again and bring every open window back to its folder.
-      if (!quitting && BrowserWindow.getAllWindows().length) void restart()
+      if (!quitting && !relaunching && BrowserWindow.getAllWindows().length) void restart()
     })
     await healthy(port, 45000)
     origin = `http://127.0.0.1:${port}`
@@ -137,6 +137,58 @@ function startServer() {
   return starting.finally(() => {
     starting = null
   })
+}
+
+/**
+ * A new look brings new colours, which the editor loads when it starts. Open windows show a quiet
+ * page meanwhile (so the editor's "failed to connect" message never shows), then come back to
+ * their folders on the new server.
+ */
+let relaunching = false
+async function relaunchEditor() {
+  if (relaunching) return
+  relaunching = true
+  try {
+    const wins = []
+    for (const w of BrowserWindow.getAllWindows()) {
+      try {
+        if (ours(w.webContents.getURL())) wins.push([w, new URL(w.webContents.getURL()).searchParams.get('folder')])
+      } catch {
+        // A window that is closing.
+      }
+    }
+    const bg = launch?.background?.[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'] ?? '#0d1017'
+    const wait = `data:text/html;charset=utf-8,${encodeURIComponent(`<body style="margin:0;height:100vh;display:grid;place-items:center;background:${bg};color:#9aa3b8;font:13px -apple-system,sans-serif">Applying the new look…</body>`)}`
+    for (const [w] of wins) void w.loadURL(wait).catch(() => undefined)
+    if (server) {
+      const s = server
+      await new Promise((resolve) => {
+        s.once('exit', resolve)
+        setTimeout(resolve, 5000)
+        try {
+          s.kill('SIGTERM')
+        } catch {
+          resolve()
+        }
+      })
+    }
+    server = null
+    origin = ''
+    await startServer()
+    restarts = 0
+    for (const [w, folder] of wins) if (folder && !w.isDestroyed()) void w.loadURL(editorUrl(origin, port, { folder }))
+  } catch {
+    // The log says why; the windows stay on their quiet page and can be reopened.
+  } finally {
+    relaunching = false
+  }
+}
+
+/** Before a window opens: if the look changed since the editor started, restart it first. */
+async function refreshIfLookChanged() {
+  if (!server || !origin || !launch) return
+  const fresh = readLaunch(fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : '')
+  if (fresh && fresh.theme !== launch.theme) await relaunchEditor()
 }
 
 let restarts = 0
@@ -257,19 +309,14 @@ async function applyLook(win, force = true) {
   if (win.isDestroyed()) return
   const fresh = readLaunch(fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : '')
   if (fresh && launch) {
-    const themeChanged = fresh.theme !== launch.theme
-    Object.assign(launch, { css: fresh.css, fonts: fresh.fonts, update: fresh.update, background: fresh.background, appearance: fresh.appearance, theme: fresh.theme })
-    nativeTheme.themeSource = fresh.appearance
-    // New colours live in an extension the editor loads when it starts: restart it, windows come back to their folders.
-    if (themeChanged && server) {
-      restarts = 0
-      try {
-        server.kill('SIGTERM')
-      } catch {
-        // Already gone.
-      }
+    // New colours live in an extension the editor loads when it starts.
+    if (fresh.theme !== launch.theme && server) {
+      nativeTheme.themeSource = fresh.appearance
+      void relaunchEditor()
       return
     }
+    Object.assign(launch, { css: fresh.css, fonts: fresh.fonts, update: fresh.update, background: fresh.background, appearance: fresh.appearance, theme: fresh.theme })
+    nativeTheme.themeSource = fresh.appearance
   }
   const sign = JSON.stringify([launch?.css, launch?.update])
   if (!force && signs.get(win) === sign) return
@@ -341,6 +388,7 @@ function addRecent(folder) {
 /** Opens a folder (or a file at a line inside it) in a window: the one already showing that folder, or a new one. */
 async function open(target) {
   try {
+    await refreshIfLookChanged()
     await startServer()
   } catch (e) {
     if (e.setup) return setupWindow()

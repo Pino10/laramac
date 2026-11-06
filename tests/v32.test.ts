@@ -140,4 +140,10 @@ describe('Laramac Code window', () => {
     expect(main).toContain('font-src')
     expect(main).toContain('ours(details.url)')
   })
+  it('restarts the editor before a window opens when the look changed, behind a quiet page', () => {
+    const main = readFileSync(join(__dirname, '..', 'code-app', 'main.js'), 'utf8')
+    expect(main).toContain('await refreshIfLookChanged()')
+    expect(main).toContain('Applying the new look')
+    expect(main).toContain('!relaunching')
+  })
 })

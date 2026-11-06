@@ -1,3 +1,8 @@
+## New in 0.36.1
+
+### Fix
+- Changing the look and then opening Laramac Code no longer flashes "The workbench failed to connect to the server". The editor now restarts first (open windows show "Applying the new look…" meanwhile) and your windows come back to their folders.
+
 ## New in 0.36
 
 ### Laramac Code: ten looks, three of them new
