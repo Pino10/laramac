@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CircleCheck, CircleDashed, CircleX, Download, ExternalLink, GitPullRequest, Lock, LogOut, Plus, RefreshCw, Search, X } from 'lucide-react'
+import { CircleCheck, CircleDashed, CircleX, Download, ExternalLink, GitPullRequest, Info, Lock, LogOut, Plus, RefreshCw, Search, X } from 'lucide-react'
 import type { AzureAccount, AzureProject, AzureRepo, AzureRepoDetails } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
@@ -120,44 +120,61 @@ export default function Azure(): React.JSX.Element {
           ))}
         </select>
       </div>
-      {repos === null && <div className="panel pad hint">Loading repositories…</div>}
-      {repos && shown.length === 0 && <div className="panel pad hint">No repository matches.</div>}
-      <div className="gh-list">
-        {shown.map((r) => {
-          const here = local.has(r.name.toLowerCase())
-          return (
-            <div key={r.id} className="gh-repo glass">
-              <div className="row-main" role="button" tabIndex={0} onClick={() => setOpen(r)} onKeyDown={(e) => e.key === 'Enter' && setOpen(r)} style={{ cursor: 'pointer' }}>
-                <div className="row-title">
-                  <span className="hint">{r.project} /</span> {r.name}
+      {repos === null ? (
+        <div className="group empty-state">Loading your repositories…</div>
+      ) : shown.length === 0 ? (
+        <div className="group empty-state">No repository matches.</div>
+      ) : (
+        <div className="gh-grid">
+          {shown.map((r) => {
+            const here = local.has(r.name.toLowerCase())
+            const cloning = busy.has(`az-clone-${r.id}`)
+            return (
+              <div key={r.id} className="card glass gh-repo">
+                <div className="gh-repo-head">
+                  <span className="gh-owner">{r.project} /</span>
+                  <button className="gh-name" onClick={() => setOpen(r)}>
+                    {r.name}
+                  </button>
                   {r.disabled && <span className="tag">Disabled</span>}
                   {r.empty && <span className="tag">Empty</span>}
                 </div>
-                <div className="row-sub">
-                  {r.defaultBranch} · {(r.size / 1024 / 1024).toFixed(1)} MB
+                <p className="gh-desc">{r.empty ? <span className="hint">No commits yet</span> : <span className="hint">Open it to see branches, commits, pull requests and pipelines.</span>}</p>
+                <div className="gh-meta">
+                  <span>{r.defaultBranch}</span>
+                  <span>{r.size < 1024 * 1024 ? `${Math.max(1, Math.round(r.size / 1024))} KB` : `${(r.size / 1024 / 1024).toFixed(1)} MB`}</span>
+                </div>
+                <div className="ai-actions">
+                  {here ? (
+                    <span className="tag tag-accent">In your projects</span>
+                  ) : (
+                    <button
+                      className="btn btn-tonal btn-sm"
+                      disabled={r.empty || r.disabled || cloning}
+                      onClick={async () => {
+                        const next = await act(`az-clone-${r.id}`, () => api.invoke('azure:clone', r.id))
+                        if (next) {
+                          setSites(next)
+                          notify({ kind: 'info', text: `${r.name} is in your projects folder.` })
+                        }
+                      }}
+                    >
+                      <Download size={14} /> {cloning ? 'Cloning…' : 'Clone to projects'}
+                    </button>
+                  )}
+                  <span style={{ flex: 1 }} />
+                  <button className="icon-btn" data-tip="Branches, commits, pull requests and pipelines" aria-label={`Details of ${r.name}`} onClick={() => setOpen(r)}>
+                    <Info />
+                  </button>
+                  <button className="icon-btn" aria-label={`Open ${r.name} in Azure DevOps`} data-tip="Open in Azure DevOps" onClick={() => api.invoke('tools:open-external', r.url)}>
+                    <ExternalLink />
+                  </button>
                 </div>
               </div>
-              {here ? (
-                <span className="tag tag-ok">In your projects</span>
-              ) : (
-                <button
-                  className="btn btn-sm"
-                  disabled={r.empty || r.disabled || busy.has(`az-clone-${r.id}`)}
-                  onClick={async () => {
-                    const next = await act(`az-clone-${r.id}`, () => api.invoke('azure:clone', r.id))
-                    if (next) setSites(next)
-                  }}
-                >
-                  <Download size={13} /> {busy.has(`az-clone-${r.id}`) ? 'Cloning…' : 'Clone'}
-                </button>
-              )}
-              <button className="icon-btn" aria-label={`Open ${r.name} in Azure DevOps`} data-tip="Open in Azure DevOps" onClick={() => api.invoke('tools:open-external', r.url)}>
-                <ExternalLink />
-              </button>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
       {creating && <CreateAzureRepo projects={projects} onClose={() => setCreating(false)} onCreated={(r) => setRepos([r, ...(repos ?? [])])} />}
       {open && <AzureDetails repo={open} onClose={() => setOpen(null)} />}
     </>

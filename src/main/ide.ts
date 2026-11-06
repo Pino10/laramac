@@ -323,8 +323,8 @@ export function writeLaunch(): void {
     bin: bin(),
     args: serverArgs({ port: '{port}', dataDir: dataDir(), extDir: extDir() }),
     env: launchEnv({ ...process.env, ...runtimeEnv() }, { LARAMAC_SKILL_DIRS: skillDirs.join(':'), LARAMAC_COMPOSER_BIN: join(dirs.root(), 'composer', 'vendor', 'bin') }),
-    css: workbenchCss({ uiFont: getSettings().uiFont === 'poppins' ? 'poppins' : 'system' }),
-    fonts: getSettings().uiFont === 'poppins' ? poppinsFonts() : [],
+    css: workbenchCss({ uiFont: (getSettings().uiFont ?? 'poppins') }),
+    fonts: (getSettings().uiFont ?? 'poppins') === 'poppins' ? poppinsFonts() : [],
     home: getSettings().wwwPath,
     background: { dark: '#0d1017', light: '#f6f7fb' },
     ai: aiLaunch({ llm: getSettings().llm, servers: safeServers(), freellm: { baseUrl: freeLlmUrl(getSettings().freellm?.baseUrl ?? FREELLM_DEFAULT_URL) }, freeModels: FREELLM_MODELS })

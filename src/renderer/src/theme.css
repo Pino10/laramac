@@ -2323,7 +2323,11 @@ html .dialog,
 html .popover,
 html .palette,
 html .menu,
-html .toast {
+html .toast,
+html .wizard,
+html .notice-card,
+html .toast-mini,
+html .scrim > .glass {
   color-scheme: dark;
   --ink: #f5f3fb;
   --ink-2: rgba(240, 236, 252, 0.74);
@@ -6727,3 +6731,93 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .notice-title small { color: var(--ink-3); font-size: 12px; }
 .notice-body { overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); user-select: text; padding-right: 4px; }
 .notice-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------- Pop-ups and dialogs: a surface you can read on, whatever is behind it ---------- */
+:root:root .dialog,
+:root:root .wizard,
+:root:root .popover,
+:root:root .palette,
+:root:root .menu,
+:root:root .notice-card,
+:root:root .toast-mini,
+:root:root .scrim > .glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 38%),
+    rgba(20, 17, 30, 0.93);
+  color: var(--ink);
+  backdrop-filter: saturate(170%) blur(36px);
+  -webkit-backdrop-filter: saturate(170%) blur(36px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.5px rgba(0, 0, 0, 0.45),
+    0 40px 90px -26px rgba(0, 0, 0, 0.75);
+}
+:root:root .scrim { background: rgba(8, 6, 14, 0.5); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%); }
+:root:root .wizard .hint, :root:root .wizard .page-desc { color: var(--ink-2); }
+:root:root .wizard .dropzone { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.22); }
+:root:root .wizard .dropzone:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+:root:root .wizard input, :root:root .dialog input, :root:root .popover input { background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); color: var(--ink); }
+:root:root .wizard input::placeholder, :root:root .dialog input::placeholder { color: var(--ink-3); }
+
+/* ---------- Tooltips: solid, and never hanging off the window edge ---------- */
+:root:root .icon-btn[data-tip]::after,
+:root:root .foot-btn[data-tip]::after,
+:root:root .slim-toggle[data-tip]::after,
+:root:root [data-tip].dev-toggle::after,
+:root:root [data-tip].dev-logs::after,
+:root:root .sidebar[data-slim='true'] [data-tip]::after {
+  background: rgba(20, 17, 30, 0.97);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.6);
+  z-index: 3000;
+}
+:root:root .foot-row .foot-btn:first-child[data-tip]::after { left: 0; transform: translate(0, 4px); }
+:root:root .foot-row .foot-btn:first-child:hover::after { transform: translate(0, 0); }
+:root:root .foot-row .foot-btn:last-child[data-tip]::after { left: auto; right: 0; transform: translate(0, 4px); }
+:root:root .foot-row .foot-btn:last-child:hover::after { transform: translate(0, 0); }
+
+/* ---------- Buttons: one calm family, like a system app ---------- */
+:root:root .btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  gap: 7px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: none;
+  color: var(--ink);
+  transition:
+    background 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    transform 0.2s var(--spring),
+    box-shadow 0.2s var(--ease);
+}
+:root:root .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, transparent); border-color: color-mix(in srgb, var(--ink) 16%, transparent); }
+:root:root .btn:active:not(:disabled) { transform: scale(0.97); }
+:root:root .btn:focus-visible, :root:root .icon-btn:focus-visible, :root:root .foot-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
+:root:root .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+:root:root .btn-sm { height: 28px; padding: 0 13px; font-size: 12.5px; }
+:root:root .btn-lg { height: 42px; padding: 0 24px; font-size: 14px; }
+:root:root .btn-primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 82%, #fff), var(--accent));
+  color: var(--accent-ink, #fff);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 18px -8px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+:root:root .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 74%, #fff), color-mix(in srgb, var(--accent) 92%, #000)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 10px 24px -8px color-mix(in srgb, var(--accent) 90%, transparent); }
+:root:root .btn-tonal, :root:root .btn-accent { background: var(--accent-soft); color: var(--accent-text, var(--ink)); border-color: transparent; }
+:root:root .btn-tonal:hover:not(:disabled), :root:root .btn-accent:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); border-color: transparent; }
+:root:root .btn-quiet { background: transparent; border-color: transparent; color: var(--ink-2); }
+:root:root .btn-quiet:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); border-color: transparent; }
+:root:root .btn-danger { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); border-color: transparent; }
+:root:root .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 24%, transparent); border-color: transparent; }
+:root:root .icon-btn { border-radius: 999px; transition: background 0.18s var(--ease), transform 0.2s var(--spring); }
+:root:root .icon-btn:active:not(:disabled) { transform: scale(0.92); }
+:root:root .seg { border-radius: 999px; }
+:root:root .seg button { border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { :root:root .btn, :root:root .icon-btn { transition: none; } :root:root .btn:active:not(:disabled) { transform: none; } }

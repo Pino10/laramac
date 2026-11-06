@@ -395,7 +395,7 @@ export default function Settings(): React.JSX.Element {
                 ['poppins', 'Poppins']
               ] as const
             ).map(([id, label]) => (
-              <button key={id} role="radio" aria-checked={(settings.uiFont ?? 'system') === id} onClick={() => updateSettings({ uiFont: id })}>
+              <button key={id} role="radio" aria-checked={(settings.uiFont ?? 'poppins') === id} onClick={() => updateSettings({ uiFont: id })}>
                 {label}
               </button>
             ))}

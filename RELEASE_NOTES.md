@@ -1,3 +1,11 @@
+## Fixes in 0.29.1
+
+- **Pop-ups and dialogs are readable.** Dialogs such as Import a project, the Activity panel and menus now sit on a solid, softly blurred surface, so the page behind no longer shows through the text.
+- **Tooltips are solid** and no longer hang off the edge of the window (the buttons at the bottom left of the sidebar used to).
+- **Azure DevOps looks like GitHub.** Repositories are now cards in a grid, with the project, branch, size, a clear Clone button and a Details button for branches, commits, pull requests and pipelines.
+- **Poppins is the default font** in Laramac and Laramac Code. If you already chose a font, it stays. You can still switch to the Apple font in Settings.
+- **Calmer buttons.** One family of rounded buttons with soft hover and press, clear keyboard focus, and the same look on every page.
+
 ## New in 0.29
 
 ### Deep audit

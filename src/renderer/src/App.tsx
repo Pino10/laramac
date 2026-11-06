@@ -43,7 +43,7 @@ function Shell(): React.JSX.Element {
       root.dataset.glass = style
       root.dataset.tone = mq.matches ? 'dark' : 'light'
       root.dataset.accent = settings?.accent ?? 'blue'
-      root.dataset.font = settings?.uiFont ?? 'system'
+      root.dataset.font = settings?.uiFont ?? 'poppins'
     }
     apply()
     mq.addEventListener('change', apply)
