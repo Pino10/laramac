@@ -78,6 +78,9 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'uiFont':
         out.uiFont = oneOf(value, ['system', 'poppins'] as const, 'The font')
         break
+      case 'codeLook':
+        out.codeLook = oneOf(value, ['aurora', 'paper', 'carbon'] as const, 'The Laramac Code look')
+        break
       case 'editorFont':
         out.editorFont = oneOf(value, ['system', 'jetbrains', 'fira', 'cascadia', 'menlo'] as const, 'The editor font')
         break

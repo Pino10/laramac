@@ -214,7 +214,8 @@ const healthClients = new Map<string, Client>()
 
 /** One quiet connection kept open for a Health tab, so it does not log in again every few seconds. */
 export async function openHealth(id: string, passphrase: string | null, crypto: Crypto): Promise<HealthOpenResult> {
-  if (server(id).protocol !== 'sftp') throw new Error('Health needs a server you connect to with SSH.')
+  // Servers saved by older versions have no protocol: they are SSH (SFTP) servers.
+  if ((server(id).protocol ?? 'sftp') !== 'sftp') throw new Error('Health needs a server you connect to with SSH.')
   const opened = await openClient(id, passphrase, crypto)
   if (!('client' in opened)) return opened
   const sid = randomBytes(8).toString('hex')

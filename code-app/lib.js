@@ -79,6 +79,7 @@ function readLaunch(text, exists = fs.existsSync) {
     css: typeof l.css === 'string' ? l.css : '',
     fonts: Array.isArray(l.fonts) ? l.fonts.filter((f) => f && typeof f.family === 'string' && /^[\w ]{1,40}$/.test(f.family) && Number.isInteger(f.weight) && f.weight >= 100 && f.weight <= 900 && typeof f.data === 'string' && /^[A-Za-z0-9+/=]{100,400000}$/.test(f.data)) : [],
     home: typeof l.home === 'string' ? l.home : null,
+    update: l.update && /^\d+\.\d+\.\d+$/.test(l.update.version) && /^\d+\.\d+\.\d+$/.test(l.update.current) ? { version: l.update.version, current: l.update.current } : null,
     ai: readAi(l.ai),
     background: { dark: /^#[0-9a-f]{6}$/i.test(l.background?.dark) ? l.background.dark : '#0d1017', light: /^#[0-9a-f]{6}$/i.test(l.background?.light) ? l.background.light : '#f6f7fb' }
   }
@@ -194,9 +195,32 @@ function fontScript(fonts) {
   return `(() => { for (const f of ${JSON.stringify(safe)}) { try { const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0)); const face = new FontFace(f.family, bytes, { weight: String(f.weight), style: 'normal' }); document.fonts.add(face); void face.load() } catch (e) {} } })()`
 }
 
+/** The text a click on the update banner writes to the console, which the app listens for. */
+const UPDATE_MARK = '__laramac_code_update__'
+
+/**
+ * A quiet banner at the top of the editor when a newer Laramac is out. Only numbers are put in it
+ * (they are checked in readLaunch), the button asks Laramac to show the update, and the cross hides
+ * it until the next version. Calling it with null removes the banner.
+ */
+function bannerScript(update) {
+  if (!update) return "document.getElementById('lc-update')?.remove()"
+  const v = JSON.stringify(update.version)
+  return `(() => { try { if (localStorage.getItem('lc-update-hidden') === ${v}) return } catch (e) {} const old = document.getElementById('lc-update'); if (old && old.dataset.v === ${v}) return; old?.remove(); const b = document.createElement('div'); b.id = 'lc-update'; b.dataset.v = ${v}; const t = document.createElement('span'); t.textContent = 'Laramac ' + ${v} + ' is ready.'; const go = document.createElement('button'); go.textContent = 'See what is new'; go.onclick = () => console.log(${JSON.stringify(UPDATE_MARK)}); const x = document.createElement('button'); x.className = 'x'; x.setAttribute('aria-label', 'Hide'); x.textContent = '\u00d7'; x.onclick = () => { try { localStorage.setItem('lc-update-hidden', ${v}) } catch (e) {} b.remove() }; b.append(t, go, x); document.body.appendChild(b) })()`
+}
+
+const BANNER_CSS = `
+#lc-update{position:fixed;z-index:2600;top:44px;right:16px;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:999px;font:500 12px/1 -apple-system,BlinkMacSystemFont,sans-serif;color:var(--vscode-foreground,#e6e9f2);background:color-mix(in srgb,var(--vscode-editorWidget-background,#161b27) 86%,transparent);backdrop-filter:blur(18px);border:1px solid color-mix(in srgb,var(--vscode-focusBorder,#8ab4f8) 45%,transparent);box-shadow:0 14px 40px -12px rgba(0,0,0,.55),0 0 0 4px color-mix(in srgb,var(--vscode-focusBorder,#8ab4f8) 12%,transparent);animation:lc-up .35s cubic-bezier(.2,.8,.2,1)}
+#lc-update button{font:inherit;border:0;cursor:pointer;border-radius:999px;padding:6px 12px;color:var(--vscode-button-foreground,#0b1020);background:var(--vscode-button-background,#8ab4f8)}
+#lc-update button.x{padding:5px 9px;background:transparent;color:inherit;opacity:.6;font-size:15px;line-height:1}
+#lc-update button.x:hover{opacity:1}
+@keyframes lc-up{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#lc-update{animation:none}}
+`
+
 /** The folders opened most recently, newest first, without duplicates or folders that are gone. */
 function remember(list, folder, exists = fs.existsSync, max = 12) {
   return [folder, ...list.filter((f) => f !== folder)].filter((f) => exists(f)).slice(0, max)
 }
 
-module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, readAi, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS }
+module.exports = { editorUrl, validOpen, parseOpenUrl, readLaunch, readAi, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, ENV_KEYS, bannerScript, BANNER_CSS, UPDATE_MARK }

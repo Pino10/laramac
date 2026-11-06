@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import * as phpdev from './phpdev'
-import { ideInstalled, ideLatest, ideLookChanged, ideOnStart, ideStatus, ideVersion, installApp, installExtensions, installIde, openIdeApp, openInIde } from './ide'
+import { ideInstalled, ideLatest, ideLookChanged, ideNoteUpdate, ideOnStart, ideStatus, ideVersion, installApp, installExtensions, installIde, openIdeApp, openInIde } from './ide'
 import { EDITORS, isAppBundle, isEditorChoice } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
@@ -271,9 +271,23 @@ function showIde(url: string | null): void {
   if (loading) pendingIdeShow = { url }
   else send('ide:show', { url })
 }
+/** laramac://update (from the banner inside Laramac Code): Laramac comes forward and shows the update. */
+function showUpdate(): void {
+  showWindow()
+  void checkForUpdate()
+    .then((info) => {
+      ideNoteUpdate(info)
+      if (info) send('update:available', info)
+    })
+    .catch(() => undefined)
+}
 // Nothing else is accepted.
 app.on('open-url', (e, url) => {
   e.preventDefault()
+  if (/^laramac:\/\/update\/?$/.test(url)) {
+    if (app.isReady()) showUpdate()
+    return
+  }
   if (!/^laramac:\/\/code\/?$/.test(url)) return
   if (app.isReady()) showIde(null)
   else pendingIdeShow = { url: null }
@@ -509,7 +523,7 @@ function registerIpc(): void {
     const before = getSettings()
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
-    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent).catch(() => undefined)
+    if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.codeLook !== before.codeLook || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent).catch(() => undefined)
     if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' ? 'light' : next.appearance === 'auto' ? 'system' : 'dark'
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
@@ -862,6 +876,7 @@ function registerIpc(): void {
   // ---- Updates, reset, setup
   handle('app:check-update', async () => {
     const info = await checkForUpdate()
+    ideNoteUpdate(info)
     if (info) send('update:available', info)
     return info
   })
@@ -3410,6 +3425,7 @@ async function backgroundChecks(): Promise<void> {
   if (!getSettings().autoUpdateCheck) return
   try {
     const info: UpdateInfo | null = await checkForUpdate()
+    ideNoteUpdate(info)
     if (info && !announced.has(`app-${info.version}`)) {
       announced.add(`app-${info.version}`)
       activity.push('info', `Laramac ${info.version} is available`, 'Update from the banner on the Overview or in Settings.')

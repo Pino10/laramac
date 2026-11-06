@@ -32,6 +32,7 @@ import { openAsset, releasesApi } from './distribution'
 import { hashFor } from './versions'
 import checksSource from './idext/extension.cjs?raw'
 import { createRequire } from 'module'
+import { isCodeLook, LOOK_BACKGROUND, type CodeLook } from './idelooks'
 import { accentBuild, isAccent, themeJson, themePackage, vsixManifest, VSIX_CONTENT_TYPES, type Accent } from './idetheme'
 
 const REPO = 'coder/code-server'
@@ -308,6 +309,22 @@ const safeServers = (): ReturnType<typeof listServers> => {
   }
 }
 
+/** The look chosen in Laramac (Aurora until another is picked). */
+export const currentLook = (): CodeLook => (isCodeLook(getSettings().codeLook) ? (getSettings().codeLook as CodeLook) : 'aurora')
+
+/** A newer Laramac, shown inside Laramac Code as a quiet banner. */
+let pendingUpdate: { version: string; current: string } | null = null
+export function ideNoteUpdate(info: { version: string } | null): void {
+  const next = info ? { version: info.version, current: app.getVersion() } : null
+  if (next?.version === pendingUpdate?.version) return
+  pendingUpdate = next
+  try {
+    writeLaunch()
+  } catch {
+    // The banner is a courtesy: never break an update check over it.
+  }
+}
+
 export function writeLaunch(): void {
   if (!ideInstalled()) return
   writeSettings()
@@ -323,10 +340,12 @@ export function writeLaunch(): void {
     bin: bin(),
     args: serverArgs({ port: '{port}', dataDir: dataDir(), extDir: extDir() }),
     env: launchEnv({ ...process.env, ...runtimeEnv() }, { LARAMAC_SKILL_DIRS: skillDirs.join(':'), LARAMAC_COMPOSER_BIN: join(dirs.root(), 'composer', 'vendor', 'bin') }),
-    css: workbenchCss({ uiFont: (getSettings().uiFont ?? 'poppins') }),
+    look: currentLook(),
+    update: pendingUpdate,
+    css: workbenchCss({ uiFont: (getSettings().uiFont ?? 'poppins'), look: currentLook() }),
     fonts: (getSettings().uiFont ?? 'poppins') === 'poppins' ? poppinsFonts() : [],
     home: getSettings().wwwPath,
-    background: { dark: '#0d1017', light: '#f6f7fb' },
+    background: LOOK_BACKGROUND[currentLook()],
     ai: aiLaunch({ llm: getSettings().llm, servers: safeServers(), freellm: { baseUrl: freeLlmUrl(getSettings().freellm?.baseUrl ?? FREELLM_DEFAULT_URL) }, freeModels: FREELLM_MODELS })
   }
   mkdirSync(home(), { recursive: true })

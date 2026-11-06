@@ -1,3 +1,20 @@
+## New in 0.33
+
+### Laramac Code: three looks to choose from
+Open **Laramac Code** in Laramac and pick **Choose a look**. Each one is a different layout, not just a colour:
+- **Aurora** (the new default): soft floating glass cards on a glowing backdrop, pill tabs and a floating status bar.
+- **Paper**: one calm, flat page with almost no lines, text tabs with a thin underline and a quiet status bar.
+- **Carbon**: dense and sharp, with accent edges, small capital section titles and a console-style status bar.
+
+If Laramac Code is open, it changes within a minute. Your accent colour and fonts still apply to all three.
+
+### Laramac Code tells you when Laramac has an update
+When a newer Laramac is out, a small banner appears at the top right of Laramac Code. **See what is new** brings Laramac forward on the update; the cross hides it until the next version.
+
+### Fixes
+- **Remote servers, Health** now works on servers you saved with an older Laramac (it wrongly said they needed SSH).
+- **Server cards**: Terminal, Health and Files fit inside the card instead of spilling out.
+
 ## New in 0.32
 
 ### A clearer start on every page

@@ -16,7 +16,7 @@ const http = require('http')
 const net = require('net')
 const os = require('os')
 const path = require('path')
-const { editorUrl, validOpen, parseOpenUrl, readLaunch, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS } = require('./lib')
+const { editorUrl, validOpen, parseOpenUrl, readLaunch, continueConfig, relayHandler, withPort, remember, fontScript, WINDOW_CSS, bannerScript, BANNER_CSS, UPDATE_MARK } = require('./lib')
 
 const HOME = path.join(os.homedir(), '.laramac', 'code')
 const LAUNCH = path.join(HOME, 'launch.json')
@@ -223,14 +223,45 @@ function newWindow(url) {
       void win.webContents.executeJavaScript(`(() => { const i = document.querySelector('input[name=password]'); const f = document.querySelector('form'); if (i && f) { i.value = ${JSON.stringify(password)}; f.submit() } })()`)
       return
     }
-    void win.webContents.insertCSS(`${launch?.css ?? ''}\n${WINDOW_CSS}`)
-    if (launch?.fonts.length) void win.webContents.executeJavaScript(fontScript(launch.fonts)).catch(() => undefined)
+    void applyLook(win)
+  })
+  // The banner's button writes a marker to the console: Laramac comes forward and shows the update.
+  win.webContents.on('console-message', (...args) => {
+    const message = typeof args[0]?.message === 'string' ? args[0].message : args[2]
+    if (message === UPDATE_MARK) void shell.openExternal('laramac://update')
   })
   win.on('enter-full-screen', () => void win.webContents.executeJavaScript("document.querySelector('.monaco-workbench')?.classList.add('fullscreen')").catch(() => undefined))
   win.on('leave-full-screen', () => void win.webContents.executeJavaScript("document.querySelector('.monaco-workbench')?.classList.remove('fullscreen')").catch(() => undefined))
   void win.loadURL(url)
   return win
 }
+
+// The look and the update banner follow launch.json while the window stays open.
+const looks = new WeakMap()
+const signs = new WeakMap()
+async function applyLook(win, force = true) {
+  if (win.isDestroyed()) return
+  const fresh = readLaunch(fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : '')
+  if (fresh && launch) Object.assign(launch, { css: fresh.css, fonts: fresh.fonts, update: fresh.update, background: fresh.background })
+  const sign = JSON.stringify([launch?.css, launch?.update])
+  if (!force && signs.get(win) === sign) return
+  signs.set(win, sign)
+  const wc = win.webContents
+  const key = looks.get(win)
+  if (key) await wc.removeInsertedCSS(key).catch(() => undefined)
+  looks.set(win, await wc.insertCSS(`${launch?.css ?? ''}\n${WINDOW_CSS}\n${BANNER_CSS}`).catch(() => undefined))
+  if (launch?.fonts.length) await wc.executeJavaScript(fontScript(launch.fonts)).catch(() => undefined)
+  await wc.executeJavaScript(bannerScript(launch?.update ?? null)).catch(() => undefined)
+}
+setInterval(() => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      if (ours(w.webContents.getURL())) void applyLook(w, false)
+    } catch {
+      // A window that is closing.
+    }
+  }
+}, 30_000)
 
 /** Shown when Laramac has not set Laramac Code up yet. */
 function setupWindow() {

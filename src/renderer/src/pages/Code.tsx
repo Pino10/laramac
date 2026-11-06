@@ -4,6 +4,7 @@ import type { IdeStatus } from '@shared/types'
 import { useApp } from '../store'
 import { Monogram } from '../ui'
 import LaramacCode from '../components/LaramacCode'
+import CodeLooks from '../components/CodeLooks'
 import codeIcon from '../assets/code-icon.png'
 
 const FEATURES: { icon: React.ReactNode; title: string; text: string }[] = [
@@ -82,6 +83,12 @@ export default function Code(): React.JSX.Element {
           </div>
         </section>
       )}
+
+      <section>
+        <h2 className="section-title">Choose a look</h2>
+        <p className="hint" style={{ margin: '0 0 12px' }}>Three different layouts. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
+        <CodeLooks />
+      </section>
 
       <section>
         <h2 className="section-title">Inside</h2>

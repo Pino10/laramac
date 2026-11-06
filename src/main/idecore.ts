@@ -5,6 +5,7 @@
  * Laramac Code is code-server (the open-source VS Code, by Coder) running on 127.0.0.1 with a
  * password only Laramac knows, shown in a Laramac window. Extensions come from Open VSX.
  */
+import { lookCss, type CodeLook } from './idelooks'
 
 export interface IdeExtension {
   id: string
@@ -279,37 +280,11 @@ export function checksPackage(version: string): Record<string, unknown> {
 }
 
 /**
- * Islands: the side bar, editor, panel and chat float as rounded panels on a deeper base, with
- * the title and status bars part of the base. This is what makes it Laramac Code and not a
- * stock VS Code window.
- */
-const ISLANDS_CSS = `
-.monaco-workbench{--lc-base:var(--vscode-titleBar-activeBackground);--lc-line:color-mix(in srgb,var(--vscode-foreground) 7%,transparent);background:var(--lc-base)!important}
-.monaco-workbench .part.sidebar,.monaco-workbench .part.auxiliarybar,.monaco-workbench .part.panel,.monaco-workbench .part.editor{clip-path:inset(0 4px 6px 4px round 12px)}
-.monaco-workbench .part.editor>.content{background:var(--vscode-editor-background)}
-.monaco-workbench .part.sidebar>.composite.title,.monaco-workbench .part.auxiliarybar>.composite.title{padding-left:6px}
-.monaco-workbench .part.panel.bottom .composite.title{border-top:0!important}
-.monaco-workbench .part.statusbar{color:var(--vscode-descriptionForeground)!important}
-.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab{border:0!important;margin:5px 0 0 4px;height:29px!important;border-radius:8px!important}
-.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab.active{background:color-mix(in srgb,var(--vscode-foreground) 7%,transparent)!important}
-.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab:not(.active){background:transparent!important}
-.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab .tab-border-top-container,.monaco-workbench .part.editor>.content .editor-group-container>.title .tabs-container>.tab .tab-border-bottom-container{display:none!important}
-.monaco-workbench .part.editor>.content .editor-group-container>.title.tabs>.tabs-and-actions-container.tabs-border-bottom::after{display:none!important}
-.monaco-workbench .sash:not(.active):not(:hover){background:transparent!important}
-.monaco-workbench .pane-header{border-top:0!important}
-.monaco-workbench .split-view-view>.pane>.pane-header{border-radius:8px;margin:0 6px}
-.monaco-workbench .part.titlebar .command-center .command-center-center{background:color-mix(in srgb,var(--vscode-editor-background) 80%,transparent)!important;border:1px solid var(--lc-line)!important;height:26px!important;border-radius:9px!important;width:42vw!important;max-width:560px}
-.monaco-workbench .part.titlebar .command-center .command-center-center:hover{border-color:color-mix(in srgb,var(--vscode-focusBorder) 55%,transparent)!important}
-.monaco-workbench .monaco-scrollable-element>.scrollbar>.slider{border-radius:6px}
-.monaco-workbench .part.editor .editor-group-watermark .letterpress{opacity:.35}
-`
-
-/**
  * Poppins (from Laramac) for the interface, or the Mac's own font. Code keeps a monospaced font.
  * The editor's page only accepts fonts from itself, so the CSS names the font and the Laramac
  * Code app loads its bytes into the page (see code-app/lib.js fontScript).
  */
-export function workbenchCss(o: { uiFont: 'system' | 'poppins' }): string {
+export function workbenchCss(o: { uiFont: 'system' | 'poppins'; look?: CodeLook }): string {
   const faces = ''
   const family = o.uiFont === 'poppins' ? "'Laramac Poppins', -apple-system, BlinkMacSystemFont, sans-serif" : "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
   return `${faces}
@@ -329,7 +304,7 @@ export function workbenchCss(o: { uiFont: 'system' | 'poppins' }): string {
 .monaco-workbench .part.statusbar .statusbar-item .statusbar-item-label{border-radius:6px}
 .monaco-workbench .command-center .command-center-center{border-radius:8px!important}
 .monaco-workbench .welcomePageContainer .welcomePage h1{font-weight:600}
-${ISLANDS_CSS}`
+${lookCss(o.look ?? 'aurora')}`
 }
 
 /** The Laramac Code app's zip for this Mac's chip, in Laramac's release of that version. */

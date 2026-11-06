@@ -6893,3 +6893,97 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .db-bar { height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 10%, transparent); overflow: hidden; margin-top: 6px; }
 .db-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.9s var(--ease); }
 @media (prefers-reduced-motion: reduce) { .db-bar > i { transition: none; } }
+
+/* Server cards: Terminal, Health and Files always fit, wrapping if the card is narrow. */
+:root:root .server-card .card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+}
+:root:root .server-card .card-foot > span:empty {
+  display: none;
+}
+:root:root .server-card .card-foot .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+:root:root .server-card .card-foot .btn:not(.btn-primary) {
+  flex: 1 1 0;
+  justify-content: center;
+}
+:root:root .server-card .card-foot .btn-primary {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+/* Laramac Code looks: three pictures to choose from. */
+.look-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.look-card { display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 12px; border-radius: 18px; cursor: pointer; color: inherit; font: inherit; background: var(--glass-bg, rgba(255, 255, 255, 0.05)); border: 1px solid var(--line, rgba(255, 255, 255, 0.1)); transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }
+.look-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent, #8ab4f8) 55%, transparent); }
+.look-card.on { border-color: var(--accent, #8ab4f8); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #8ab4f8) 22%, transparent); }
+.look-card:focus-visible { outline: 2px solid var(--accent, #8ab4f8); outline-offset: 3px; }
+.look-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.look-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; color: var(--accent, #8ab4f8); background: color-mix(in srgb, var(--accent, #8ab4f8) 16%, transparent); }
+.look-about { font-size: 12.5px; opacity: 0.72; line-height: 1.45; }
+@media (prefers-reduced-motion: reduce) { .look-card { transition: none; } .look-card:hover { transform: none; } }
+
+.lk { --lk-a: var(--accent, #8ab4f8); height: 150px; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: #0a0d16; font-size: 0; }
+.lk i, .lk b, .lk u, .lk em, .lk span { display: block; }
+.lk-title { height: 16px; display: flex; align-items: center; gap: 4px; padding: 0 8px; flex: none; }
+.lk-title i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); }
+.lk-title b { height: 6px; width: 34%; margin: 0 auto; border-radius: 4px; background: rgba(255, 255, 255, 0.12); }
+.lk-body { flex: 1; display: flex; min-height: 0; }
+.lk-rail { width: 16px; display: flex; flex-direction: column; align-items: center; gap: 5px; padding-top: 6px; flex: none; }
+.lk-rail i { width: 7px; height: 7px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
+.lk-rail i:first-child { background: var(--lk-a); }
+.lk-side { width: 26%; padding: 7px 6px; display: flex; flex-direction: column; gap: 5px; flex: none; background: #101521; }
+.lk-side u { height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.14); text-decoration: none; }
+.lk-side u:nth-child(2) { width: 70%; background: color-mix(in srgb, var(--lk-a) 55%, transparent); }
+.lk-side u:nth-child(3) { width: 55%; }
+.lk-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #0f131c; }
+.lk-tabs { display: flex; gap: 3px; padding: 5px 6px 0; flex: none; }
+.lk-tabs span { height: 9px; width: 30px; background: rgba(255, 255, 255, 0.07); }
+.lk-tabs span.on { background: color-mix(in srgb, var(--lk-a) 35%, transparent); }
+.lk-code { padding: 8px 8px; display: flex; flex-direction: column; gap: 5px; }
+.lk-code em { height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); }
+.lk-code em.k { background: #ff7ab2; }
+.lk-code em.s { background: #ff8170; }
+.lk-status { height: 10px; flex: none; }
+
+/* Aurora: floating glass cards on a glowing backdrop. */
+.lk-aurora { background: radial-gradient(75% 80% at 0% 0%, color-mix(in srgb, var(--lk-a) 70%, transparent), transparent 70%), radial-gradient(65% 70% at 100% 100%, color-mix(in srgb, #c084fc 55%, transparent), transparent 70%), #0a0d16; }
+.lk-aurora .lk-body { gap: 4px; padding: 0 5px; }
+.lk-aurora .lk-side, .lk-aurora .lk-main { background: rgba(14, 18, 30, 0.72); backdrop-filter: blur(6px); border-radius: 10px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.lk-aurora .lk-tabs span { border-radius: 999px; }
+.lk-aurora .lk-tabs span.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lk-a) 60%, transparent); }
+.lk-aurora .lk-status { margin: 0 14px 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); }
+
+/* Paper: one flat page, hairlines only. */
+.lk-paper { background: #121722; }
+.lk-paper .lk-title i { background: rgba(255, 255, 255, 0.28); }
+.lk-paper .lk-title b, .lk-paper .lk-rail i { background: rgba(255, 255, 255, 0.12); }
+.lk-paper .lk-rail i:first-child { background: var(--lk-a); }
+.lk-paper .lk-side, .lk-paper .lk-main { background: #121722; }
+.lk-paper .lk-side u, .lk-paper .lk-code em { background: rgba(255, 255, 255, 0.2); }
+.lk-paper .lk-code em.k { background: #ff7ab2; }
+.lk-paper .lk-code em.s { background: #ff8170; }
+.lk-paper .lk-side { border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.lk-paper .lk-tabs { gap: 8px; padding-left: 10px; }
+.lk-paper .lk-tabs span { background: rgba(255, 255, 255, 0.12); height: 4px; margin-top: 5px; width: 22px; border-radius: 2px; }
+.lk-paper .lk-tabs span.on { background: var(--lk-a); }
+.lk-paper .lk-status { border-top: 1px solid rgba(255, 255, 255, 0.08); height: 9px; }
+
+/* Carbon: dense, sharp, accent edges. */
+.lk-carbon { background: #06080c; }
+.lk-carbon .lk-body { gap: 2px; padding: 0 2px; }
+.lk-carbon .lk-side, .lk-carbon .lk-main { border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.lk-carbon .lk-main { box-shadow: inset 0 2px 0 var(--lk-a), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.lk-carbon .lk-tabs { padding: 4px 0 0; gap: 1px; }
+.lk-carbon .lk-tabs span { height: 10px; border-radius: 0; }
+.lk-carbon .lk-tabs span.on { background: #0f131c; box-shadow: inset 0 2px 0 var(--lk-a); }
+.lk-carbon .lk-main { background: #0c1018; }
+.lk-carbon .lk-status { height: 9px; margin-top: 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--lk-a) 40%, #06080c), #06080c 70%); box-shadow: inset 0 1px 0 var(--lk-a); }
+:root:root .server-card .card-foot .btn svg { flex: none; }
