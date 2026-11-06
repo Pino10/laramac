@@ -10,51 +10,25 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'f
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { dirs } from './paths'
+import { desktopBridge } from './seckit/desktopbridge'
 
 export const desktopConfigPath = (): string => join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
 export const desktopAppInstalled = (): boolean => existsSync('/Applications/Claude.app') || existsSync(join(homedir(), 'Applications', 'Claude.app'))
 
 type Config = { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> } & Record<string, unknown>
 
-function read(): Config {
+/** The config file, or null when it exists but cannot be read: it is then left alone, never overwritten. */
+function read(): Config | null {
+  if (!existsSync(desktopConfigPath())) return {}
   try {
     return JSON.parse(readFileSync(desktopConfigPath(), 'utf8')) as Config
   } catch {
-    return {}
+    return null
   }
 }
 
 /** The small command the Claude app starts. It lives in Laramac's bin folder. */
 export const desktopBridgePath = (): string => join(dirs.bin(), 'laramac-mcp')
-
-/**
- * The Claude app starts MCP servers as commands, with a short PATH that has no Node. So the
- * command is a tiny shell script that only needs curl, which every Mac has: it reads each message
- * from the app, sends it to Laramac's local server at 127.0.0.1 and prints the answer. It reads the
- * token from Laramac's own token file each time, so the token is never copied into the app's config.
- */
-export function desktopBridge(url: string, tokenFile: string): string {
-  const q = (v: string): string => `'${v.replace(/'/g, `'\\''`)}'`
-  return `#!/bin/sh
-# Written by Laramac: lets the Claude app talk to Laramac. It needs no Node.js.
-URL=${q(url)}
-TOKEN_FILE=${q(tokenFile)}
-umask 077
-H="$(mktemp)" || exit 1
-trap 'rm -f "$H"' EXIT INT TERM HUP
-printf 'Authorization: Bearer %s\\n' "$(tr -d '[:space:]' < "$TOKEN_FILE")" > "$H"
-while IFS= read -r line || [ -n "$line" ]; do
-  [ -z "$line" ] && continue
-  out="$(printf '%s' "$line" | /usr/bin/curl -sS --max-time 600 -X POST -H @"$H" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data-binary @- "$URL" 2>/dev/null)"
-  if [ $? -ne 0 ]; then
-    id="$(printf '%s' "$line" | sed -n 's/^{"jsonrpc":"2.0","id":\\([0-9][0-9]*\\),.*/\\1/p')"
-    [ -n "$id" ] && printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32000,"message":"Laramac is not running. Open Laramac and try again."}}\\n' "$id"
-    continue
-  fi
-  [ -n "$out" ] && printf '%s\\n' "$out"
-done
-`
-}
 
 export function desktopEntry(): { command: string; args: string[] } {
   return { command: desktopBridgePath(), args: [] }
@@ -62,9 +36,10 @@ export function desktopEntry(): { command: string; args: string[] } {
 
 export function connectClaudeDesktop(url: string, tokenFile: string): { connected: boolean; path: string } {
   mkdirSync(dirs.bin(), { recursive: true })
-  writeFileSync(desktopBridgePath(), desktopBridge(url, tokenFile))
+  writeFileSync(desktopBridgePath(), desktopBridge(url, tokenFile, 'Laramac'))
   chmodSync(desktopBridgePath(), 0o755)
   const cfg = read()
+  if (!cfg) throw new Error('The Claude app’s settings file could not be read, so it was left as it is. Open the Claude app once, then try again.')
   cfg.mcpServers = { ...(cfg.mcpServers ?? {}), laramac: desktopEntry() }
   mkdirSync(dirname(desktopConfigPath()), { recursive: true })
   writeFileSync(desktopConfigPath(), JSON.stringify(cfg, null, 2) + '\n')
@@ -74,10 +49,10 @@ export function connectClaudeDesktop(url: string, tokenFile: string): { connecte
 
 /** An entry written by an older Laramac (npx and mcp-remote) is moved to the new command. */
 export function repairClaudeDesktop(url: string, tokenFile: string): boolean {
-  const e = read().mcpServers?.laramac
+  const e = read()?.mcpServers?.laramac
   if (!e || e.command === desktopBridgePath()) return false
   connectClaudeDesktop(url, tokenFile)
   return true
 }
 
-export const desktopConnected = (): boolean => !!read().mcpServers?.laramac
+export const desktopConnected = (): boolean => !!read()?.mcpServers?.laramac

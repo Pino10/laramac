@@ -22,8 +22,19 @@ describe('the Claude app connection', () => {
     expect(connectClaudeDesktop('http://127.0.0.1:53536/mcp', join(dirs.root(), 'mcp-token')).connected).toBe(true)
   })
 
+  it('leaves a settings file it cannot read exactly as it is', async () => {
+    const home = freshEnv().root
+    process.env.HOME = home
+    const { connectClaudeDesktop, desktopConfigPath, repairClaudeDesktop } = await import('../src/main/desktop')
+    mkdirSync(join(home, 'Library', 'Application Support', 'Claude'), { recursive: true })
+    writeFileSync(desktopConfigPath(), '{ "mcpServers": { "mine": { "command": "x" } ,, }')
+    expect(() => connectClaudeDesktop('http://127.0.0.1:53536/mcp', join(dirs.root(), 'mcp-token'))).toThrow(/left as it is/)
+    expect(repairClaudeDesktop('http://127.0.0.1:53536/mcp', join(dirs.root(), 'mcp-token'))).toBe(false)
+    expect(readFileSync(desktopConfigPath(), 'utf8')).toBe('{ "mcpServers": { "mine": { "command": "x" } ,, }')
+  })
+
   it('talks to the real server through the script, with a short PATH', async () => {
-    freshEnv()
+    process.env.HOME = freshEnv().root
     const { startMcpServer, mcpToken } = await import('../src/main/mcp')
     const { connectClaudeDesktop, desktopBridgePath } = await import('../src/main/desktop')
     mcpToken()
@@ -56,7 +67,7 @@ describe('the Claude app connection', () => {
   })
 
   it('answers with a plain message when Laramac is not running', async () => {
-    freshEnv()
+    process.env.HOME = freshEnv().root
     const { mcpToken } = await import('../src/main/mcp')
     const { connectClaudeDesktop, desktopBridgePath } = await import('../src/main/desktop')
     mcpToken()

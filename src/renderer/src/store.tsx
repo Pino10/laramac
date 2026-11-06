@@ -107,9 +107,17 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const toastTimer = useRef<number | undefined>(undefined)
 
   const notify = useCallback((t: Toast) => {
-    setToast(t)
-    window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), t.kind === 'error' ? 9000 : 4000)
+    // The same toasts and history as the app's own events: in front, click for the whole text.
+    const first = t.text.split(/(?<=[.!?])\s/)[0]
+    const title = first.length > 90 ? `${first.slice(0, 87)}…` : first
+    const body = t.text.length > title.length ? t.text : undefined
+    api()
+      .invoke('activity:push', t.kind, title, body)
+      .catch(() => {
+        setToast(t)
+        window.clearTimeout(toastTimer.current)
+        toastTimer.current = window.setTimeout(() => setToast(null), t.kind === 'error' ? 9000 : 4000)
+      })
   }, [])
 
   const act = useCallback(

@@ -216,7 +216,7 @@ export async function macsecScan(root: string, onLine: (l: string) => void): Pro
 
 // ---------------------------------------------------------------- Any agent CLI
 
-function runAgent(bin: string, args: string[], env: Record<string, string>, cwd: string, onLine: (l: string) => void, timeoutMs: number): Promise<string> {
+export function runAgent(bin: string, args: string[], env: Record<string, string>, cwd: string, onLine: (l: string) => void, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { cwd, env: { ...process.env, ...runtimeEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
@@ -328,7 +328,7 @@ export function countFindings(md: string): Record<'critical' | 'high' | 'medium'
   return c
 }
 
-const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'project'
+export const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'project'
 
 export async function runReview(o: { root: string; name: string; reviewer: ReviewerKind; focus: ReviewFocus; modelName: string; local?: LocalModel; remote?: boolean; scanners?: boolean; skills?: string[] }, update: (p: number | null, l?: string) => void): Promise<ReviewResult> {
   const started = Date.now()
@@ -430,6 +430,7 @@ export function deleteReview(id: string): void {
   if (!/^[a-z0-9-]+$/.test(id)) throw new Error('Unknown review.')
   rmSync(join(reviewsDir(), `${id}.md`), { force: true })
   rmSync(join(reviewsDir(), `${id}.json`), { force: true })
+  rmSync(join(reviewsDir(), `${id}.deep`), { recursive: true, force: true })
 }
 
 /** Basic-auth header for cloning with a token. Azure DevOps and others accept any user name. */

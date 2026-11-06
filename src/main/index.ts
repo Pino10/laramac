@@ -51,7 +51,9 @@ import * as review from './review'
 import * as recon from './recon'
 import * as hub from './hub'
 import { installForClaude, installedForClaude, installPackSkillsForClaude, removeFromClaude, removePackSkillsFromClaude, SKILLS } from './seckit/skills'
-import { installPack, packSkillFolders, packState, removePack, SKILL_PACKS } from './seckit/skillpacks'
+import { checkPackUpdates, installPack, packSkillFolders, packState, packUpdates, removePack, SKILL_PACKS } from './seckit/skillpacks'
+import { deepHandoffPrompt } from './seckit/deepaudit'
+import { deepPlanFor, runDeepAudit } from './deepreview'
 import { connectClaudeDesktop, desktopAppInstalled, desktopConnected, desktopConfigPath, repairClaudeDesktop } from './desktop'
 import * as scan from './scan'
 import * as audit from './audit'
@@ -1011,6 +1013,9 @@ function registerIpc(): void {
   }
   handle('review:run', async (req) => {
     if (!req || typeof req !== 'object' || !req.source) throw new ValidationError('That review request is not valid.')
+    const deepEngine = req.deep && (['cloudflare', 'anthropic', 'both'] as const).includes(req.deep.engine) ? req.deep.engine : null
+    if (req.deep && !deepEngine) throw new ValidationError('Pick which deep audit to run.')
+    if (deepEngine && !(['claude', 'claude-local', 'claude-free'] as const).includes(req.reviewer as 'claude')) throw new ValidationError('A deep audit runs through Claude Code: pick Claude Code, Claude Code on your model or Claude Code on Free LLM API.')
     const reviewer = (['claude', 'claude-local', 'claude-free', 'codex', 'gemini', 'coderabbit', 'model'] as const).includes(req.reviewer) ? req.reviewer : 'claude'
     const focus = (['security', 'bugs', 'all'] as const).includes(req.focus) ? req.focus : 'security'
     const st = getSettings()
@@ -1046,14 +1051,35 @@ function registerIpc(): void {
       const remote = src.kind !== 'site'
       try {
         const skills = Array.isArray(req.skills) ? req.skills.filter((x): x is string => typeof x === 'string' && /^(own|mine|pack):[\w:.-]{1,120}$/.test(x)).slice(0, 200) : undefined
+        if (deepEngine) return await runDeepAudit({ root, name, engine: deepEngine, reviewer: reviewer as 'claude' | 'claude-local' | 'claude-free', modelName: st.llm.model, local: reviewer === 'claude' ? undefined : server, remote }, update)
         return await review.runReview({ root, name, reviewer, focus, modelName: st.llm.model, local: server, remote, scanners: req.scanners !== false, skills }, update)
       } finally {
         // The downloaded code exists only for this review: it vanishes as soon as the review ends.
         if (remote) review.endReviewSession(root)
       }
     })
-    activity.push('success', `Reviewed ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings, ${result.secrets.length} keys in files.`)
+    activity.push('success', `${deepEngine ? 'Deep audit of' : 'Reviewed'} ${label}`, `${Object.values(result.counts).reduce((a, b) => a + b, 0)} findings${deepEngine ? '' : `, ${result.secrets.length} keys in files`}. Open Code review, Past reviews to read it.`)
     return result
+  })
+  handle('review:deep-plan', async (req) => {
+    const r = (req ?? {}) as Partial<{ engine: string; reviewer: string }>
+    const engine = (['cloudflare', 'anthropic', 'both'] as const).find((e) => e === r.engine)
+    const reviewer = (['claude', 'claude-local', 'claude-free', 'claude-desktop'] as const).find((e) => e === r.reviewer)
+    if (!engine || !reviewer) throw new ValidationError('That deep audit request is not valid.')
+    const server = reviewer === 'claude-local' || reviewer === 'claude-free' ? await reviewServer(reviewer).catch(() => undefined) : undefined
+    return deepPlanFor({ engine, reviewer, modelName: getSettings().llm.model, local: server })
+  })
+  // Claude Desktop cannot be driven from here, so the request is copied and the app opened: the person pastes it.
+  handle('review:deep-handoff', async (req) => {
+    const r = (req ?? {}) as Partial<{ engine: string; site: string }>
+    const engine = (['cloudflare', 'anthropic', 'both'] as const).find((e) => e === r.engine)
+    if (!engine || typeof r.site !== 'string') throw new ValidationError('Pick a site from www first. Claude Desktop reads folders on this Mac, so a GitHub or Azure DevOps project needs downloading first.')
+    const site = siteByName(r.site)
+    clipboard.writeText(deepHandoffPrompt({ engine, name: site.name, root: site.path }))
+    const installed = existsSync('/Applications/Claude.app') || existsSync(join(homedir(), 'Applications', 'Claude.app'))
+    if (installed) await shell.openPath(existsSync('/Applications/Claude.app') ? '/Applications/Claude.app' : join(homedir(), 'Applications', 'Claude.app'))
+    activity.push('info', 'Request copied for Claude Desktop', installed ? `In the Claude app, open the Code tab on ${site.name}, then paste.` : 'The Claude desktop app is not installed. Get it at claude.ai/download, then paste the request there.')
+    return { copied: true, opened: installed }
   })
   const skillsStatus = (): { names: string[]; installed: boolean; desktop: boolean } => ({ names: review.skillList(), installed: installedForClaude('laramac'), desktop: desktopAppInstalled() })
   const desktopStatus = (): { app: boolean; connected: boolean; path: string } => ({ app: desktopAppInstalled(), connected: desktopConnected(), path: desktopConfigPath() })
@@ -1541,6 +1567,21 @@ function registerIpc(): void {
     })
   }
   handle('packs:list', () => packList())
+  handle('packs:updates', () => packUpdates(review.packsRoot()))
+  const checkUpdates = async (announce: boolean): Promise<ReturnType<typeof packUpdates>> => {
+    const list = await checkPackUpdates(review.packsRoot())
+    const fresh = list.filter((u) => u.available && u.latest && getSettings().packsNotified?.[u.id] !== u.latest)
+    if (announce && fresh.length) {
+      const names = fresh.map((u) => SKILL_PACKS.find((p) => p.id === u.id)!.name)
+      setSettings({ packsNotified: { ...(getSettings().packsNotified ?? {}), ...Object.fromEntries(fresh.map((u) => [u.id, u.latest as string])) } })
+      activity.push('info', `Newer security skills are available`, `${names.join(', ')}. Open Code review and press Update on the skill pack to get them.`)
+    }
+    return list
+  }
+  handle('packs:check-updates', () => checkUpdates(false))
+  // Once a day, quietly: new versions are announced once, never installed without a click.
+  setTimeout(() => void checkUpdates(true).catch(() => undefined), 60_000)
+  setInterval(() => void checkUpdates(true).catch(() => undefined), 24 * 60 * 60_000)
   handle('packs:install', async (id) => {
     if (!SKILL_PACKS.some((p) => p.id === id)) throw new ValidationError('That skill pack is not on the list.')
     setSettings({ packsDeclined: (getSettings().packsDeclined ?? []).filter((x) => x !== id) })
@@ -3286,6 +3327,12 @@ function registerIpc(): void {
 
   handle('activity:list', () => activity.list())
   handle('activity:clear', () => activity.clear())
+  // Messages from the window itself (a failed action, a copied link) use the same toasts and history.
+  handle('activity:push', (kind, title, body) => {
+    if (kind !== 'info' && kind !== 'error' && kind !== 'success') throw new ValidationError('That notice is not valid.')
+    if (typeof title !== 'string' || !title.trim()) throw new ValidationError('That notice is not valid.')
+    activity.push(kind, title.trim().slice(0, 160), typeof body === 'string' && body.trim() ? body.trim().slice(0, 4000) : undefined)
+  })
 
   services.on('changed', (list) => send('services:changed', list))
   services.on('failed', (name: string, message: string) => activity.push('error', `${name} could not start`, message))

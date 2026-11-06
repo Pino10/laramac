@@ -1,3 +1,20 @@
+## New in 0.29
+
+### Deep audit
+A new **Deep audit** section on the Code review page, for projects on this Mac, in GitHub or in Azure DevOps. Pick a method, then the AI to run it with:
+- **Cloudflare security audit**: the most thorough. AI agents map the project, hunt each kind of attack, and a fresh agent tries to disprove every candidate before it counts. About 45 minutes to 3 hours.
+- **Claude Code security review**: Anthropic's own review, one careful pass that reports only high-confidence problems. About 5 to 25 minutes.
+- **Both**, one after the other.
+- **Run it with** Claude Code, Claude Desktop (Laramac copies the request and opens the Claude app), claudelm (your model in LM Studio) or claudefree (Free LLM API).
+- **It tells you what it is doing** before it starts: which AI, which method and version, what it reads, what it writes, and where your code goes.
+- **Read-only, and checked.** Your project is measured before and after, and you are warned if anything in it changed. Every finding is checked against Cloudflare's report format, and each file and line it cites must really exist, otherwise it is shown as "needs checking" instead of confirmed.
+
+### Skills you can update
+Skill packs now say when a newer version exists, with a link to see what changed and an **Update now** button. Laramac checks once a day, tells you once, and never updates anything until you press the button.
+
+### Messages you can see
+Notifications now appear at the top right, where you look. Errors stay until you close them, the others fade after a while (hovering keeps them), and clicking one opens it full size with a Copy button.
+
 ## Fixes in 0.28.1
 
 - **Claude app connection now works.** The Claude app starts helpers with a short PATH that often has no Node.js, so the old entry (npx and mcp-remote) could not start and showed "Server disconnected". Laramac now gives the app a small script that only needs curl, which every Mac has. The token is no longer copied into the app's config: the script reads it from Laramac's own file. If you connected before, Laramac fixes the entry by itself the next time it opens. Restart the Claude app afterwards.

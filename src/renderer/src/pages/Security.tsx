@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import SkillPicker from '../components/SkillPicker'
+import DeepAudit from '../components/DeepAudit'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { OwaspList, ReviewOwasp } from '../components/OwaspList'
@@ -124,9 +125,10 @@ export default function Security(): React.JSX.Element {
     </>
   )
 
+  const sourceNow = (): Record<string, unknown> =>
+    kind === 'site' ? { kind, site } : kind === 'github' && connected ? { kind, repo } : { kind: 'git', url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
   const run = async (): Promise<void> => {
-    const source =
-      kind === 'site' ? { kind, site } : kind === 'github' && connected ? { kind, repo } : { kind: 'git', url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }
+    const source = sourceNow()
     const r = await act('review', () => api.invoke('review:run', { source, reviewer, focus, scanners, skills } as never))
     if (r) {
       setResult(r)
@@ -293,6 +295,18 @@ export default function Security(): React.JSX.Element {
               </button>
             </div>
           </div>
+
+          <DeepAudit
+            source={sourceNow()}
+            canRun={canRun}
+            site={kind === 'site' ? site || null : null}
+            onResult={async (r) => {
+              setResult(r)
+              setOpened(null)
+              setToken('')
+              setHistory(await api.invoke('review:list'))
+            }}
+          />
 
           {(result || opened) && (
             <ReportView

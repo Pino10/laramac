@@ -817,6 +817,8 @@ export interface AppSettings {
   editorApp?: string | null
   /** Skill packs you removed, so they are not fetched again by themselves. */
   packsDeclined?: string[]
+  /** The newest skill pack version already announced, so each update is announced once. */
+  packsNotified?: Record<string, string>
   /** The accent colour of the Studio look and of Laramac Code's theme. */
   accent?: 'blue' | 'violet' | 'teal' | 'amber' | 'rose'
   /** The app's font: Apple's own (SF Pro) or Poppins. */
@@ -923,9 +925,36 @@ export type ReviewSource = { kind: 'site'; site: string } | { kind: 'github'; re
 /** Who reviews: Claude Code (your sign-in or your own model), Codex, Gemini CLI, CodeRabbit, or a model directly. */
 export type ReviewerKind = 'claude' | 'claude-local' | 'claude-free' | 'codex' | 'gemini' | 'coderabbit' | 'model'
 
+export type DeepEngine = 'cloudflare' | 'anthropic' | 'both'
+export type DeepReviewerKind = 'claude' | 'claude-local' | 'claude-free' | 'claude-desktop'
+
+export interface DeepPlanRequest {
+  engine: DeepEngine
+  reviewer: DeepReviewerKind
+  /** A site name, to say where the notes go and estimate size. */
+  site?: string | null
+}
+
+export interface DeepPlanLine {
+  label: string
+  text: string
+}
+
+export interface PackUpdateInfo {
+  id: string
+  current: string | null
+  latest: string | null
+  available: boolean
+  checkedAt: string | null
+  changes: string | null
+  error?: string
+}
+
 export interface ReviewRequest {
   source: ReviewSource
   reviewer: ReviewerKind
+  /** A deep audit with Cloudflare's and Anthropic's security reviews, through the Claude Code reviewer chosen. */
+  deep?: { engine: DeepEngine }
   focus: ReviewFocus
   /** Run MacSec's scanners first (Semgrep, Gitleaks, OSV-Scanner) when MacSec is installed. */
   scanners?: boolean
@@ -978,6 +1007,8 @@ export interface ReviewInfo {
   at: string
   counts: Record<'critical' | 'high' | 'medium' | 'low', number>
   secrets: number
+  /** A deep audit: which method, and what it found. */
+  deep?: { engine: DeepEngine; confirmed: number; leads: number; rejected: number }
   /** Downloaded for this review only; the copy was deleted when it finished. */
   remote?: boolean
 }
@@ -1245,6 +1276,10 @@ export interface Channels {
   'llm:servers': { args: []; result: ModelServer[] }
   'mail:relay': { args: []; result: MailRelay }
   'review:run': { args: [ReviewRequest]; result: ReviewResult }
+  'review:deep-plan': { args: [DeepPlanRequest]; result: DeepPlanLine[] }
+  'review:deep-handoff': { args: [{ engine: DeepEngine; site: string }]; result: { copied: boolean; opened: boolean } }
+  'packs:updates': { args: []; result: PackUpdateInfo[] }
+  'packs:check-updates': { args: []; result: PackUpdateInfo[] }
   'review:skill-plan': { args: [string | null]; result: SkillPlan }
   'dumps:list': { args: []; result: DumpItem[] }
   'db:root-password': { args: ['mysql' | 'mariadb']; result: { set: boolean } }
@@ -1373,6 +1408,7 @@ export interface Channels {
   'import:cancel': { args: [string]; result: void }
   'activity:list': { args: []; result: ActivityItem[] }
   'activity:clear': { args: []; result: ActivityItem[] }
+  'activity:push': { args: ['info' | 'success' | 'error', string, string | undefined]; result: void }
   'app:info': { args: []; result: AppInfo }
   'app:check-update': { args: []; result: UpdateInfo | null }
   'app:install-update': { args: []; result: void }
