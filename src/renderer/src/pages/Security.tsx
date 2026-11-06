@@ -40,6 +40,16 @@ function Counts({ counts, secrets }: { counts: ReviewInfo['counts']; secrets: nu
   )
 }
 
+const REVIEWER_ABOUT: Record<string, string> = {
+  claude: 'Your Claude account. The strongest choice.',
+  'claude-local': 'Claude Code on your own model. Private, slower.',
+  'claude-free': 'Claude Code on your free keys, behind one address.',
+  codex: 'OpenAI’s agent, in read-only mode.',
+  gemini: 'Google’s agent, in read-only mode.',
+  coderabbit: 'A second opinion on your changes only.',
+  model: 'Your model reads the riskiest files in parts.'
+}
+
 export default function Security(): React.JSX.Element {
   const { sites, settings, act, busy, llms, setPage, notify, reviewSite, setReviewSite } = useApp()
   const api = window.laramac
@@ -253,10 +263,15 @@ export default function Security(): React.JSX.Element {
             <div className="sec-row">
               <div className="field">
                 <label>Reviewer</label>
-                <div className="seg seg-grid" role="radiogroup" aria-label="Reviewer">
+                <div className="reviewer-grid" role="radiogroup" aria-label="Reviewer">
                   {(reviewers.length ? reviewers : [{ id: 'claude', name: 'Claude Code', installed: true } as ReviewerOption]).map((r) => (
-                    <button key={r.id} role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
-                      {r.id === 'model' ? <Bot size={13} /> : <Sparkles size={13} />} {r.name}
+                    <button key={r.id} className="reviewer-card" role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
+                      <span className="reviewer-ic">{r.id === 'model' ? <Bot size={16} /> : <Sparkles size={16} />}</span>
+                      <span className="reviewer-text">
+                        <strong>{r.name}</strong>
+                        <small>{r.installed ? (REVIEWER_ABOUT[r.id] ?? r.note ?? '') : (r.note ?? 'Not set up yet')}</small>
+                      </span>
+                      {!r.installed && <span className="tag">Not set up</span>}
                     </button>
                   ))}
                 </div>

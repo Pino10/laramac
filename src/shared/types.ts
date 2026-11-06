@@ -394,6 +394,25 @@ export interface SshServerInput {
   password?: string
 }
 
+/** A server's health, read over SSH. */
+export interface ServerHealth {
+  at: number
+  os: string
+  uptimeSec: number
+  cores: number
+  /** 1, 5 and 15 minute load averages. */
+  load: [number, number, number]
+  memTotalKb: number
+  memUsedKb: number
+  swapTotalKb: number
+  swapUsedKb: number
+  diskTotalKb: number
+  diskUsedKb: number
+  services: { name: string; unit: string }[]
+}
+
+export type HealthOpenResult = { status: 'connected'; session: string } | { status: 'unknown-host'; fingerprint: string }
+
 export interface SftpEntry {
   name: string
   type: 'file' | 'dir' | 'link' | 'other'
@@ -789,6 +808,8 @@ export interface AppSettings {
   glassStyle: 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism' | 'ion'
   /** Light or dark: follow the Mac, or always one. Every look has both. */
   appearance?: 'auto' | 'light' | 'dark'
+  /** Set once the move to the dark default has been made, so it never repeats. */
+  darkDefault?: boolean
   /** The first-run tour has been seen. */
   tourDone: boolean
   /** Send dump() and dd() to the Dumps window instead of the page. */
@@ -1425,6 +1446,9 @@ export interface Channels {
   'ssh:delete': { args: [string]; result: SshServer[] }
   'ssh:terminal': { args: [string]; result: void }
   'ssh:trust': { args: [string, string]; result: SshServer[] }
+  'health:open': { args: [string, string | null]; result: HealthOpenResult }
+  'health:sample': { args: [string]; result: ServerHealth }
+  'health:close': { args: [string]; result: void }
   'sftp:connect': { args: [string, string | null]; result: SftpConnectResult }
   'sftp:list': { args: [string, string]; result: SftpListing }
   'sftp:download': { args: [string, string[]]; result: number }

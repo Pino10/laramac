@@ -1,3 +1,14 @@
+## New in 0.31
+
+### Remote servers: a live Health tab
+Open a Linux server and choose **Health**: animated rings for how busy it is, memory and disk (they turn yellow at 75% and red at 90%), a load graph, how long it has been up, swap, and which of Nginx, Apache, PHP-FPM, MySQL or MariaDB, PostgreSQL, Redis, Docker, Supervisor, Cron, SSH, Fail2ban and the firewall are running. It reads every 10 seconds over one quiet connection, asks with one fixed command that only reads, and changes nothing on the server. It uses the same key checks and trusted fingerprint as the terminal.
+
+### Dark by default
+Laramac now looks like its pop-ups: dark smoked glass. If you were on "Like my Mac", you move to Dark once. Light and Dark choices stay, and you can pick "Like my Mac" again in Settings, Look.
+
+### A better reviewer picker
+In Code review, the reviewers are now cards, each with a line about what it is and a clear "Not set up" tag, instead of one long pill.
+
 ## New in 0.30
 
 ### Better flows

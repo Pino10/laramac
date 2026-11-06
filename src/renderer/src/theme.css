@@ -6829,3 +6829,46 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .after-text strong { font-size: 14px; }
 .after-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .after-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- Reviewer cards ---------- */
+.reviewer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.reviewer-card { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 18px; border: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink); cursor: pointer; transition: background 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.2s var(--spring); min-width: 0; }
+.reviewer-card:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.reviewer-card:active:not(:disabled) { transform: scale(0.985); }
+.reviewer-card[aria-checked='true'] { border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.reviewer-card:disabled { opacity: 0.55; cursor: not-allowed; }
+.reviewer-ic { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 12px; background: var(--accent-soft); color: var(--accent-text, var(--accent)); }
+.reviewer-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.reviewer-text strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reviewer-text small { font-size: 12px; line-height: 1.4; color: var(--ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.reviewer-card .tag { flex: none; }
+
+/* ---------- Server health ---------- */
+.hl { display: grid; gap: 18px; }
+.hl-rings { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.hl-ring { position: relative; display: grid; justify-items: center; gap: 6px; padding: 20px 16px 16px; border-radius: 24px; border: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.hl-ring > svg { width: 132px; height: 132px; }
+.hl-track { fill: none; stroke: color-mix(in srgb, var(--ink) 10%, transparent); stroke-width: 9; }
+.hl-fill { fill: none; stroke: var(--ok); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 1.1s var(--ease), stroke 0.4s; }
+.hl-ring[data-level='warn'] .hl-fill { stroke: var(--warn); }
+.hl-ring[data-level='bad'] .hl-fill { stroke: var(--bad); }
+.hl-center { position: absolute; top: 20px; left: 0; right: 0; height: 132px; display: grid; place-items: center; pointer-events: none; }
+.hl-center strong { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+.hl-label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.hl small { color: var(--ink-3); font-size: 12px; text-align: center; line-height: 1.45; }
+.hl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.hl-card { display: grid; gap: 8px; align-content: start; padding: 16px 18px; border-radius: 22px; }
+.hl-card small { text-align: left; }
+.hl-big { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+.hl-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hl-spark { width: 100%; height: 44px; }
+.hl-spark polyline { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.hl-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hl-foot small { text-align: left; }
+@media (prefers-reduced-motion: reduce) { .hl-fill { transition: none; } }
+.hl-ring > svg { width: 132px; height: 132px; }
+.hl-ring svg:not(.hl-spark) { flex: none; }
+.hl-label svg { width: 13px; height: 13px; }
+.sec-row:has(.reviewer-grid) { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.field:has(> .reviewer-grid) { grid-column: 1 / -1; }
+.reviewer-text strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }

@@ -12,6 +12,7 @@ import {
   FolderUp,
   KeyRound,
   Link2,
+  Activity,
   Pencil,
   Plus,
   RefreshCw,
@@ -25,6 +26,7 @@ import type { SftpEntry, SftpListing, SshServer, SshServerInput } from '@shared/
 import { useApp } from '../store'
 import { formatBytes, PageHead } from '../ui'
 import { useAsk } from '../components/Ask'
+import ServerHealth from '../components/ServerHealth'
 
 const api = (): Window['laramac'] => window.laramac
 
@@ -34,7 +36,7 @@ export default function Servers(): React.JSX.Element {
   const [editing, setEditing] = useState<SshServerInput | null>(null)
   const [workspace, setWorkspace] = useState<{
     server: SshServer
-    tab: 'terminal' | 'files'
+    tab: 'terminal' | 'files' | 'health'
     passphrase: string | null
     key: number
   } | null>(null)
@@ -49,7 +51,7 @@ export default function Servers(): React.JSX.Element {
     api().invoke('ssh:list').then(setServers)
   }, [])
 
-  const openWorkspace = async (srv: SshServer, tab: 'terminal' | 'files'): Promise<void> => {
+  const openWorkspace = async (srv: SshServer, tab: 'terminal' | 'files' | 'health'): Promise<void> => {
     let passphrase: string | null = null
     if (srv.auth === 'key') {
       const pass = await ask({
@@ -216,6 +218,11 @@ export default function Servers(): React.JSX.Element {
                 ) : (
                   <span />
                 )}
+                {s.protocol === 'sftp' && (
+                  <button className="btn" onClick={() => openWorkspace(s, 'health')}>
+                    <Activity size={14} /> Health
+                  </button>
+                )}
                 <button className="btn btn-primary" onClick={() => openWorkspace(s, 'files')}>
                   <Folder size={14} /> Files
                 </button>
@@ -262,9 +269,9 @@ function Workspace({
   onClose
 }: {
   server: SshServer
-  tab: 'terminal' | 'files'
+  tab: 'terminal' | 'files' | 'health'
   passphrase: string | null
-  onTab: (t: 'terminal' | 'files') => void
+  onTab: (t: 'terminal' | 'files' | 'health') => void
   onUnknownHost: Unknown
   onClose: () => void
 }): React.JSX.Element {
@@ -293,6 +300,11 @@ function Workspace({
           <button role="tab" aria-selected={tab === 'files'} onClick={() => onTab('files')}>
             <Folder size={14} /> Files
           </button>
+          {server.protocol === 'sftp' && (
+            <button role="tab" aria-selected={tab === 'health'} onClick={() => onTab('health')}>
+              <Activity size={14} /> Health
+            </button>
+          )}
         </div>
         {server.protocol === 'sftp' && (
           <button
@@ -313,6 +325,7 @@ function Workspace({
       <div style={{ display: tab === 'files' ? 'block' : 'none' }}>
         {seen.has('files') && <FilesPane server={server} passphrase={passphrase} onUnknownHost={onUnknownHost} />}
       </div>
+      {tab === 'health' && <ServerHealth server={server} passphrase={passphrase} onUnknownHost={onUnknownHost} />}
     </>
   )
 }

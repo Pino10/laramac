@@ -333,7 +333,7 @@ export default function Settings(): React.JSX.Element {
                 ['dark', 'Dark']
               ] as const
             ).map(([id, label]) => (
-              <button key={id} role="radio" aria-checked={(settings.appearance ?? 'auto') === id} onClick={() => updateSettings({ appearance: id })}>
+              <button key={id} role="radio" aria-checked={(settings.appearance ?? 'dark') === id} onClick={() => updateSettings({ appearance: id })}>
                 {label}
               </button>
             ))}

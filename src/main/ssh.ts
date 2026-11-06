@@ -6,8 +6,9 @@ import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
 import { Client as FtpClient } from 'basic-ftp'
 import { ftpFs, sftpFs, type RemoteFs } from './remotefs'
 import { StringDecoder } from 'string_decoder'
-import type { SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
+import type { HealthOpenResult, ServerHealth, SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
 import { dirs } from './paths'
+import { HEALTH_COMMAND, parseHealth } from './serverhealth'
 import { openTerminal, shellQuote } from './integrations'
 
 /**
@@ -207,6 +208,51 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
   })
 }
 
+// ------------------------------------------------------------ health
+
+const healthClients = new Map<string, Client>()
+
+/** One quiet connection kept open for a Health tab, so it does not log in again every few seconds. */
+export async function openHealth(id: string, passphrase: string | null, crypto: Crypto): Promise<HealthOpenResult> {
+  if (server(id).protocol !== 'sftp') throw new Error('Health needs a server you connect to with SSH.')
+  const opened = await openClient(id, passphrase, crypto)
+  if (!('client' in opened)) return opened
+  const sid = randomBytes(8).toString('hex')
+  healthClients.set(sid, opened.client)
+  opened.client.once('close', () => healthClients.delete(sid))
+  return { status: 'connected', session: sid }
+}
+
+export function sampleHealth(sid: string): Promise<ServerHealth> {
+  const client = healthClients.get(sid)
+  if (!client) return Promise.reject(new Error('The connection was closed. Open the server again.'))
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('The server took too long to answer.')), 15000)
+    client.exec(HEALTH_COMMAND, (err, stream) => {
+      if (err) {
+        clearTimeout(timer)
+        return reject(err)
+      }
+      let out = ''
+      stream.on('data', (d: Buffer) => {
+        if (out.length < 200_000) out += d.toString('utf8')
+      })
+      stream.stderr.on('data', () => undefined)
+      stream.on('close', () => {
+        clearTimeout(timer)
+        if (!out.includes('#up')) return reject(new Error('This server did not answer like a Linux machine, so its health cannot be read.'))
+        resolve(parseHealth(out))
+      })
+    })
+  })
+}
+
+export function closeHealth(sid: string): void {
+  const c = healthClients.get(sid)
+  healthClients.delete(sid)
+  c?.end()
+}
+
 // ------------------------------------------------------------ terminal
 
 interface Shell {
@@ -357,6 +403,7 @@ export function disconnect(sid: string): void {
 }
 
 export function disconnectAll(): void {
+  for (const sid of [...healthClients.keys()]) closeHealth(sid)
   for (const sid of [...sessions.keys()]) disconnect(sid)
   for (const sid of [...shells.keys()]) closeShell(sid)
 }

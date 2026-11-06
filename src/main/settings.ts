@@ -14,7 +14,8 @@ const defaults = (): AppSettings => ({
   tld: 'test',
   glass: true,
   glassStyle: 'studio',
-  appearance: 'auto',
+  appearance: 'dark',
+  darkDefault: true,
   tourDone: false,
   dumps: false,
   xdebug: false,
@@ -98,6 +99,13 @@ export function migrate(loaded: Partial<AppSettings> & Record<string, unknown>):
   // An editor that was never really chosen ('auto') means Laramac Code now.
   if (loaded.editor === 'auto') {
     loaded.editor = 'laramac'
+    changed = true
+  }
+  // 0.31: dark is the default look. Once, anyone still on "Like my Mac" moves to Dark; light and dark choices stay,
+  // and switching back to "Like my Mac" afterwards is respected.
+  if (loaded.darkDefault === undefined) {
+    if (loaded.appearance === undefined || loaded.appearance === 'auto') loaded.appearance = 'dark'
+    loaded.darkDefault = true
     changed = true
   }
   return changed

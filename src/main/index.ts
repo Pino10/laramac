@@ -510,7 +510,7 @@ function registerIpc(): void {
     const next = setSettings(clean)
     if (next.wwwPath !== before.wwwPath) watchWww()
     if (next.accent !== before.accent || next.editorFont !== before.editorFont || next.editorFontSize !== before.editorFontSize || next.uiFont !== before.uiFont || next.wwwPath !== before.wwwPath) void ideLookChanged(next.accent !== before.accent).catch(() => undefined)
-    if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' || next.appearance === 'dark' ? next.appearance : 'system'
+    if (next.appearance !== before.appearance) nativeTheme.themeSource = next.appearance === 'light' ? 'light' : next.appearance === 'auto' ? 'system' : 'dark'
     // claudelm follows the model chosen in the Assistant.
     if ((next.llm.model !== before.llm.model || next.llm.baseUrl !== before.llm.baseUrl) && claudeLmInstalled().installed) {
       const claude = findCli(['claude'])
@@ -1826,6 +1826,9 @@ function registerIpc(): void {
   handle('ssh:delete', (id) => ssh.deleteServer(String(id)))
   handle('ssh:terminal', (id) => ssh.openSshTerminal(String(id)))
   handle('ssh:trust', (id, fp) => ssh.trustHostKey(String(id), String(fp)))
+  handle('health:open', (id, passphrase) => ssh.openHealth(String(id), typeof passphrase === 'string' ? passphrase : null, keychain))
+  handle('health:sample', (sid) => ssh.sampleHealth(String(sid)))
+  handle('health:close', (sid) => ssh.closeHealth(String(sid)))
   handle('sftp:connect', (id, passphrase) => ssh.connectSftp(String(id), typeof passphrase === 'string' ? passphrase : null, keychain))
   handle('sftp:list', (sid, path) => ssh.listDir(String(sid), String(path)))
   handle('sftp:download', async (sid, paths) => {
@@ -3367,7 +3370,7 @@ app.whenReady().then(() => {
   // 0.23 brings the Studio look as the default; it reaches everyone once, and Settings, Look switches back.
   if ((getSettings().lookVersion ?? 0) < 23) setSettings({ glassStyle: 'studio', lookVersion: 23 })
   // Light, dark or the Mac's own: for the window, its glass and Laramac Code.
-  nativeTheme.themeSource = getSettings().appearance === 'light' || getSettings().appearance === 'dark' ? (getSettings().appearance as 'light' | 'dark') : 'system'
+  nativeTheme.themeSource = getSettings().appearance === 'light' ? 'light' : getSettings().appearance === 'auto' ? 'system' : 'dark'
   ensureWww()
   refreshShims()
   refreshRuntimeShims()
