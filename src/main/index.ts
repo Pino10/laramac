@@ -64,6 +64,8 @@ import * as project from './project'
 import * as cli from './cli'
 import { dbPassword, getSecret, setSecret, setSecretsCrypto } from './secrets'
 import { createPgDatabase } from './svc/postgres'
+import { checkDatabases, updateDatabase } from './dbupdates'
+import { compareVersions } from './versions'
 import { runQuiet } from './starterrun'
 import { runtimeEnv, runtimesRoot } from './runtimes'
 import { normalize } from 'path'
@@ -1272,6 +1274,7 @@ function registerIpc(): void {
     return minor && existsSync(composerPhar()) ? [phpBinary(minor), composerPhar()] : findOnPath('composer') ? [findOnPath('composer')!] : null
   }
   let lastReport: UpdatesReport | null = null
+  let lastBrewUpdate = 0
   const collectUpdates = async (deep: boolean): Promise<UpdatesReport> => {
     const items: UpdateItem[] = []
     const notes: string[] = []
@@ -1290,6 +1293,10 @@ function registerIpc(): void {
       listVersions()
         .then((list) => {
           for (const v of list) if (v.installed && v.updateAvailable) items.push({ id: `php:${v.minor}`, group: 'php', name: `PHP ${v.minor}`, current: v.installed, latest: v.latest, detail: 'Security and bug fixes. Sites on this version restart with it.', jump: 'patch' })
+          // A newer PHP line than any you have (for example 8.6 when you have 8.5): offered as an install, your current one stays.
+          const have = list.filter((v) => v.installed).map((v) => v.minor)
+          const top = have.sort((a, b) => compareVersions(b, a))[0]
+          for (const v of list) if (!v.installed && top && compareVersions(v.minor, top) > 0 && /^\d+\.\d+\.\d+$/.test(v.latest)) items.push({ id: `php:${v.minor}`, group: 'php', name: `PHP ${v.minor} (new version)`, current: null, latest: v.latest, detail: `A newer PHP line. It installs next to ${top}, so your sites keep running until you switch.`, jump: 'minor' })
         })
         .catch(() => void notes.push('PHP versions could not be checked.'))
     )
@@ -1382,7 +1389,11 @@ function registerIpc(): void {
         (async () => {
           const bin = join(prefix, 'bin', 'brew')
           const benv = { ...process.env, HOMEBREW_NO_AUTO_UPDATE: deep ? '' : '1', HOMEBREW_NO_ENV_HINTS: '1' }
-          if (deep) await upd.run(bin, ['update', '--quiet'], { env: benv, timeout: 180000 })
+          // Homebrew only knows about new versions after `brew update`, so a quiet check refreshes it too, at most every six hours.
+          if (deep || Date.now() - lastBrewUpdate > 6 * 3600_000) {
+            await upd.run(bin, ['update', '--quiet'], { env: { ...benv, HOMEBREW_NO_AUTO_UPDATE: '1' }, timeout: 180000 })
+            lastBrewUpdate = Date.now()
+          }
           const out = await upd.run(bin, ['outdated', '--json=v2'], { env: { ...benv, HOMEBREW_NO_AUTO_UPDATE: '1' }, timeout: 60000 })
           for (const o of upd.parseBrewOutdated(out.slice(out.indexOf('{')), BREW.map((b) => b.formula))) {
             const b = BREW.find((x) => x.formula === o.formula)!
@@ -1391,6 +1402,15 @@ function registerIpc(): void {
         })().catch(() => void notes.push('Homebrew could not be checked.'))
       )
     }
+    // Databases Laramac installed itself
+    tasks.push(
+      checkDatabases()
+        .then((r) => {
+          items.push(...r.items)
+          notes.push(...r.notes)
+        })
+        .catch(() => void notes.push('Databases could not be checked.'))
+    )
     // Each site's packages
     tasks.push(
       (async () => {
@@ -1465,6 +1485,8 @@ function registerIpc(): void {
         await services.stop(b.service)
         await services.start(b.service)
       }
+    } else if (id.startsWith('db:')) {
+      await updateDatabase(id, update, { running: (n) => services.list().find((x) => x.id === n)?.status === 'running', stop: (n) => services.stop(n), start: (n) => services.start(n) })
     } else if (id.startsWith('site:')) {
       if (!consent) throw new ValidationError('Updating a site\'s packages runs its own install scripts. Agree to that first.')
       await updateSitePackages(siteByName(id.slice(5)), {}, update)

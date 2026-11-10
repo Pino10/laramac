@@ -1595,9 +1595,9 @@ export interface ReconDiff {
 }
 
 export interface UpdateItem {
-  /** laramac, php:8.4, node:main, node:20, runtime:go, tool:composer, brew:httpd or site:shop. */
+  /** laramac, php:8.4, node:main, node:20, runtime:go, tool:composer, brew:httpd, db:mysql or site:shop. */
   id: string
-  group: 'laramac' | 'php' | 'node' | 'runtime' | 'service' | 'tool' | 'site'
+  group: 'laramac' | 'php' | 'node' | 'runtime' | 'service' | 'database' | 'tool' | 'site'
   name: string
   current: string | null
   latest: string

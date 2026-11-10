@@ -5093,10 +5093,12 @@ html[data-glass='studio'] .shortcut-icon {
   padding-top: 1px;
 }
 .toasts {
-  position: absolute;
-  top: 46px;
-  right: 0;
-  z-index: 60;
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 9000;
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
   display: grid;
   gap: 8px;
   width: 320px;
@@ -6715,7 +6717,7 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .tag-new { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); }
 
 /* ---------- Notifications: in front of everything, readable in full ---------- */
-.toasts { position: fixed; top: 56px; right: 18px; width: 380px; max-width: calc(100vw - 36px); z-index: 2000; display: grid; gap: 10px; pointer-events: none; }
+.toasts { position: fixed; top: 56px; right: 18px; width: 380px; max-width: calc(100vw - 36px); max-height: calc(100vh - 80px); overflow: hidden; z-index: 9000; display: grid; gap: 10px; pointer-events: none; }
 .toast-mini { pointer-events: auto; position: relative; display: block; padding: 0; border-radius: 18px; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7); }
 .toast-mini[data-kind='error'] { border-color: color-mix(in srgb, #ff4d6d 60%, transparent); }
 .toast-open { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; width: 100%; padding: 14px 40px 14px 14px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; border-radius: inherit; }
@@ -7102,3 +7104,7 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .proof-meta dd { margin: 0; word-break: break-all; }
 .tag svg { vertical-align: -1px; margin-right: 3px; }
 .rc-only { display: flex; gap: 8px; align-items: center; padding: 10px 16px; font-size: 13px; }
+
+.pkg-check { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 14px; }
+
+.toast-more { pointer-events: auto; justify-self: end; font-size: 11.5px; color: var(--ink-3); padding: 2px 8px; }

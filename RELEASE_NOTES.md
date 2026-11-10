@@ -1,3 +1,17 @@
+## New in 0.38.0
+
+### Updates you can actually see
+- **Databases:** MySQL, PostgreSQL and MongoDB that Laramac installed now show newer releases of the same version line, with one button to update. Your databases are not touched, and the server restarts if it was running.
+- **PHP:** a newer PHP line than the ones you have (for example 8.6 when you have 8.5) now shows up by itself, in Updates and on Packages under "Newer versions you can add". It installs next to your current one.
+- **Homebrew:** Laramac now refreshes Homebrew's own list of new versions before checking (at most every six hours), so Apache, Nginx, MariaDB, Redis, Memcached and RabbitMQ updates are no longer missed.
+- **Packages page:** shows when it last checked, has a "Check for updates now" button, and checks by itself when you open it.
+
+### Notifications no longer pile up
+A burst of notifications now stays in place instead of stacking on top of each other and jumping to the top. At most three show at once, the same message replaces itself, errors stay, and the rest wait in the bell ("2 more are waiting in the bell").
+
+### Security skills
+Six new review skills for mobile apps (Android, iOS), GraphQL, servers and networks, and cloud accounts.
+
 ## New in 0.37.0
 
 ### Recon now shows proof

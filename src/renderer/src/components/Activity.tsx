@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Bell, CircleAlert, CircleCheck, Copy, Sparkles, X } from 'lucide-react'
 import type { ActivityItem } from '@shared/types'
 import { useApp } from '../store'
+import { stackToasts } from '../toasts'
 
 function ago(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000))
@@ -82,6 +83,7 @@ function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem)
   const [since] = useState(() => Date.now())
   const [shown, setShown] = useState<ActivityItem[]>([])
   const [hover, setHover] = useState(false)
+  const [skipped, setSkipped] = useState(0)
   const known = useRef(new Set<string>())
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const drop = (id: string): void => {
@@ -93,8 +95,17 @@ function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem)
     const fresh = activity.filter((a) => a.at >= since && !known.current.has(a.id))
     if (!fresh.length) return
     for (const a of fresh) known.current.add(a.id)
-    setShown((s) => [...fresh.reverse(), ...s].slice(0, 4))
+    // Oldest first, added at the bottom, so what you are reading never moves. The same message twice replaces itself
+    // instead of piling up, and only a few show at once: the rest wait in the bell.
+    setShown((s) => {
+      const { next, skipped: n } = stackToasts(s, fresh.slice().reverse())
+      if (n) setSkipped((x) => x + n)
+      return next
+    })
   }, [activity, since])
+  useEffect(() => {
+    if (shown.length === 0) setSkipped(0)
+  }, [shown.length])
   // Each toast has its own clock, paused while the pointer is on the stack. Errors have none.
   useEffect(() => {
     if (hover) {
@@ -135,6 +146,7 @@ function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem)
           </button>
         </div>
       ))}
+      {skipped > 0 && <div className="toast-more">{skipped === 1 ? '1 more is' : `${skipped} more are`} waiting in the bell</div>}
     </div>,
     document.body
   )

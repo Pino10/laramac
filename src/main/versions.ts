@@ -86,8 +86,11 @@ export function fetchPhpReleases(flavor: PhpFlavor): Promise<Record<string, stri
 /** PHP versions Laramac offers. php.net is asked for the newest release of each. */
 export const SUPPORTED_PHP = ['8.5', '8.4', '8.3', '8.2', '8.1', '8.0']
 
+/** Every PHP line worth asking php.net about, including ones newer than any Laramac has seen, so a new release shows up by itself. */
+export const PHP_PROBE: string[] = [...Array.from({ length: 10 }, (_, i) => `8.${9 - i}`), ...Array.from({ length: 4 }, (_, i) => `9.${3 - i}`)].sort((a, b) => compareVersions(b, a))
+
 /** The newest release of each PHP version according to php.net itself. */
-export function fetchPhpNetLatest(minors: string[] = SUPPORTED_PHP): Promise<Record<string, string>> {
+export function fetchPhpNetLatest(minors: string[] = PHP_PROBE): Promise<Record<string, string>> {
   return cached('php.net', async () => {
     const out: Record<string, string> = {}
     await Promise.all(

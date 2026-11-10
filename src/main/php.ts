@@ -6,7 +6,7 @@ import { getSettings, setSettings } from './settings'
 import { USER_AGENT, downloadFile, extract, removeQuarantine, sha256File } from './download'
 import { execFile } from 'child_process'
 import { jobs } from './jobs'
-import { SUPPORTED_PHP, compareVersions, fetchPhpNetLatest, hashFor, minorOf, resolvePhpBuilds, type PhpBuild } from './versions'
+import { PHP_PROBE, compareVersions, fetchPhpNetLatest, hashFor, minorOf, resolvePhpBuilds, type PhpBuild } from './versions'
 import { generateFpmConf, generatePhpIni, phpPortFor } from './configgen'
 import { ManagedProcess } from './process'
 
@@ -55,7 +55,7 @@ export async function listVersions(): Promise<PhpVersionInfo[]> {
     fetchPhpNetLatest().catch(() => ({}) as Record<string, string>)
   ])
   // Only the newest PHP is offered; older versions you add yourself from a download (Add a version).
-  const newest = SUPPORTED_PHP.filter((m) => builds[m] || upstream[m]).sort((a, b) => compareVersions(b, a))[0]
+  const newest = [...new Set([...PHP_PROBE, ...Object.keys(builds)])].filter((m) => /^\d+\.\d+$/.test(m) && (builds[m] || upstream[m])).sort((a, b) => compareVersions(b, a))[0]
   const minors = new Set([...(newest ? [newest] : []), ...installed])
   return [...minors]
     .sort((a, b) => compareVersions(b, a))

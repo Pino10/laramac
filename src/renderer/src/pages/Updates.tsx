@@ -10,6 +10,7 @@ const GROUPS: { id: UpdateItem['group']; title: string }[] = [
   { id: 'node', title: 'Node.js' },
   { id: 'runtime', title: 'Languages' },
   { id: 'service', title: 'Services' },
+  { id: 'database', title: 'Databases' },
   { id: 'tool', title: 'Tools' },
   { id: 'site', title: 'Your sites' }
 ]

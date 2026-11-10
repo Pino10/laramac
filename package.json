@@ -1,7 +1,7 @@
 {
   "name": "laramac",
   "productName": "Laramac",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "description": "A free, open-source local development environment for macOS, inspired by Laragon.",
   "main": "./out/main/index.js",
   "author": "Laramac contributors",

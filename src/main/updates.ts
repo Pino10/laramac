@@ -24,6 +24,17 @@ export function jumpOf(current: string | null, latest: string): UpdateItem['jump
 
 export const isNewer = (current: string | null, latest: string | null | undefined): boolean => !!latest && (!current || compareVersions(latest.replace(/^v/, ''), current.replace(/^v/, '')) > 0)
 
+/** The newest version in `list` that is newer than `current` and stays in the same line (same first `parts` numbers). */
+export function newestInLine(current: string, list: string[], parts: 1 | 2): string | null {
+  const head = (v: string): string => v.replace(/^v/, '').split('.').slice(0, parts).join('.')
+  let best: string | null = null
+  for (const v of list) {
+    if (!/^\d+(\.\d+)+$/.test(v) || head(v) !== head(current) || compareVersions(v, current) <= 0) continue
+    if (!best || compareVersions(v, best) > 0) best = v
+  }
+  return best
+}
+
 /** `brew outdated --json=v2`, only for the formulae Laramac looks after. */
 export function parseBrewOutdated(json: string, ours: string[]): { formula: string; current: string; latest: string }[] {
   try {
@@ -80,7 +91,7 @@ export async function getJson<T>(url: string): Promise<T | null> {
 }
 
 /** Groups in the order the Updates page shows them. */
-export const GROUP_ORDER: UpdateItem['group'][] = ['laramac', 'php', 'node', 'runtime', 'service', 'tool', 'site']
+export const GROUP_ORDER: UpdateItem['group'][] = ['laramac', 'php', 'node', 'runtime', 'service', 'database', 'tool', 'site']
 
 export function sortItems(items: UpdateItem[]): UpdateItem[] {
   return [...items].sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) || a.name.localeCompare(b.name))

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from "vitest"
 import { advertisedMethods, bannersOf, compareVersions, corsReflection, detectWaf, dirListing, errorLeak, fileShows, libsIn, matchNvd, nvdUrl, proofOf, TEST_ORIGIN, versionSeverity } from '../src/main/seckit/confirm'
 import { exposureReal } from '../src/main/seckit/recon'
 
@@ -146,5 +146,44 @@ describe('versions', () => {
     expect(u.hostname).toBe('services.nvd.nist.gov')
     expect(u.searchParams.get('virtualMatchString')).toBe('cpe:2.3:a:f5:nginx')
     expect(u.searchParams.get('versionStart')).toBe('1.18.0')
+  })
+})
+
+import { stackToasts, MAX_TOASTS } from '../src/renderer/src/toasts'
+import { newestInLine } from '../src/main/updates'
+import { PHP_PROBE } from '../src/main/versions'
+
+const ev = (id: string, title: string, kind: 'info' | 'error' | 'success' = 'info') => ({ id, at: 1, kind, title })
+
+describe('notifications stack without piling up', () => {
+  it('keeps what is on screen in place and adds new ones at the end', () => {
+    const r = stackToasts([ev('a', 'One')], [ev('b', 'Two')])
+    expect(r.next.map((x) => x.id)).toEqual(['a', 'b'])
+    expect(r.skipped).toBe(0)
+  })
+  it('the same message replaces itself', () => {
+    const r = stackToasts([ev('a', 'Installed PHP')], [ev('b', 'Installed PHP')])
+    expect(r.next.map((x) => x.id)).toEqual(['b'])
+  })
+  it('shows only a few and counts the rest, keeping errors', () => {
+    const r = stackToasts([ev('e', 'Broke', 'error')], [ev('1', 'A'), ev('2', 'B'), ev('3', 'C')])
+    expect(r.next).toHaveLength(MAX_TOASTS)
+    expect(r.next.some((x) => x.id === 'e')).toBe(true)
+    expect(r.skipped).toBe(1)
+  })
+})
+
+describe('update lines', () => {
+  it('offers only a newer release in the same line', () => {
+    expect(newestInLine('8.4.6', ['8.4.5', '8.4.8', '8.4.7', '9.0.1', '8.5.0'], 2)).toBe('8.4.8')
+    expect(newestInLine('17.2.0', ['17.4.0', '18.0.0'], 1)).toBe('17.4.0')
+    expect(newestInLine('8.4.8', ['8.4.8', '8.4.2'], 2)).toBeNull()
+    expect(newestInLine('9.0.4', ['latest', '9.0.5'], 1)).toBe('9.0.5')
+  })
+  it('asks php.net about lines newer than any known today', () => {
+    expect(PHP_PROBE).toContain('8.5')
+    expect(PHP_PROBE).toContain('8.9')
+    expect(PHP_PROBE).toContain('9.0')
+    expect(PHP_PROBE[0]).toBe('9.3')
   })
 })

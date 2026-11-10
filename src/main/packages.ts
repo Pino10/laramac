@@ -23,7 +23,8 @@ export const BREW: { formula: string; name: string; service: ServiceId }[] = [
   { formula: 'nginx', name: 'Nginx', service: 'nginx' },
   { formula: 'mariadb', name: 'MariaDB', service: 'mariadb' },
   { formula: 'redis', name: 'Redis', service: 'redis' },
-  { formula: 'memcached', name: 'Memcached', service: 'memcached' }
+  { formula: 'memcached', name: 'Memcached', service: 'memcached' },
+  { formula: 'rabbitmq', name: 'RabbitMQ', service: 'rabbitmq' }
 ]
 
 const BINS: { file: string; name: string; desc: string; service?: ServiceId }[] = [

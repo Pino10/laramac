@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowUpCircle, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Download, RefreshCw, Trash2 } from 'lucide-react'
 import type { UpdateItem } from '@shared/types'
 import type { PackageInfo } from '@shared/types'
 import { useApp } from '../store'
@@ -20,7 +20,7 @@ export default function Packages(): React.JSX.Element {
   const { act, busy, notify, setServices, updates, setUpdates } = useApp()
   // An update for a package, from the Updates page's last check.
   const updateFor = (p: PackageInfo): UpdateItem | undefined =>
-    (updates?.items ?? []).find((u) => u.group !== 'site' && u.group !== 'laramac' && (u.id === p.id || u.name.toLowerCase() === p.name.toLowerCase() || (u.id.split(':')[1] && u.id.split(':')[1] === p.id.split(':')[1])))
+    (updates?.items ?? []).find((u) => u.group !== 'site' && u.group !== 'laramac' && u.current !== null && (u.group !== 'database' || u.current === p.detail) && (u.id === p.id || u.name.toLowerCase() === p.name.toLowerCase() || (u.id.split(':')[1] && u.id.split(':')[1] === p.id.split(':')[1])))
   const update = async (u: UpdateItem): Promise<void> => {
     const r = await act(`upd-${u.id}`, () => api.invoke('updates:apply', [u.id], false))
     if (r) {
@@ -32,6 +32,21 @@ export default function Packages(): React.JSX.Element {
   const api = window.laramac
   const [items, setItems] = useState<PackageInfo[] | null>(null)
   const [ask, askDialog] = useAsk()
+
+  // Newer versions you do not have yet (for example a new PHP line). Installing one leaves what you have alone.
+  const fresh = (updates?.items ?? []).filter((u) => u.current === null && u.group === 'php')
+  const recheck = (): void => {
+    void act('updates-check', () => api.invoke('updates:check', true)).then((r) => {
+      if (r) {
+        setUpdates(r)
+        notify({ kind: 'info', text: r.items.length ? `${r.items.length} ${r.items.length === 1 ? 'update' : 'updates'} found.` : 'Everything is up to date.' })
+      }
+    })
+  }
+  useEffect(() => {
+    if (!updates || Date.now() - updates.checkedAt > 3600_000) void api.invoke('updates:check', false).then(setUpdates).catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const load = useCallback(() => void api.invoke('packages:list').then(setItems), [api])
   useEffect(() => {
@@ -64,6 +79,39 @@ export default function Packages(): React.JSX.Element {
   return (
     <>
       <PageHead title="Packages" desc="Everything Laramac has installed on this Mac, how much space it takes, and which ones have an update. Remove what you no longer use." />
+
+      <div className="pkg-check">
+        <span className="hint">{updates ? `Last checked ${new Date(updates.checkedAt).toLocaleTimeString()}.` : 'Checking for updates…'}</span>
+        <button className="btn btn-sm" disabled={busy.has('updates-check')} onClick={recheck}>
+          <RefreshCw size={13} /> {busy.has('updates-check') ? 'Checking…' : 'Check for updates now'}
+        </button>
+      </div>
+
+      {fresh.length > 0 && (
+        <section>
+          <h2 className="section-title">Newer versions you can add</h2>
+          <div className="group">
+            {fresh.map((u) => (
+              <div key={u.id} className="pkg-row">
+                <span className="mono-tile" aria-hidden>
+                  New
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <strong>{u.name}</strong>
+                  <small>{u.detail}</small>
+                </span>
+                <span className="hint" style={{ textAlign: 'right' }}>
+                  <button className="btn btn-sm btn-tonal" disabled={busy.has(`upd-${u.id}`)} onClick={() => update(u)}>
+                    <Download size={13} /> {busy.has(`upd-${u.id}`) ? 'Installing…' : `Install ${u.latest}`}
+                  </button>
+                </span>
+                <span />
+                <span />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="pkg-total">
         <div>

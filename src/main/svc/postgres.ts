@@ -14,6 +14,35 @@ const PORT = 5432
 
 const bin = (version: string, name: string): string => join(dirs.postgres(version), 'bin', name)
 
+type Progress = (pct: number | null, label?: string) => void
+
+/** Downloads, checks and unpacks one PostgreSQL build. Used for a first install and for updates. */
+export async function installPostgresVersion(version: string, update: Progress): Promise<void> {
+  const jar = join(dirs.downloads(), `postgres-${version}.jar`)
+  const staging = join(dirs.downloads(), `postgres-${version}-staging`)
+  rmSync(staging, { recursive: true, force: true })
+  await downloadFile(postgresJarUrl(version), jar, (p) => update(p, `Downloading PostgreSQL ${version}`))
+  update(null, 'Checking the download')
+  await verifySha256(jar, `${postgresJarUrl(version)}.sha256`)
+
+  // The jar is a zip holding one .txz archive with the real binaries.
+  update(null, `Unpacking PostgreSQL ${version}`)
+  await extract(jar, staging)
+  const txz = readdirSync(staging).find((f) => f.endsWith('.txz'))
+  if (!txz) throw new Error('Unexpected PostgreSQL archive layout.')
+
+  const target = dirs.postgres(version)
+  rmSync(target, { recursive: true, force: true })
+  mkdirSync(target, { recursive: true })
+  await run('tar', ['-xJf', join(staging, txz), '-C', target])
+  for (const name of ['postgres', 'initdb', 'pg_ctl']) {
+    if (existsSync(bin(version, name))) chmodSync(bin(version, name), 0o755)
+  }
+  await removeQuarantine(target)
+  rmSync(staging, { recursive: true, force: true })
+  rmSync(jar, { force: true })
+}
+
 export function installedPostgres(): string[] {
   if (!existsSync(dirs.postgres())) return []
   return readdirSync(dirs.postgres())
@@ -55,31 +84,7 @@ export const postgres: ServiceImpl = {
       throw new Error(`PostgreSQL ${major} is not available. Available: ${Object.keys(versions).join(', ')}.`)
     }
 
-    await jobs.run(`Installing PostgreSQL ${version}`, async (update) => {
-      const jar = join(dirs.downloads(), `postgres-${version}.jar`)
-      const staging = join(dirs.downloads(), `postgres-${version}-staging`)
-      rmSync(staging, { recursive: true, force: true })
-      await downloadFile(postgresJarUrl(version), jar, (p) => update(p, `Downloading PostgreSQL ${version}`))
-      update(null, 'Checking the download')
-      await verifySha256(jar, `${postgresJarUrl(version)}.sha256`)
-
-      // The jar is a zip holding one .txz archive with the real binaries.
-      update(null, `Unpacking PostgreSQL ${version}`)
-      await extract(jar, staging)
-      const txz = readdirSync(staging).find((f) => f.endsWith('.txz'))
-      if (!txz) throw new Error('Unexpected PostgreSQL archive layout.')
-
-      const target = dirs.postgres(version)
-      rmSync(target, { recursive: true, force: true })
-      mkdirSync(target, { recursive: true })
-      await run('tar', ['-xJf', join(staging, txz), '-C', target])
-      for (const name of ['postgres', 'initdb', 'pg_ctl']) {
-        if (existsSync(bin(version, name))) chmodSync(bin(version, name), 0o755)
-      }
-      await removeQuarantine(target)
-      rmSync(staging, { recursive: true, force: true })
-      rmSync(jar, { force: true })
-    })
+    await jobs.run(`Installing PostgreSQL ${version}`, (update) => installPostgresVersion(version, update))
   },
 
   async start() {

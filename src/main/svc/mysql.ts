@@ -43,6 +43,34 @@ export function linkSharedSocket(target: string, shared = '/tmp/mysql.sock'): 'l
   }
 }
 
+type Progress = (pct: number | null, label?: string) => void
+
+/** Downloads and unpacks one MySQL build next to the others. Used for a first install and for updates. */
+export async function installMysqlBuild(build: { version: string; url: string }, update: Progress): Promise<void> {
+  const { version, url } = build
+
+  const archive = join(dirs.downloads(), `mysql-${version}.tar.gz`)
+  const staging = join(dirs.downloads(), `mysql-${version}-staging`)
+  rmSync(staging, { recursive: true, force: true })
+  await downloadFile(url, archive, (p) => update(p, `Downloading MySQL ${version}`))
+  update(null, `Unpacking MySQL ${version}`)
+  await extract(archive, staging)
+
+  // The tarball holds one top-level folder named after the build.
+  const inner = readdirSync(staging).find((d) => d.startsWith('mysql-'))
+  if (!inner) throw new Error('Unexpected MySQL archive layout.')
+  mkdirSync(dirs.mysql(), { recursive: true })
+  rmSync(baseDir(version), { recursive: true, force: true })
+  renameSync(join(staging, inner), baseDir(version))
+  for (const bin of ['mysqld', 'mysql', 'mysqldump', 'mysqladmin']) {
+    const p = join(baseDir(version), 'bin', bin)
+    if (existsSync(p)) chmodSync(p, 0o755)
+  }
+  await removeQuarantine(baseDir(version))
+  rmSync(staging, { recursive: true, force: true })
+  rmSync(archive, { force: true })
+}
+
 export function installedMysqlVersions(): string[] {
   if (!existsSync(dirs.mysql())) return []
   return readdirSync(dirs.mysql())
@@ -101,28 +129,7 @@ export const mysql: ServiceImpl = {
       if (!build) {
         throw new Error(`Oracle has no MySQL 8.4 build for this Mac (${process.arch}). Try MariaDB instead.`)
       }
-      const { version, url } = build
-
-      const archive = join(dirs.downloads(), `mysql-${version}.tar.gz`)
-      const staging = join(dirs.downloads(), `mysql-${version}-staging`)
-      rmSync(staging, { recursive: true, force: true })
-      await downloadFile(url, archive, (p) => update(p, `Downloading MySQL ${version}`))
-      update(null, `Unpacking MySQL ${version}`)
-      await extract(archive, staging)
-
-      // The tarball holds one top-level folder named after the build.
-      const inner = readdirSync(staging).find((d) => d.startsWith('mysql-'))
-      if (!inner) throw new Error('Unexpected MySQL archive layout.')
-      mkdirSync(dirs.mysql(), { recursive: true })
-      rmSync(baseDir(version), { recursive: true, force: true })
-      renameSync(join(staging, inner), baseDir(version))
-      for (const bin of ['mysqld', 'mysql', 'mysqldump', 'mysqladmin']) {
-        const p = join(baseDir(version), 'bin', bin)
-        if (existsSync(p)) chmodSync(p, 0o755)
-      }
-      await removeQuarantine(baseDir(version))
-      rmSync(staging, { recursive: true, force: true })
-      rmSync(archive, { force: true })
+      await installMysqlBuild(build, update)
     })
   },
 
