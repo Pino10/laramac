@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, ChevronRight, Circle, CircleSlash, Download, E
 import type { ReconDiff, ReconDepth, ReconDetail, ReconInfo, ReconSeverity, ReviewerKind, ReviewerOption } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
+import ProofBlock, { ConfidenceTag } from '../components/ProofBlock'
 
 const SEV: ReconSeverity[] = ['critical', 'high', 'medium', 'low', 'info']
 const isLocal = (d: string): boolean => /\.(test|localhost)$/.test(d.trim().replace(/^https?:\/\//, '').replace(/[/:].*$/, ''))
@@ -161,6 +162,7 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
   const [lines, setLines] = useState<string[]>([])
   const [diff, setDiff] = useState<ReconDiff | null>(null)
   const [now, setNow] = useState(Date.now())
+  const [onlyProven, setOnlyProven] = useState(false)
   const box = useRef<HTMLPreElement>(null)
   const stamp = `${info?.status}|${info?.steps.map((s) => s.status).join(',')}`
   useEffect(() => {
@@ -178,7 +180,9 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
     if (box.current) box.current.scrollTop = box.current.scrollHeight
   }, [lines])
   const s = { ...(d ?? {}), ...(info ?? {}) } as ReconDetail & ReconInfo
-  const findings = useMemo(() => (d?.findings ?? []).slice().sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity)), [d])
+  const allFindings = useMemo(() => (d?.findings ?? []).slice().sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity)), [d])
+  const provenCount = allFindings.filter((f) => f.confidence === 'confirmed').length
+  const findings = onlyProven ? allFindings.filter((f) => f.confidence === 'confirmed') : allFindings
   if (!d) return <div className="empty dim">Opening…</div>
   const done = s.steps.filter((x) => x.status !== 'waiting' && x.status !== 'running').length
   const total = Math.max(s.steps.length, s.depth === 'passive' ? 4 : 8)
@@ -270,12 +274,18 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
 
       {tab === 'findings' && (
         <div className="panel">
+          {provenCount > 0 && (
+            <label className="rc-only">
+              <input type="checkbox" checked={onlyProven} onChange={(e) => setOnlyProven(e.target.checked)} /> Confirmed only ({provenCount})
+            </label>
+          )}
           {findings.length === 0 && <div className="empty dim">{running ? 'Findings appear when the steps finish.' : 'Nothing to report.'}</div>}
           {findings.map((f) => (
             <details key={f.id} className="rc-finding" data-fp={f.verdict === 'false-positive'}>
               <summary>
                 <span className="sev" data-sev={f.severity}>{f.severity}</span>
                 <span className="row-title">{f.title}</span>
+                {f.confidence === 'possible' && <span className="tag tag-warn">Possible</span>}
                 {f.verdict === 'false-positive' && <span className="tag">AI: harmless</span>}
               </summary>
               {f.url && (
@@ -283,7 +293,13 @@ function ReconView({ id, info, onBack }: { id: string; info?: ReconInfo; onBack:
                   {f.url} {/^https?:\/\//.test(f.url) && <ExternalLink size={11} />}
                 </button>
               )}
+              {f.confidence && (
+                <p>
+                  <ConfidenceTag f={f} />
+                </p>
+              )}
               {f.description && <p>{f.description}</p>}
+              <ProofBlock f={f} />
               {f.aiNote && <p className="hint">AI: {f.aiNote}</p>}
               {f.fix && (
                 <p>

@@ -1,3 +1,16 @@
+## New in 0.37.0
+
+### Recon now shows proof
+Recon no longer only points at things that might be wrong. When it can, it **confirms** them by reading the real file or page, and keeps the proof next to the finding.
+
+- **Confirmed** means the problem itself was seen: a folder listing, a real .git or .env file, a readable source map, an error page that shows code details, a site that accepts a made-up origin, or a CDN or firewall answering. **Possible** means the evidence points at it but does not prove it, such as a version that matches a known issue.
+- Each proof shows the request, the answer's status and size, a fingerprint of what was read, the time, and a command you can copy to repeat it yourself. Secret values are never stored: a .env file shows only the setting names.
+- New checks: folder listings, about 40 more risky files (Git, Subversion, backups, dumps, keys, debug pages), CDN and firewall detection, error pages, cross-origin sharing, advertised methods, and versions of web servers and scripts matched against the public NVD list.
+- Version matches are always "Possible", never critical, and a Linux package may have been fixed without changing its version number.
+- A "Confirmed only" switch hides everything that is not proven.
+
+Nothing is exploited. Recon only reads, with short fixed lists of paths, and never guesses passwords or sends data that changes anything.
+
 ## New in 0.36.1
 
 ### Fix

@@ -1671,6 +1671,10 @@ export interface ReconFindingInfo {
   description?: string
   fix?: string
   kind: string
+  /** Confirmed: the problem itself was seen. Possible: the evidence points at it but does not prove it. */
+  confidence?: 'confirmed' | 'possible'
+  /** The request, the size and fingerprint of the answer, and what in it proves the finding. */
+  proof?: { request: string; reproduce: string; status: number; contentType?: string; bytes: number; sha256: string; at: string; shows: string[] }
   verdict?: 'confirmed' | 'false-positive'
   aiNote?: string
 }
