@@ -142,7 +142,7 @@ describe('Hosting and integrations', () => {
 
 describe('Skills', () => {
   it('has 29 skills of its own, and the review plan names real ones', () => {
-    expect(Object.keys(SKILLS)).toHaveLength(41)
+    expect(Object.keys(SKILLS)).toHaveLength(43)
     for (const n of ['audit-context', 'entry-points', 'variant-analysis', 'false-positive-check', 'change-review', 'insecure-defaults', 'sharp-edges', 'threat-model', 'fix-verification']) expect(SKILLS[n], n).toBeTruthy()
   })
   it('loads only the listed packs, and only their security plugins', () => {
