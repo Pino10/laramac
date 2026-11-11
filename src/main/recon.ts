@@ -237,13 +237,13 @@ export function applyVerdicts(report: string, findings: ReconFindingInfo[]): voi
 
 async function aiReport(result: ReconResult, reviewer: ReconRequest['reviewer'], cwd: string, r: { children: Set<ReturnType<typeof spawn>> }, onLine: (t: string) => void): Promise<string> {
   const prompt = reconPrompt(result)
-  if (reviewer === 'model') return chatWithLlm([{ role: 'system', content: skillText(['recon-methodology', 'js-recon', 'attack-surface-report']) }, { role: 'user', content: prompt }], 20 * 60_000)
+  if (reviewer === 'model') return chatWithLlm([{ role: 'system', content: skillText(['untrusted-content-guard', 'recon-methodology', 'js-recon', 'attack-surface-report']) }, { role: 'user', content: prompt }], 20 * 60_000)
   const id = reviewer as ReviewerId
   if (id === 'coderabbit') throw new Error('CodeRabbit reviews code, not recon. Choose another AI.')
   const bin = findCli(id === 'claude-local' || id === 'claude' ? ['claude'] : [id])
   if (!bin) throw new Error(`${REVIEWER_NAMES[id]} is not installed.`)
   const st = getSettings()
-  const method = id === 'claude' ? '' : `\n\nMethod:\n${skillText(['recon-methodology', 'js-recon', 'attack-surface-report'], [join(mySkillsDir(), 'skills')])}`
+  const method = id === 'claude' ? '' : `\n\nMethod:\n${skillText(['untrusted-content-guard', 'recon-methodology', 'js-recon', 'attack-surface-report'], [join(mySkillsDir(), 'skills')])}`
   if (id === 'claude-local') {
     const ctx = await ensureLmContext(st.llm.baseUrl, st.llm.model)
     if (!ctx.ok) throw new Error(ctx.note)
