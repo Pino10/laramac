@@ -6,10 +6,11 @@
  * reads version numbers. An update installs the new build next to your data, restarts the
  * database if it was running, and never touches the data folders.
  */
-import type { UpdateItem } from '../shared/types'
+import type { SwapChoice, UpdateItem } from '../shared/types'
+import { getSettings, setSettings } from './settings'
 import { compareVersions, fetchPostgresVersions, findMysqlBuilds, latestMongodb, minorOf } from './versions'
-import { activeMysql, installMysqlBuild } from './svc/mysql'
-import { activePostgres, installPostgresVersion } from './svc/postgres'
+import { activeMysql, installedMysqlVersions, installMysqlBuild } from './svc/mysql'
+import { activePostgres, installedPostgres, installPostgresVersion } from './svc/postgres'
 import { mongodb } from './svc/mongodb'
 import { isNewer, jumpOf, newestInLine } from './updates'
 
@@ -27,7 +28,9 @@ export async function checkDatabases(): Promise<{ items: UpdateItem[]; notes: st
   const my = activeMysql()
   if (my) {
     try {
-      const next = newestInLine(my, (await findMysqlBuilds()).map((b) => b.version), 2)
+      // A newer build that is already installed (but not in use) counts as installed: it is switched to on Packages, not downloaded again.
+      const have = newestInLine(my, installedMysqlVersions(), 2) ?? my
+      const next = newestInLine(have, (await findMysqlBuilds()).map((b) => b.version), 2)
       if (next) items.push({ id: 'db:mysql', group: 'database', name: 'MySQL', current: my, latest: next, detail: `Newest ${minorOf(my)} release from Oracle. Your databases are not touched. MySQL restarts if it was running.`, jump: 'patch' })
     } catch {
       notes.push('MySQL could not be checked.')
@@ -37,8 +40,9 @@ export async function checkDatabases(): Promise<{ items: UpdateItem[]; notes: st
   if (pg) {
     try {
       const major = pg.split('.')[0]
+      const have = newestInLine(pg, installedPostgres(), 1) ?? pg
       const next = (await fetchPostgresVersions())[major]
-      if (next && isNewer(pg, next) && next.split('.')[0] === major) items.push({ id: 'db:postgres', group: 'database', name: 'PostgreSQL', current: pg, latest: next, detail: `Newest ${major}.x release. Your databases are not touched. PostgreSQL restarts if it was running.`, jump: jumpOf(pg, next) })
+      if (next && isNewer(have, next) && next.split('.')[0] === major) items.push({ id: 'db:postgres', group: 'database', name: 'PostgreSQL', current: pg, latest: next, detail: `Newest ${major}.x release. Your databases are not touched. PostgreSQL restarts if it was running.`, jump: jumpOf(pg, next) })
     } catch {
       notes.push('PostgreSQL could not be checked.')
     }
@@ -55,40 +59,41 @@ export async function checkDatabases(): Promise<{ items: UpdateItem[]; notes: st
   return { items, notes }
 }
 
-export async function updateDatabase(id: string, update: Progress, ctl: Controller): Promise<void> {
+/**
+ * Installs the newer build next to the one in use. What runs does not change: the person is asked
+ * whether to switch, so an update never swaps a database under a running project. MongoDB keeps one
+ * folder, so it is replaced in place and restarted.
+ */
+export async function updateDatabase(id: string, update: Progress, ctl: Controller): Promise<SwapChoice | null> {
   const name = id.slice(3) as 'mysql' | 'postgres' | 'mongodb'
   if (!['mysql', 'postgres', 'mongodb'].includes(name)) throw new Error('Laramac cannot update that database by itself.')
-  const was = ctl.running(name)
   if (name === 'mysql') {
     const cur = activeMysql()
     if (!cur) throw new Error('MySQL is not installed.')
     const builds = await findMysqlBuilds()
-    const next = newestInLine(cur, builds.map((b) => b.version), 2)
+    const next = newestInLine(newestInLine(cur, installedMysqlVersions(), 2) ?? cur, builds.map((b) => b.version), 2)
     const build = builds.find((b) => b.version === next)
     if (!build) throw new Error('MySQL is already up to date.')
-    if (was) await ctl.stop(name)
-    try {
-      await installMysqlBuild(build, update)
-    } finally {
-      if (was) await ctl.start(name)
-    }
-  } else if (name === 'postgres') {
+    // Keep running exactly what is running now, even when the setting was "newest".
+    if (getSettings().mysqlVersion === 'latest') setSettings({ mysqlVersion: cur })
+    await installMysqlBuild(build, update)
+    return { id: `mysql:${build.version}`, name: 'MySQL', from: cur, to: build.version, sameData: minorOf(cur) === minorOf(build.version) }
+  }
+  if (name === 'postgres') {
     const cur = activePostgres()
     if (!cur) throw new Error('PostgreSQL is not installed.')
     const next = (await fetchPostgresVersions())[cur.split('.')[0]]
-    if (!next || compareVersions(next, cur) <= 0) throw new Error('PostgreSQL is already up to date.')
-    if (was) await ctl.stop(name)
-    try {
-      await installPostgresVersion(next, update)
-    } finally {
-      if (was) await ctl.start(name)
-    }
-  } else {
-    if (was) await ctl.stop(name)
-    try {
-      await mongodb.install()
-    } finally {
-      if (was) await ctl.start(name)
-    }
+    if (!next || compareVersions(next, newestInLine(cur, installedPostgres(), 1) ?? cur) <= 0) throw new Error('PostgreSQL is already up to date.')
+    if (getSettings().postgresMajor === 'latest' || !getSettings().postgresMajor.includes('.')) setSettings({ postgresMajor: cur })
+    await installPostgresVersion(next, update)
+    return { id: `postgres:${next}`, name: 'PostgreSQL', from: cur, to: next, sameData: cur.split('.')[0] === next.split('.')[0] }
   }
+  const was = ctl.running('mongodb')
+  if (was) await ctl.stop('mongodb')
+  try {
+    await mongodb.install()
+  } finally {
+    if (was) await ctl.start('mongodb')
+  }
+  return null
 }

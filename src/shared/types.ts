@@ -779,6 +779,8 @@ export interface PackageInfo {
   name: string
   detail: string
   bytes: number
+  /** The version Laramac runs (databases) or uses by default (PHP). Only set where several can be installed. */
+  active?: boolean
 }
 
 export interface DatabaseInfo {
@@ -1515,6 +1517,7 @@ export interface Channels {
   'mcp:connect': { args: []; result: McpStatus }
   'packages:list': { args: []; result: PackageInfo[] }
   'packages:remove': { args: [string]; result: PackageInfo[] }
+  'packages:use': { args: [string]; result: PackageInfo[] }
   'db:list': { args: []; result: DatabaseInfo[] }
   'db:create': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }
   'db:drop': { args: ['mysql' | 'mariadb', string]; result: DatabaseInfo[] }
@@ -1615,10 +1618,22 @@ export interface UpdatesReport {
   notes: string[]
 }
 
+/** A newer version was installed next to the one in use: ask whether to switch. */
+export interface SwapChoice {
+  /** The package to switch to, as `packages:use` takes it: mysql:8.4.8, postgres:17.5.0 or php:8.5. */
+  id: string
+  name: string
+  from: string | null
+  to: string
+  /** Both versions keep their databases in the same data folder, so switching back and forth is safe. */
+  sameData: boolean
+}
+
 export interface UpdatesApplied {
   done: string[]
   failed: { id: string; error: string }[]
   report: UpdatesReport
+  swaps?: SwapChoice[]
 }
 
 export interface SiteNodeInfo {

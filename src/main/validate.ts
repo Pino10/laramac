@@ -109,7 +109,7 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
         out.mysqlVersion = typeof value === 'string' && (value === 'latest' || /^\d{1,2}\.\d{1,2}\.\d{1,3}$/.test(value)) ? value : fail('Use latest, or a MySQL version like 8.4.11.')
         break
       case 'postgresMajor':
-        out.postgresMajor = typeof value === 'string' && (value === 'latest' || /^\d{1,2}$/.test(value)) ? value : fail('Use latest, or a PostgreSQL major version like 17.')
+        out.postgresMajor = typeof value === 'string' && (value === 'latest' || /^\d{1,2}(\.\d{1,3}){0,2}$/.test(value)) ? value : fail('Use latest, a PostgreSQL major version like 17, or a full version like 17.5.0.')
         break
       case 'httpPort':
       case 'httpsPort':

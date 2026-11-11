@@ -1,3 +1,13 @@
+## New in 0.38.1
+
+### Switching versions, with nothing deleted
+- Every installed MySQL, PostgreSQL and PHP version on the Packages page now says **In use**, and the others have a **Use this one** (or **Make default**) button. Both versions and all your data stay where they are, so you can switch back any time.
+- After an update installs a newer MySQL or PostgreSQL next to the one in use, Laramac asks: **Use the new one now**, or **Keep the old one**. The same question appears when a new PHP line is installed. Before, the update installed the new version but kept running the old one, and the old one kept showing an update.
+- A build that is already installed is no longer offered as an update again.
+- An update that finishes but leaves the same version installed is now reported as a problem instead of looking done.
+- When php.net has a newer PHP than the ready-made builds, Updates and Packages now say so instead of showing nothing.
+- PostgreSQL can stay on an exact version, not only a major version.
+
 ## New in 0.38.0
 
 ### Updates you can actually see

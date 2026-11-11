@@ -63,9 +63,9 @@ import { owaspChecklist } from './seckit/owasp'
 import * as project from './project'
 import * as cli from './cli'
 import { dbPassword, getSecret, setSecret, setSecretsCrypto } from './secrets'
-import { createPgDatabase } from './svc/postgres'
+import { activePostgres, createPgDatabase, installedPostgres } from './svc/postgres'
 import { checkDatabases, updateDatabase } from './dbupdates'
-import { compareVersions } from './versions'
+import { clearVersionCache, compareVersions } from './versions'
 import { runQuiet } from './starterrun'
 import { runtimeEnv, runtimesRoot } from './runtimes'
 import { normalize } from 'path'
@@ -76,8 +76,8 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { CommandsInfo, ProfilerInfo, SiteInfo as SiteInfoT, OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
-import { activeMysql, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
+import type { CommandsInfo, ProfilerInfo, SiteInfo as SiteInfoT, OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, SwapChoice, PackageInfo, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import { activeMysql, installedMysqlVersions, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
 import type { ImportAnswers } from '../shared/types'
@@ -1293,6 +1293,8 @@ function registerIpc(): void {
       listVersions()
         .then((list) => {
           for (const v of list) if (v.installed && v.updateAvailable) items.push({ id: `php:${v.minor}`, group: 'php', name: `PHP ${v.minor}`, current: v.installed, latest: v.latest, detail: 'Security and bug fixes. Sites on this version restart with it.', jump: 'patch' })
+          // php.net can be ahead of the ready-made builds: say so instead of showing nothing.
+          for (const v of list) if (v.installed && !v.updateAvailable && v.upstream && compareVersions(v.upstream, v.installed) > 0) notes.push(`PHP ${v.minor}: php.net has ${v.upstream}, but no ready-made build of it is published yet. It shows here as soon as one is.`)
           // A newer PHP line than any you have (for example 8.6 when you have 8.5): offered as an install, your current one stays.
           const have = list.filter((v) => v.installed).map((v) => v.minor)
           const top = have.sort((a, b) => compareVersions(b, a))[0]
@@ -1450,10 +1452,17 @@ function registerIpc(): void {
       await runQuiet([...comp, ...args, '--no-interaction', '--no-progress'], site.path, env, line, 15 * 60_000)
     }
   }
+  /** Newer versions installed next to the one in use during this apply: the person is asked about each. */
+  let swaps: SwapChoice[] = []
   const applyOne = async (id: string, consent: boolean, update: (p: number | null, l?: string) => void): Promise<void> => {
     if (id.startsWith('php:')) {
-      await installMinor(assertMinor(id.slice(4)))
+      const minor = assertMinor(id.slice(4))
+      const before = defaultMinor()
+      const had = installedMinors().includes(minor)
+      await installMinor(minor)
       refreshShims()
+      // A new PHP line is added next to your default: ask before it becomes the default.
+      if (!had && before && before !== minor) swaps.push({ id: `php:${minor}`, name: 'PHP', from: before, to: minor, sameData: true })
     } else if (id === 'node:main') {
       await nodes.updateMainNode(update)
       refreshRuntimeShims()
@@ -1486,7 +1495,8 @@ function registerIpc(): void {
         await services.start(b.service)
       }
     } else if (id.startsWith('db:')) {
-      await updateDatabase(id, update, { running: (n) => services.list().find((x) => x.id === n)?.status === 'running', stop: (n) => services.stop(n), start: (n) => services.start(n) })
+      const swap = await updateDatabase(id, update, { running: (n) => services.list().find((x) => x.id === n)?.status === 'running', stop: (n) => services.stop(n), start: (n) => services.start(n) })
+      if (swap) swaps.push(swap)
     } else if (id.startsWith('site:')) {
       if (!consent) throw new ValidationError('Updating a site\'s packages runs its own install scripts. Agree to that first.')
       await updateSitePackages(siteByName(id.slice(5)), {}, update)
@@ -1505,6 +1515,7 @@ function registerIpc(): void {
     const done: string[] = []
     const failed: { id: string; error: string }[] = []
     const list = ids.filter((i) => i !== 'laramac')
+    swaps = []
     await jobs.run(`Updating ${list.length} ${list.length === 1 ? 'thing' : 'things'}`, async (update) => {
       for (const [n, id] of list.entries()) {
         update(Math.round((n / list.length) * 100), `Updating ${lastReport?.items.find((x) => x.id === id)?.name ?? id}`)
@@ -1519,8 +1530,18 @@ function registerIpc(): void {
     if (done.length) activity.push('success', `Updated ${done.length} ${done.length === 1 ? 'thing' : 'things'}`, failed.length ? `${failed.length} could not be updated.` : 'Everything you chose is up to date.')
     if (failed.length) activity.push('error', `${failed.length} ${failed.length === 1 ? 'update' : 'updates'} failed`, failed.map((f) => `${f.id}: ${f.error}`).join('\n').slice(0, 400))
     notifySitesChanged()
+    clearVersionCache()
     const report = await collectUpdates(false)
-    return { done, failed, report }
+    // An update that is still offered after it ran did not change what is installed: say so instead of looking done.
+    for (const id of [...done]) {
+      if (id.startsWith('site:') || id.startsWith('db:')) continue
+      const left = report.items.find((x) => x.id === id)
+      if (left && left.current) {
+        done.splice(done.indexOf(id), 1)
+        failed.push({ id, error: `${left.name} is still ${left.current} after the update: the download source offers ${left.latest} but served the same build. Try again later.` })
+      }
+    }
+    return { done, failed, report, swaps }
   })
   handle('site:update-packages', async (name, o) => {
     const site = siteByName(name)
@@ -3268,7 +3289,40 @@ function registerIpc(): void {
   })
 
   // ---- Packages
-  handle('packages:list', () => listPackages())
+  const packagesNow = async (): Promise<PackageInfo[]> => {
+    const my = activeMysql()
+    const pg = activePostgres()
+    const php = defaultMinor()
+    return (await listPackages()).map((p) => (p.id.startsWith('mysql:') ? { ...p, active: p.detail === my } : p.id.startsWith('postgres:') ? { ...p, active: p.detail === pg } : p.id.startsWith('php:') ? { ...p, active: p.id.slice(4) === php } : p))
+  }
+  handle('packages:list', () => packagesNow())
+  // Switching which installed version runs. Nothing is deleted: both versions and all data stay where they are.
+  handle('packages:use', async (id) => {
+    const m = /^(mysql|postgres|php):([\d.]+)$/.exec(String(id))
+    if (!m) throw new ValidationError('Choose an installed version.')
+    const [, kind, version] = m
+    if (kind === 'php') {
+      const minor = assertMinor(version)
+      if (!installedMinors().includes(minor)) throw new ValidationError(`PHP ${minor} is not installed.`)
+      setSettings({ defaultPhp: minor })
+      refreshShims()
+      notifySitesChanged()
+      activity.push('success', `PHP ${minor} is now the default`, 'Sites that pick their own PHP version keep it.')
+      return packagesNow()
+    }
+    const svc = kind === 'mysql' ? 'mysql' : 'postgres'
+    if (!(kind === 'mysql' ? installedMysqlVersions() : installedPostgres()).includes(version)) throw new ValidationError(`${kind === 'mysql' ? 'MySQL' : 'PostgreSQL'} ${version} is not installed.`)
+    const was = services.list().find((x) => x.id === svc)?.status === 'running'
+    if (was) await services.stop(svc)
+    try {
+      setSettings(kind === 'mysql' ? { mysqlVersion: version } : { postgresMajor: version })
+      refreshShims()
+    } finally {
+      if (was) await services.start(svc)
+    }
+    activity.push('success', `${kind === 'mysql' ? 'MySQL' : 'PostgreSQL'} ${version} is in use`, 'Nothing was deleted. The other version is still installed and your databases are untouched.')
+    return packagesNow()
+  })
   handle('packages:remove', async (id) => {
     const pid = String(id)
     if (!/^(php|mysql|postgres|dir|bin|brew|cache):[A-Za-z0-9._-]{1,40}$/.test(pid)) throw new ValidationError('Unknown package.')
@@ -3283,7 +3337,7 @@ function registerIpc(): void {
     })
     activity.push('info', 'Removed a package', pid.replace(':', ' '))
     send('services:changed', services.list())
-    return listPackages()
+    return packagesNow()
   })
 
   // ---- Databases (MySQL and MariaDB)

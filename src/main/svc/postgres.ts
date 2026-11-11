@@ -53,8 +53,9 @@ export function installedPostgres(): string[] {
 /** The installed build matching the chosen major version, else the newest installed. */
 export function activePostgres(): string | null {
   const installed = installedPostgres()
-  const major = getSettings().postgresMajor
-  return (major !== 'latest' && installed.find((v) => v.split('.')[0] === major)) || installed[0] || null
+  const wanted = getSettings().postgresMajor
+  // A full version (17.5.0) keeps exactly that build; a major (17) takes the newest build of it.
+  return (wanted !== 'latest' && (installed.find((v) => v === wanted) ?? installed.find((v) => v.split('.')[0] === wanted.split('.')[0]))) || installed[0] || null
 }
 
 function run(command: string, args: string[]): Promise<void> {
@@ -78,7 +79,7 @@ export const postgres: ServiceImpl = {
     const wanted = getSettings().postgresMajor
     const versions = await fetchPostgresVersions()
     const newestMajor = Object.keys(versions).sort((a, b) => Number(b) - Number(a))[0]
-    const major = wanted === 'latest' ? newestMajor : wanted
+    const major = wanted === 'latest' ? newestMajor : wanted.split('.')[0]
     const version = versions[major]
     if (!version) {
       throw new Error(`PostgreSQL ${major} is not available. Available: ${Object.keys(versions).join(', ')}.`)

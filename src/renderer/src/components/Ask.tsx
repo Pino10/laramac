@@ -6,6 +6,8 @@ interface AskOptions {
   initial?: string
   secret?: boolean
   confirm?: string
+  /** The text of the other button, which answers "no". Default: Cancel. */
+  cancel?: string
   danger?: boolean
   /** Ask a yes/no question instead of asking for text. */
   yesNo?: boolean
@@ -62,7 +64,7 @@ export function useAsk(): [(o: AskOptions) => Promise<string | null>, React.JSX.
         )}
         <div className="end">
           <button className="btn" onClick={() => finish(null)}>
-            Cancel
+            {state.cancel ?? 'Cancel'}
           </button>
           <button className={state.danger ? 'btn btn-danger' : 'btn btn-primary'} autoFocus={state.yesNo} onClick={() => finish(state.yesNo ? 'yes' : state.value)}>
             {state.confirm ?? 'OK'}

@@ -4,6 +4,8 @@ import type { ReleaseNote, UpdateItem } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
 import Notes from '../components/Notes'
+import { useAsk } from '../components/Ask'
+import { offerSwaps } from '../components/swap'
 
 const GROUPS: { id: UpdateItem['group']; title: string }[] = [
   { id: 'php', title: 'PHP' },
@@ -38,6 +40,7 @@ function interests(o: { kinds: string[]; services: string[]; php: string[]; hasN
 
 export default function Updates(): React.JSX.Element {
   const { appInfo, update, setUpdate, updates, setUpdates, settings, updateSettings, act, busy, jobs, notify, sites, services, php, tools } = useApp()
+  const [ask, askDialog] = useAsk()
   const api = window.laramac
   const [notes, setNotes] = useState<ReleaseNote[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -87,6 +90,8 @@ export default function Updates(): React.JSX.Element {
       setPicked(null)
       setConsent(false)
       if (r.failed.length) notify({ kind: 'error', text: r.failed.map((f) => f.error).join(' ') })
+      // A newer version sits next to the one in use: switch, or keep.
+      await offerSwaps(r.swaps, ask, (id) => api.invoke('packages:use', id))
     }
   }
 
@@ -240,6 +245,7 @@ export default function Updates(): React.JSX.Element {
           Show older versions
         </button>
       )}
+      {askDialog}
     </>
   )
 }

@@ -5,6 +5,7 @@ import type { PackageInfo } from '@shared/types'
 import { useApp } from '../store'
 import { formatBytes, PageHead } from '../ui'
 import { useAsk } from '../components/Ask'
+import { offerSwaps } from '../components/swap'
 
 const GROUPS: { id: PackageInfo['group']; title: string; note?: string }[] = [
   { id: 'php', title: 'PHP versions' },
@@ -24,9 +25,11 @@ export default function Packages(): React.JSX.Element {
   const update = async (u: UpdateItem): Promise<void> => {
     const r = await act(`upd-${u.id}`, () => api.invoke('updates:apply', [u.id], false))
     if (r) {
-      notify(r.failed.length ? { kind: 'error', text: `${u.name}: ${r.failed[0].error}` } : { kind: 'info', text: `${u.name} is now ${u.latest}.` })
+      notify(r.failed.length ? { kind: 'error', text: `${u.name}: ${r.failed[0].error}` } : { kind: 'info', text: r.swaps?.length ? `${u.name} ${u.latest} is installed.` : `${u.name} is now ${u.latest}.` })
       setUpdates(r.report)
       load()
+      // A newer version sits next to the one in use: switch, or keep.
+      if (await offerSwaps(r.swaps, ask, (id) => act(`use-${id}`, () => api.invoke('packages:use', id)).then((x) => x && setItems(x)))) load()
     }
   }
   const api = window.laramac
@@ -55,6 +58,25 @@ export default function Packages(): React.JSX.Element {
 
   const total = (items ?? []).reduce((n, p) => n + p.bytes, 0)
   const cache = (items ?? []).filter((p) => p.group === 'cache').reduce((n, p) => n + p.bytes, 0)
+
+  const use = async (p: PackageInfo): Promise<void> => {
+    const sameLine = p.group === 'database' && (items ?? []).some((x) => x.active && x.name === p.name && x.detail.split('.').slice(0, p.name === 'MySQL' ? 2 : 1).join('.') === p.detail.split('.').slice(0, p.name === 'MySQL' ? 2 : 1).join('.'))
+    const ok = await ask({
+      title: `Use ${p.name} ${p.detail}?`,
+      label:
+        p.group === 'php'
+          ? 'New sites and the terminal will use it. Sites that choose their own PHP version keep it. Nothing is deleted.'
+          : sameLine
+            ? 'Both versions use the same data, so your databases stay as they are. If it is running, it restarts for a moment. Nothing is deleted.'
+            : 'This version keeps its own data folder. Your databases in the other version are not deleted and come back when you switch back. If it is running, it restarts for a moment.',
+      yesNo: true,
+      confirm: 'Switch',
+      cancel: 'Keep as it is'
+    })
+    if (!ok) return
+    const next = await act(`use-${p.id}`, () => api.invoke('packages:use', p.id))
+    if (next) setItems(next)
+  }
 
   const remove = async (p: PackageInfo): Promise<void> => {
     const ok = await ask({
@@ -86,6 +108,8 @@ export default function Packages(): React.JSX.Element {
           <RefreshCw size={13} /> {busy.has('updates-check') ? 'Checking…' : 'Check for updates now'}
         </button>
       </div>
+
+      {(updates?.notes.length ?? 0) > 0 && <p className="hint">{updates!.notes.join(' ')}</p>}
 
       {fresh.length > 0 && (
         <section>
@@ -148,10 +172,17 @@ export default function Packages(): React.JSX.Element {
                     {LETTERS[p.group]}
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <strong>{p.name}</strong>
+                    <strong>
+                      {p.name} {p.active && <span className="tag tag-ok">In use</span>}
+                    </strong>
                     <small>{p.detail}</small>
                   </span>
                   <span className="hint" style={{ textAlign: 'right' }}>
+                    {p.active === false && (
+                      <button className="btn btn-sm" style={{ marginRight: 8 }} disabled={busy.has(`use-${p.id}`)} onClick={() => void use(p)}>
+                        {busy.has(`use-${p.id}`) ? 'Switching…' : p.group === 'php' ? 'Make default' : 'Use this one'}
+                      </button>
+                    )}
                     {(() => {
                       const u = updateFor(p)
                       if (u)
