@@ -74,6 +74,9 @@ describe('0.17 import for every project type', () => {
       'public/index.php': ''
     })
     execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo })
+    // A commit starts git's background maintenance, which creates and removes lock files while the import reads the folder.
+    execFileSync('git', ['config', 'maintenance.auto', 'false'], { cwd: repo })
+    execFileSync('git', ['config', 'gc.auto', '0'], { cwd: repo })
     execFileSync('git', ['add', '-A'], { cwd: repo })
     execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init'], { cwd: repo })
     // A local bare repo stands in for GitHub: inspectGit only takes https, so clone through a file path here.
