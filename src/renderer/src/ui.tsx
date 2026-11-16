@@ -143,8 +143,7 @@ export function CopyField({ value }: { value: string }): React.JSX.Element {
     <div className="copyfield no-drag">
       <span className="mono">{value}</span>
       <button
-        className="btn btn-quiet btn-icon"
-        style={{ height: 22, width: 22 }}
+        className="copy-btn"
         title={copied ? 'Copied' : 'Copy'}
         aria-label={`Copy ${value}`}
         onClick={() => {

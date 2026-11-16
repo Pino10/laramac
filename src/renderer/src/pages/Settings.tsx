@@ -7,73 +7,16 @@ import type { AppSettings, ResetOptions } from '@shared/types'
 import { useApp } from '../store'
 import { PageHead, Switch } from '../ui'
 
-function SiteNames(): React.JSX.Element | null {
-  const { sites, settings, act, busy, setSites, notify } = useApp()
-  const api = window.laramac
-  const [draft, setDraft] = useState<Record<string, string>>({})
-  if (!settings || sites.length === 0) return null
-  const save = async (name: string, aliases: string[]): Promise<void> => {
-    const next = await act(`alias-${name}`, () => api.invoke('sites:set-config', name, { aliases }))
-    if (next) {
-      setSites(next)
-      setDraft((d) => ({ ...d, [name]: '' }))
-    }
-  }
-  return (
-    <>
-      <h2 className="section-title">
-        Extra names for your sites <small>Any name works, like shop.local or api.shop.test. macOS asks for your password once to add it.</small>
-      </h2>
-      <div className="panel">
-        {sites.map((site) => {
-          const own = settings.siteConfig[site.name]?.aliases ?? []
-          const value = draft[site.name] ?? ''
-          return (
-            <div key={site.name} className="row alias-row">
-              <div className="row-main">
-                <div className="row-title">{site.name}</div>
-                <div className="alias-chips">
-                  <span className="chip-static">{site.domain}</span>
-                  {site.aliases
-                    .filter((a) => !own.includes(a))
-                    .map((a) => (
-                      <span key={a} className="chip-static">
-                        {a}
-                      </span>
-                    ))}
-                  {own.map((a) => (
-                    <span key={a} className="chip-own">
-                      {a}
-                      <button aria-label={`Remove ${a}`} onClick={() => save(site.name, own.filter((x) => x !== a))}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <form
-                className="alias-add"
-                onSubmit={async (e) => {
-                  e.preventDefault()
-                  const v = value.trim()
-                  if (!v) return
-                  await save(site.name, [...own, v])
-                  notify({ kind: 'info', text: `${site.name} now also opens at http://${v.toLowerCase()}` })
-                }}
-              >
-                <input className="input" placeholder="Add a name" value={value} onChange={(e) => setDraft((d) => ({ ...d, [site.name]: e.target.value }))} aria-label={`Extra name for ${site.name}`} />
-                <button className="btn btn-tonal btn-sm" disabled={!value.trim() || busy.has(`alias-${site.name}`)}>
-                  Add
-                </button>
-              </form>
-            </div>
-          )
-        })}
-      </div>
-      <p className="footnote">HTTPS covers your .{settings.tld} addresses. Extra names open over plain http.</p>
-    </>
-  )
-}
+/** One group of settings is shown at a time, so the page stays short. Searching looks in all of them. */
+export const SETTINGS_TABS: { id: string; label: string; sections: string[] }[] = [
+  { id: 'look', label: 'Appearance', sections: ['Appearance and alerts'] },
+  { id: 'sites', label: 'Sites and addresses', sections: ['Sites', 'Addresses'] },
+  { id: 'servers', label: 'Web servers', sections: ['Web servers', 'Downloads'] },
+  { id: 'connect', label: 'Connections', sections: ['Connections', 'Integrations'] },
+  { id: 'editor', label: 'Editor and Terminal', sections: ['Terminal and editor'] },
+  { id: 'updates', label: 'Updates and reset', sections: ['Updates', 'Start over'] }
+]
+export const settingsTabOf = (section: string): string => SETTINGS_TABS.find((t) => t.sections.includes(section.trim()))?.id ?? 'sites'
 
 export default function Settings(): React.JSX.Element {
   const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify, setTourOpen } = useApp()
@@ -89,12 +32,27 @@ export default function Settings(): React.JSX.Element {
     }
   })
   const [hits, setHits] = useState<number | null>(null)
+  const [tab, setTab] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('laramac.settingsTab') ?? 'look'
+    } catch {
+      return 'look'
+    }
+  })
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('laramac.settingsTab', tab)
+    } catch {
+      // Not remembered; it still works.
+    }
+  }, [tab])
   const body = useRef<HTMLDivElement>(null)
   // Shows only the settings that match, and the sections they are in.
   useEffect(() => {
     const root = body.current
     if (!root) return
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const apply = (): void => {
     const rows = [...root.querySelectorAll<HTMLElement>('.row, .alias-site')]
     let n = 0
     for (const r of rows) {
@@ -113,7 +71,7 @@ export default function Settings(): React.JSX.Element {
       if (!title) return
       const own = words.every((w) => (title!.textContent ?? '').toLowerCase().includes(w))
       const any = blocks.some((b) => !b.querySelector('.row, .alias-site') || [...b.querySelectorAll<HTMLElement>('.row, .alias-site')].some((r) => r.style.display !== 'none'))
-      const keep = !words.length || own || (any && blocks.some((b) => [...b.querySelectorAll<HTMLElement>('.row, .alias-site')].some((r) => r.style.display !== 'none')))
+      const keep = !words.length ? settingsTabOf(title.textContent ?? '') === tab : own || (any && blocks.some((b) => [...b.querySelectorAll<HTMLElement>('.row, .alias-site')].some((r) => r.style.display !== 'none')))
       if (own && words.length) for (const b of blocks) for (const r of b.querySelectorAll<HTMLElement>('.row, .alias-site')) r.style.display = ''
       title.style.display = keep ? '' : 'none'
       for (const b of blocks) b.style.display = keep ? '' : 'none'
@@ -127,7 +85,13 @@ export default function Settings(): React.JSX.Element {
     }
     settle()
     setHits(words.length ? n : null)
-  }, [q, settings])
+    }
+    apply()
+    // Some cards load a moment later (Laramac Code, integrations). They join the right tab when they arrive.
+    const mo = new MutationObserver(apply)
+    mo.observe(root, { childList: true })
+    return () => mo.disconnect()
+  }, [q, settings, tab])
   if (!settings) return <></>
   const other = settings.primaryServer === 'apache' ? 'Nginx' : 'Apache'
   const main = settings.primaryServer === 'apache' ? 'Apache' : 'Nginx'
@@ -145,22 +109,16 @@ export default function Settings(): React.JSX.Element {
         )}
       </div>
       {hits === 0 && <div className="panel pad hint">No setting matches “{q}”. Try another word, or look under AI tools and Languages.</div>}
-      <nav className="settings-jump" aria-label="Sections" style={{ display: q ? 'none' : undefined }}>
-        {['Sites', 'Addresses', 'Web servers', 'Downloads', 'Connections', 'Terminal and editor', 'Integrations', 'Appearance and alerts', 'Updates', 'Start over'].map((t) => (
-          <button
-            key={t}
-            className="chip-ask"
-            onClick={() => [...document.querySelectorAll('h2.section-title')].find((h) => h.textContent?.trim() === t)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          >
-            {t}
+      <div className="seg-tabs settings-tabs" role="tablist" aria-label="Settings groups" style={{ display: q ? 'none' : undefined }}>
+        {SETTINGS_TABS.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+            {t.label}
           </button>
         ))}
-      </nav>
+      </div>
       <div ref={body} className="settings-body">
 
-      <h2 className="section-title" style={{ marginTop: 0 }}>
-        Sites
-      </h2>
+      <h2 className="section-title">Sites</h2>
       <div className="panel">
         <div className="row row-set">
           <div className="row-main">
@@ -242,7 +200,6 @@ export default function Settings(): React.JSX.Element {
           <span className="tag tag-ok">Always on</span>
         </div>
       </div>
-      <SiteNames />
 
       <h2 className="section-title">Web servers</h2>
       <div className="panel">
@@ -299,7 +256,7 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <h2 className="section-title">Terminal and editor</h2>
-      <Family />
+      <Family only="macsec" />
       <Tools part="more" />
 
       <h2 className="section-title">Appearance and alerts</h2>
@@ -386,7 +343,7 @@ export default function Settings(): React.JSX.Element {
         <div className="row row-set">
           <div className="row-main">
             <div className="row-title">Font</div>
-            <div className="row-sub">The app’s text. Laramac Code’s font is under Terminal and editor.</div>
+            <div className="row-sub">The app’s text. Laramac Code’s font is on the Editor and Terminal tab.</div>
           </div>
           <div className="seg" role="radiogroup" aria-label="Font">
             {(

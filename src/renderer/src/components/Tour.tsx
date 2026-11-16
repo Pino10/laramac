@@ -14,64 +14,30 @@ interface Step {
 export const TOUR: Step[] = [
   {
     title: 'Welcome to Laramac',
-    body: 'A one-minute tour of where everything is. You can leave at any time and replay it from Settings or the command bar.'
+    body: 'Five quick stops. You can leave at any time and replay this from Settings or the command bar.'
   },
   {
     target: '[data-tour="dashboard"]',
     page: 'dashboard',
     title: 'Overview',
-    body: 'Your whole stack on one screen. Start all turns on the web server, PHP and databases. Green means running; if something fails, the reason shows right there.'
+    body: 'Your whole stack on one screen. Green means running. If something fails, the reason and the fix show right there.'
   },
   {
     target: '[data-tour="sites"]',
     page: 'sites',
     title: 'Sites',
-    body: 'Every folder in your www folder is a site at name.test. Each row has buttons to open it, edit it, push it to GitHub, deploy it, snapshot it, and the stethoscope, which asks your local AI what is wrong.'
+    body: 'Every folder in your projects folder is a site at name.test. Click a site for its commands, logs, database, security review and deploy.'
   },
   {
     target: '[data-tour="starters"]',
     page: 'starters',
-    title: 'Starters',
-    body: 'New projects in any language: React, Next.js, Laravel, Django, C#, Go, Rust, Swift and more. Laramac installs what is missing and starts it at name.test.'
-  },
-  {
-    target: '[data-tour="languages"]',
-    page: 'languages',
-    title: 'Languages and databases',
-    body: 'PHP, Node.js and every other language, each with the versions you want. Open PHP for its versions, settings and tools. Databases has MySQL, PostgreSQL, Redis and the rest, with backups, imports and phpMyAdmin.'
-  },
-  {
-    target: '[data-tour="servers"]',
-    page: 'servers',
-    title: 'Servers',
-    body: 'Save your hosting servers once, then open a terminal, browse files over SFTP or FTP, and deploy a site in one click.'
-  },
-  {
-    target: '[data-tour="api"]',
-    page: 'api',
-    title: 'API client and GitHub',
-    body: 'Test APIs like in Postman, import your Postman collections, and manage your GitHub repositories without leaving the app.'
-  },
-  {
-    target: '[data-tour="security"]',
-    page: 'security',
-    title: 'Security',
-    body: 'Have Claude Code or your own model review the code of a site, a GitHub repository or an Azure DevOps repository, and scan your sites with Nuclei for known problems.'
-  },
-  {
-    target: '[data-tour="tools"]',
-    page: 'tools',
-    title: 'Tools and AI',
-    body: 'Claude Code, Codex, OpenCode and local models like LM Studio, Ollama and vMLX. Each card shows whether it is working and has a Test button.'
+    title: 'New project',
+    body: 'Start in any language: Laravel, WordPress, Next.js, Django, Go and more. Laramac installs what is missing.'
   },
   {
     target: '.search-pill',
     title: 'Do anything with ⌘K',
-    body: 'Type what you want: “new react”, “start mysql”, “php 8.4”, a site name. It finds the action and runs it.'
-  },
-  {
-    title: 'You are set',
-    body: 'Laramac also lives in the menu bar, where you can start services and dev servers and open sites without opening this window. Enjoy building.'
+    body: 'Type what you want: “new react”, “start mysql”, “php 8.4”, a site name. Laramac also lives in the menu bar. Enjoy building.'
   }
 ]
 
@@ -81,10 +47,7 @@ export default function Tour(): React.JSX.Element | null {
   const [rect, setRect] = useState<DOMRect | null>(null)
   const step = TOUR[i]
 
-  // Opens by itself the first time.
-  useEffect(() => {
-    if (settings && !settings.tourDone) setTourOpen(true)
-  }, [settings?.tourDone]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The tour never opens on its own: the Overview offers it once, and Settings and the command bar replay it.
 
   useEffect(() => {
     if (tourOpen && step?.page) setPage(step.page)

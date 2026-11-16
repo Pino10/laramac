@@ -22,7 +22,7 @@ import {
 import { useApp, type Page } from '../store'
 import icon from '../assets/icon-128.png'
 
-type Item = { id: Page; label: string; icon: React.ReactNode }
+type Item = { id: Page; label: string; icon: React.ReactNode; short?: string }
 type Group = { id: string; label: string | null; items: Item[] }
 
 const I = 17
@@ -34,7 +34,7 @@ export const GROUPS: Group[] = [
     items: [
       { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={I} /> },
       { id: 'sites', label: 'Sites', icon: <Globe size={I} /> },
-      { id: 'starters', label: 'Starter', icon: <Rocket size={I} /> },
+      { id: 'starters', label: 'New project', icon: <Rocket size={I} /> },
       { id: 'code', label: 'Laramac Code', icon: <SquareCode size={I} /> }
     ]
   },
@@ -73,7 +73,7 @@ export const GROUPS: Group[] = [
 ]
 
 const FOOT: Item[] = [
-  { id: 'packages', label: 'Packages and disk space', icon: <Package size={16} /> },
+  { id: 'packages', label: 'Packages and disk space', short: 'Packages', icon: <Package size={16} /> },
   { id: 'updates', label: 'Updates', icon: <ArrowDownToLine size={16} /> },
   { id: 'settings', label: 'Settings', icon: <SettingsIcon size={16} /> }
 ]
@@ -213,6 +213,7 @@ export default function Sidebar(): React.JSX.Element {
               onClick={() => setPage(it.id)}
             >
               {it.icon}
+              <span className="foot-word nav-label">{it.short ?? it.label}</span>
               {it.id === 'updates' && (update || !!updates?.items.length) && <span className="nav-dot" aria-label="Updates available" />}
             </button>
           ))}

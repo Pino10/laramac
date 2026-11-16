@@ -20,7 +20,7 @@ export default function SkillPacks(): React.JSX.Element {
       <div className="packs-head">
         <div className="row-title">Skills from security teams</div>
         <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-          Free skill sets from Trail of Bits, Sentry, Cloudflare, Laravel and Anthropic, kept in Laramac’s folder and loaded into every Claude Code review next to Laramac’s own 29 skills. Reviews stay read-only whatever a skill asks for.
+          Free skill sets from Trail of Bits, Sentry, Cloudflare, Laravel and Anthropic, kept in Laramac’s folder and loaded into every Claude Code review next to Laramac’s own skills. Reviews stay read-only whatever a skill asks for.
         </div>
         <div className="row-sub" style={{ whiteSpace: 'normal', marginTop: 6 }}>
           {updates.some((u) => u.available) ? `${updates.filter((u) => u.available).length} newer ${updates.filter((u) => u.available).length === 1 ? 'version is' : 'versions are'} available.` : 'Everything is up to date.'}{' '}
@@ -68,6 +68,38 @@ export default function SkillPacks(): React.JSX.Element {
           </button>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** Asked once: nothing is downloaded from other teams until you say yes. */
+export function PacksAsk({ onDone }: { onDone?: () => void }): React.JSX.Element | null {
+  const { act, busy } = useApp()
+  const api = window.laramac
+  const [asked, setAsked] = useState<'yes' | 'no' | null | undefined>(undefined)
+  useEffect(() => {
+    void api.invoke('packs:asked').then(setAsked)
+  }, [api])
+  if (asked !== null) return null
+  const answer = async (yes: boolean): Promise<void> => {
+    setAsked(yes ? 'yes' : 'no')
+    await act('packs-answer', () => api.invoke('packs:answer', yes))
+    onDone?.()
+  }
+  return (
+    <div className="panel pad packs-ask">
+      <div className="row-main">
+        <div className="row-title">Add free skill sets from security teams?</div>
+        <div className="row-sub wrap">
+          Trail of Bits, Sentry, Cloudflare, Laravel and Anthropic publish review skills. They make reviews more thorough. They are downloaded from GitHub into Laramac’s folder, and reviews stay read-only whatever a skill asks for. You can add or remove each one later.
+        </div>
+      </div>
+      <button className="btn" disabled={busy.has('packs-answer')} onClick={() => void answer(false)}>
+        Not now
+      </button>
+      <button className="btn btn-primary" disabled={busy.has('packs-answer')} onClick={() => void answer(true)}>
+        Add them
+      </button>
     </div>
   )
 }

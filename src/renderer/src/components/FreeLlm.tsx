@@ -45,21 +45,21 @@ export default function FreeLlm(): React.JSX.Element {
         {s && (
           <div className="cs-grid">
             <div className="cs-item" data-ok={s.hasKey}>
-              {s.hasKey ? <Check size={14} /> : <X size={14} />}
+              <span className={s.hasKey ? 'tag tag-ok' : 'tag'}>{s.hasKey ? <><Check size={11} /> Ready</> : 'Not set up'}</span>
               <div>
                 <code>Key</code>
                 <span>{s.hasKey ? 'Kept in the Keychain.' : 'Paste the unified key from Free LLM API’s Keys page.'}</span>
               </div>
             </div>
             <div className="cs-item" data-ok={ok}>
-              {ok ? <Check size={14} /> : <X size={14} />}
+              <span className={ok ? 'tag tag-ok' : 'tag'}>{ok ? <><Check size={11} /> Ready</> : 'Not set up'}</span>
               <div>
                 <code>Server</code>
                 <span>{s.ok === null ? 'Not checked yet.' : s.note}</span>
               </div>
             </div>
             <div className="cs-item" data-ok={s.claudefree}>
-              {s.claudefree ? <Check size={14} /> : <X size={14} />}
+              <span className={s.claudefree ? 'tag tag-ok' : 'tag'}>{s.claudefree ? <><Check size={11} /> Ready</> : 'Not set up'}</span>
               <div>
                 <code>claudefree</code>
                 <span>{s.claudefree ? `Claude Code on ${s.model}. Arguments pass through: claudefree --resume.` : s.claudeCode ? 'Written as soon as the key is saved.' : 'Needs Claude Code: set up Claude everywhere above.'}</span>

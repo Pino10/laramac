@@ -35,8 +35,34 @@ const AI_LETTERS: Record<string, string> = { omlx: 'oM', burp: 'Bp', claude: 'Cc
  * One component, three places: the AI tools page ('ai'), the mail inbox and public links on the
  * Services page ('mail'), and the laramac command, Composer, editor and integrations in Settings ('more').
  */
+type Way = 'account' | 'local' | 'free' | 'more'
+/** Three plain ways to use AI, and one drawer for everything else. Only the chosen one is shown. */
+const WAYS: { id: Way; title: string; text: string }[] = [
+  { id: 'account', title: 'Use my Claude account', text: 'Claude Code with your own sign-in. The strongest choice.' },
+  { id: 'local', title: 'Use a model on this Mac', text: 'LM Studio, Ollama and others. Private: nothing leaves your Mac.' },
+  { id: 'free', title: 'Use free keys', text: 'Free plans from Google, Groq and others, behind one address.' },
+  { id: 'more', title: 'Other tools', text: 'Codex, Gemini CLI, OpenCode, Burp Suite and more.' }
+]
+const LOCAL_TOOLS = ['lmstudio', 'ollama', 'vmlx', 'omlx']
+
 export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'ai' | 'mail' | 'more'; initialTab?: 'tools' | 'assistant' }): React.JSX.Element {
   const [aiTab, setAiTab] = useState<'tools' | 'assistant'>(initialTab)
+  const [way, setWayState] = useState<Way>(() => {
+    try {
+      const v = localStorage.getItem('laramac.aiWay')
+      return v === 'local' || v === 'free' || v === 'more' ? v : 'account'
+    } catch {
+      return 'account'
+    }
+  })
+  const setWay = (w: Way): void => {
+    setWayState(w)
+    try {
+      localStorage.setItem('laramac.aiWay', w)
+    } catch {
+      // Not remembered; it still works.
+    }
+  }
   const { tools, settings, services, act, busy, setTools, updateSettings, notify, llms, refreshLlms, setPage } = useApp()
   const [tests, setTests] = useState<Record<string, LlmTest>>({})
   const [relay, setRelay] = useState<MailRelay | null>(null)
@@ -77,7 +103,7 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
     <>
       {part === 'ai' && (
       <>
-      <PageHead title="AI tools" desc={aiTab === 'tools' ? 'Claude Code three ways (your account, your own model, your free keys), other coding agents and local models. Installers run in Terminal so you can see every step.' : 'Ask the model running on your Mac. It can suggest actions, and nothing runs until you press the button.'}>
+      <PageHead title="AI tools" desc={aiTab === 'tools' ? 'Choose how you want to use AI. Each choice shows only what it needs. Installers run in Terminal so you can see every step.' : 'Ask the model running on your Mac. It can suggest actions, and nothing runs until you press the button.'}>
         <div className="seg-tabs" role="tablist" aria-label="AI tools">
           <button role="tab" aria-selected={aiTab === 'tools'} onClick={() => setAiTab('tools')}>
             Claude and models
@@ -94,10 +120,20 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
       ) : (
       <>
 
-      <ClaudeSetup />
+      <div className="ways" role="radiogroup" aria-label="How do you want to use AI?">
+        {WAYS.map((w) => (
+          <button key={w.id} className="way glass" role="radio" aria-checked={way === w.id} onClick={() => setWay(w.id)}>
+            <strong>{w.title}</strong>
+            <span>{w.text}</span>
+          </button>
+        ))}
+      </div>
 
-      <FreeLlm />
+      {way === 'account' && <ClaudeSetup />}
 
+      {way === 'free' && <FreeLlm />}
+
+      {way === 'account' && (
       <div className="mcp-card glass">
         <span className="mcp-mark" aria-hidden>
           <Sparkles size={20} />
@@ -152,12 +188,15 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
           />
         </span>
       </div>
+      )}
 
-      <ModelServers />
+      {way === 'local' && <ModelServers />}
 
-      <h2 className="section-title">AI tools</h2>
+      {(way === 'local' || way === 'more') && (
+      <>
+      <h2 className="section-title">{way === 'local' ? 'Apps that run models on this Mac' : 'Other AI tools'}</h2>
       <div className="ai-grid">
-        {ai.map((t) => {
+        {ai.filter((t) => LOCAL_TOOLS.includes(t.id) === (way === 'local')).map((t) => {
           const isDefault = settings.aiTool === t.id
           const get = async (kind: 'cli' | 'app'): Promise<void> => {
             await act(`ai-install-${t.id}-${kind}`, () => api.invoke('ai:install-tool', t.id, kind))
@@ -258,6 +297,8 @@ export default function Tools({ part = 'ai', initialTab = 'tools' }: { part?: 'a
           )
         })}
       </div>
+      </>
+      )}
 
       </>
       )}

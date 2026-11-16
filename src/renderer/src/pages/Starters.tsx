@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, Download, GitCommitHorizontal, Play, RefreshCw, Se
 import type { RuntimeId, RuntimeInfo, StarterReadiness } from '@shared/types'
 import { CATEGORIES, STARTERS, starterContext, type Starter, type StarterCategory } from '@shared/starters'
 import { useApp } from '../store'
+import { readBuilds } from './Dashboard'
 import { PageHead } from '../ui'
 
 const RUNTIME_NAME: Record<RuntimeId, string> = { node: 'Node.js', bun: 'Bun', python: 'Python', dotnet: '.NET', go: 'Go', rust: 'Rust', swift: 'Swift', php: 'PHP' }
@@ -25,9 +26,9 @@ function Mark({ s, size = 44 }: { s: Starter; size?: number }): React.JSX.Elemen
 }
 
 export default function Starters(): React.JSX.Element {
-  const { pendingStarter, setPendingStarter, setPage } = useApp()
+  const { pendingStarter, setPendingStarter, setNewProject } = useApp()
   const api = window.laramac
-  const [cat, setCat] = useState<StarterCategory | 'all'>('all')
+  const [cat, setCat] = useState<StarterCategory | 'all'>(() => (readBuilds() === 'php' && CATEGORIES.some((c) => c.id === 'php') ? 'php' : 'all'))
   const [query, setQuery] = useState('')
   const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([])
   const [versions, setVersions] = useState<Record<string, string>>({})
@@ -55,10 +56,11 @@ export default function Starters(): React.JSX.Element {
 
   return (
     <>
-      <PageHead title="Starter" desc="Start a project with each framework's own official setup tool, so you always get the newest version. Laramac installs what it needs, sets up the database and gives it a .test address.">
-        <button className="btn" onClick={() => setPage('languages')}>
-          Languages
+      <PageHead title="New project" desc="Start a project with each framework's own official setup tool, so you always get the newest version. Laramac installs what it needs, sets up the database and gives it a .test address.">
+        <button className="btn" onClick={() => setNewProject(true)}>
+          WordPress or plain PHP
         </button>
+
       </PageHead>
 
           <div className="recipes">

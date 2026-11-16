@@ -84,6 +84,8 @@ export default function Code(): React.JSX.Element {
         </section>
       )}
 
+      {s.installed ? (
+        <>
       <section>
         <h2 className="section-title">Choose a look</h2>
         <p className="hint" style={{ margin: '0 0 12px' }}>Ten looks: each one arranges the editor differently, with its own buttons, tabs and colours. If Laramac Code is open, it changes within a minute. You can switch any time.</p>
@@ -102,6 +104,32 @@ export default function Code(): React.JSX.Element {
           ))}
         </div>
       </section>
+
+        </>
+      ) : (
+        <>
+      <section>
+        <h2 className="section-title">Inside</h2>
+        <div className="code-features">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="code-feature">
+              <span className="code-feature-icon">{f.icon}</span>
+              <strong>{f.title}</strong>
+              <span>{f.text}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+          <details className="fold">
+            <summary>
+              <strong>Choose a look</strong>
+              <span className="hint">Ten looks. You can pick one now or any time after installing.</span>
+            </summary>
+            <CodeLooks />
+          </details>
+        </>
+      )}
 
       {s.installed && (
         <section>

@@ -329,7 +329,22 @@ export const kindLabel: Record<SiteInfo['kind'], string> = {
 }
 
 export default function Sites(): React.JSX.Element {
-  const { sites, settings, tools, php, act, busy, setSites, notify, setNewProject, setImportOpen, setPage, openSite, showSite } = useApp()
+  const { sites, settings, tools, php, services, act, busy, setSites, setServices, notify, setNewProject, setImportOpen, setPage, openSite, showSite } = useApp()
+  // Whether sites can open at all: the main web server must be installed and running.
+  const webSvc = services.find((x) => x.id === (settings?.primaryServer ?? 'apache'))
+  const web: 'none' | 'down' | 'up' = !webSvc || webSvc.status === 'not-installed' ? 'none' : webSvc.status === 'running' ? 'up' : 'down'
+  const statusOf = (s: SiteInfo): { state: string; text: string } =>
+    s.dev
+      ? s.dev.running
+        ? { state: 'up', text: 'Live' }
+        : { state: 'stopped', text: 'Stopped' }
+      : !PHP_KINDS.includes(s.kind)
+        ? { state: 'unknown', text: s.devSuggestion ? 'Needs a start command' : 'No server' }
+        : web === 'up'
+          ? { state: 'up', text: 'Ready' }
+          : web === 'down'
+            ? { state: 'stopped', text: 'Web server stopped' }
+            : { state: 'unknown', text: 'Needs setup' }
   const [query, setQuery] = useState('')
   const api = window.laramac
   const installedPhp = php.filter((p) => p.installed)
@@ -402,10 +417,19 @@ export default function Sites(): React.JSX.Element {
         <button className="btn" onClick={() => setImportOpen(true)}>
           <Upload size={14} /> Import
         </button>
-        <button className="btn btn-primary" onClick={() => setNewProject(true)}>
+        <button className="btn btn-primary" onClick={() => setPage('starters')}>
           <Plus size={14} /> New project
         </button>
       </PageHead>
+
+      {sites.some((x) => PHP_KINDS.includes(x.kind) && !x.dev) && web !== 'up' && (
+        <NextLine
+          action={web === 'none' ? 'Finish setup' : 'Start it'}
+          onAction={() => (web === 'none' ? setPage('dashboard') : void act('web-start', () => api.invoke('services:toggle', webSvc!.id).then(setServices)))}
+        >
+          <strong>{web === 'none' ? 'Your sites cannot open yet.' : 'Your web server is stopped.'}</strong> {web === 'none' ? 'No web server is installed. Setup takes a few minutes.' : 'Start it and your sites open again.'}
+        </NextLine>
+      )}
 
       {sites.length > 0 && (
         <>
@@ -470,11 +494,8 @@ export default function Sites(): React.JSX.Element {
             <button className="btn" onClick={() => setImportOpen(true)}>
               <Upload size={14} /> Import a project
             </button>
-            <button className="btn" onClick={() => setNewProject(true)}>
-              <Plus size={14} /> WordPress or PHP
-            </button>
             <button className="btn btn-primary" onClick={() => setPage('starters')}>
-              <Rocket size={14} /> Browse starters
+              <Plus size={14} /> New project
             </button>
           </div>
         </div>
@@ -523,8 +544,13 @@ export default function Sites(): React.JSX.Element {
                   </button>
                 )}
                 <span className="tag">{kindLabel[site.kind]}</span>
+                <span className="status-pill" data-state={statusOf(site).state}>
+                  {statusOf(site).text}
+                </span>
               </div>
-              {PHP_KINDS.includes(site.kind) ? (
+              {PHP_KINDS.includes(site.kind) && installedPhp.length === 0 ? (
+                site.kind === 'static' ? <span /> : <span className="hint" style={{ whiteSpace: 'nowrap' }}>PHP not installed</span>
+              ) : PHP_KINDS.includes(site.kind) ? (
                 <select
                   className="input"
                   aria-label={`PHP version for ${site.name}`}
@@ -543,7 +569,8 @@ export default function Sites(): React.JSX.Element {
               ) : (
                 <DevControl site={site} onLogs={() => setLogsFor(site)} />
               )}
-              <span title="HTTPS">
+              <span className="https-set" title="Serve this site over HTTPS">
+                <span className="ib-word">HTTPS</span>
                 <Switch
                   on={site.secure}
                   label={`HTTPS for ${site.name}`}
@@ -560,6 +587,7 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn
                   label={`Open ${site.name}`}
                   title="Open in browser"
+                  word="Open"
                   onClick={() => api.invoke('sites:open-url', site.secure ? site.httpsUrl : site.url)}
                 >
                   <ExternalLink size={18} />
@@ -567,6 +595,7 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn
                   label={`Open ${site.name} in ${editor}`}
                   title={`Open in ${editor}`}
+                  word="Code"
                   onClick={() => act(`editor-${site.name}`, () => api.invoke('sites:open-editor', site.path))}
                 >
                   <Code size={18} />
@@ -574,6 +603,7 @@ export default function Sites(): React.JSX.Element {
                 <IconBtn
                   label={`${aiName} in ${site.name}`}
                   title={`Open ${aiName} here`}
+                  word="AI"
                   onClick={() => act(`claude-${site.name}`, () => api.invoke('sites:open-claude', site.path))}
                 >
                   <Terminal size={18} />
@@ -603,6 +633,7 @@ export default function Sites(): React.JSX.Element {
 function IconBtn({
   label,
   title,
+  word,
   onClick,
   pressed,
   disabled,
@@ -610,14 +641,17 @@ function IconBtn({
 }: {
   label: string
   title: string
+  /** A short word shown under the icon, so nobody has to guess. */
+  word?: string
   onClick: () => unknown
   pressed?: boolean
   disabled?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <button className="icon-btn" aria-label={label} data-tip={title} aria-pressed={pressed} disabled={disabled} onClick={() => void onClick()}>
+    <button className={word ? 'icon-btn icon-word' : 'icon-btn'} aria-label={label} data-tip={title} aria-pressed={pressed} disabled={disabled} onClick={() => void onClick()}>
       {children}
+      {word && <span className="ib-word">{word}</span>}
     </button>
   )
 }

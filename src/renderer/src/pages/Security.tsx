@@ -4,7 +4,7 @@ import DeepAudit from '../components/DeepAudit'
 import { Bot, Download, FileText, FolderOpen, GitBranch, Globe2, KeyRound, Laptop, ListChecks, Microscope, Package, Radar, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import type { ReviewFinding, ReviewerKind, ReviewerOption, AuditResult, GitHubRepo, ReviewFocus, ReviewInfo, ReviewResult, ScanResult } from '@shared/types'
 import { OwaspList, ReviewOwasp } from '../components/OwaspList'
-import SkillPacks from '../components/SkillPacks'
+import SkillPacks, { PacksAsk } from '../components/SkillPacks'
 import { useApp } from '../store'
 import { PageHead } from '../ui'
 import { Answer } from '../components/Answer'
@@ -95,6 +95,18 @@ export default function Security(): React.JSX.Element {
   const current = llms.find((l) => l.baseUrl === settings?.llm.baseUrl)
   const connected = !!repos && repos.length > 0
   const canRun = kind === 'site' ? !!site : kind === 'github' && connected ? !!repo : /^https:\/\/\S+$/.test(url.trim())
+  /** Why Start is greyed out, in words, or null when it can run. */
+  const whyNot = !canRun
+    ? kind === 'site'
+      ? sites.length
+        ? 'Choose a site in step 1.'
+        : 'You have no sites yet. Add one, or choose a repository in step 1.'
+      : kind === 'github' && connected
+        ? 'Choose a repository in step 1.'
+        : 'Paste a token and choose a repository in step 1, or type its address.'
+    : reviewer === 'model' && !model
+      ? 'Choose a model on the AI tools page first.'
+      : null
   const switchKind = (k: SourceKind): void => {
     setKind(k)
     setListed(null)
@@ -159,7 +171,7 @@ export default function Security(): React.JSX.Element {
   return (
     <>
       <PageHead
-        title={tab === 'review' ? 'Code review' : tab === 'scan' ? 'Web scan' : 'Package check'}
+        title={tab === 'review' ? 'Code review' : tab === 'scan' ? 'Web scan' : 'Dependencies'}
         desc={tab === 'review' ? 'An AI reviewer reads your project with Laramac’s security skills and every scanner result, and tells you what to fix first. Nothing here changes your code.' : tab === 'scan' ? 'Look at a running site the way a visitor can: headers, exposed files and known problems. Only reads.' : 'Every package your project uses, checked against public lists of known flaws.'}
       >
         <div className="seg-tabs" role="tablist">
@@ -170,16 +182,21 @@ export default function Security(): React.JSX.Element {
             <Radar size={14} /> Web scan
           </button>
           <button role="tab" aria-selected={tab === 'deps'} onClick={() => setTab('deps')}>
-            <Package size={14} /> Packages
+            <Package size={14} /> Dependencies
           </button>
         </div>
       </PageHead>
 
       {tab === 'review' ? (
         <>
-          <div className="sec-form glass">
+          <PacksAsk />
+          <div className="steps">
+          <section className="step glass">
+            <span className="step-n">1</span>
+            <div className="step-body sec-form-in">
+              <h2 className="step-title">What to review</h2>
+              <p className="step-sub">A site in your projects folder, or a repository on GitHub, Azure DevOps or any Git host.</p>
             <div className="field">
-              <label>1. What to review</label>
               <div className="seg" role="radiogroup" aria-label="Source">
                 <button role="radio" aria-checked={kind === 'site'} onClick={() => switchKind('site')}>
                   <Laptop size={13} /> A site in www
@@ -243,8 +260,14 @@ export default function Security(): React.JSX.Element {
             )}
             {kind !== 'site' && <div className="hint">Each review downloads its own private copy, and the copy is deleted the moment the review finishes. Only the report stays. The token is used once and not saved.</div>}
 
+            </div>
+          </section>
+          <section className="step glass">
+            <span className="step-n">2</span>
+            <div className="step-body sec-form-in">
+              <h2 className="step-title">Who reviews it</h2>
+              <p className="step-sub">The reviewer reads your code and every scanner result, decides what is real, and writes the report.</p>
             <div className="field">
-              <label>2. How to review it</label>
               <div className="seg" role="radiogroup" aria-label="How to review">
                 <button role="radio" aria-checked={mode === 'standard'} onClick={() => setMode('standard')}>
                   <ShieldCheck size={13} /> Standard review
@@ -264,7 +287,7 @@ export default function Security(): React.JSX.Element {
               <div className="field">
                 <label>Reviewer</label>
                 <div className="reviewer-grid" role="radiogroup" aria-label="Reviewer">
-                  {(reviewers.length ? reviewers : [{ id: 'claude', name: 'Claude Code', installed: true } as ReviewerOption]).map((r) => (
+                  {(reviewers.length ? reviewers.filter((r) => r.installed || r.id === 'claude') : [{ id: 'claude', name: 'Claude Code', installed: true } as ReviewerOption]).map((r) => (
                     <button key={r.id} className="reviewer-card" role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
                       <span className="reviewer-ic">{r.id === 'model' ? <Bot size={16} /> : <Sparkles size={16} />}</span>
                       <span className="reviewer-text">
@@ -275,6 +298,14 @@ export default function Security(): React.JSX.Element {
                     </button>
                   ))}
                 </div>
+                {reviewers.some((r) => !r.installed && r.id !== 'claude') && (
+                  <div className="hint">
+                    {reviewers.filter((r) => !r.installed && r.id !== 'claude').length} more reviewers ({reviewers.filter((r) => !r.installed && r.id !== 'claude').map((r) => r.name).join(', ')}) appear here once they are set up.{' '}
+                    <button className="link" onClick={() => setPage('tools')}>
+                      Open AI tools
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="field">
                 <label>Look for</label>
@@ -294,14 +325,15 @@ export default function Security(): React.JSX.Element {
               </div>
             </div>
             {reviewer.startsWith('claude') && <SkillPicker site={kind === 'site' ? site || null : null} reviewer={reviewer} onChange={setSkills} />}
-            <div className="while-coding">
-              <span>
-                <strong>While you code</strong> Laramac Code checks PHP when you save (PHPStan, Psalm) and reviews one file with these same skills, from the editor.
-              </span>
-              <button className="btn btn-sm" onClick={() => setPage('code')}>
-                Open Laramac Code
-              </button>
+              </>
+            )}
             </div>
+          </section>
+          {mode === 'standard' && (
+          <section className="step glass">
+            <span className="step-n">3</span>
+            <div className="step-body sec-form-in">
+              <h2 className="step-title">Start</h2>
             <label className="check-row">
               <input type="checkbox" checked={scanners} onChange={(e) => setScanners(e.target.checked)} />
               Run MacSec’s scanners first (Semgrep, Gitleaks, OSV-Scanner), when MacSec is installed, and have the reviewer check each result
@@ -329,14 +361,24 @@ export default function Security(): React.JSX.Element {
                   ? `${model} reads the most important files in parts (routes, controllers, login, database code first). Local models are private but slower; large projects take a while.`
                   : 'Pick a model on the AI tools page first.'}
             </div>
-            <div className="end">
-              <button className="btn btn-primary" disabled={!canRun || busy.has('review') || (reviewer === 'model' && !model)} onClick={run}>
-                <ShieldCheck size={14} /> {busy.has('review') ? 'Reviewing… you can keep working' : 'Start review'}
+              <div className="step-go">
+                <span className="hint">{whyNot ?? 'Nothing in your project is changed. You can keep working while it runs.'}</span>
+                <button className="btn btn-primary" disabled={!!whyNot || busy.has('review')} onClick={run}>
+                  <ShieldCheck size={14} /> {busy.has('review') ? 'Reviewing… you can keep working' : 'Start review'}
+                </button>
+              </div>
+            </div>
+          </section>
+          )}
+          </div>
+            <div className="while-coding">
+              <span>
+                <strong>While you code</strong> Laramac Code checks PHP when you save (PHPStan, Psalm) and reviews one file with these same skills, from the editor.
+              </span>
+              <button className="btn btn-sm" onClick={() => setPage('code')}>
+                Open Laramac Code
               </button>
             </div>
-              </>
-            )}
-          </div>
 
           {mode === 'deep' && (
           <DeepAudit
@@ -365,8 +407,14 @@ export default function Security(): React.JSX.Element {
             />
           )}
 
-          <ClaudeConnect />
-          <SkillPacks />
+          <details className="fold">
+            <summary>
+              <strong>Skills and skill packs</strong>
+              <span className="hint">What the reviewer is taught, and extra skill sets from security teams.</span>
+            </summary>
+            <ClaudeConnect />
+            <SkillPacks />
+          </details>
 
           {history.length > 0 && (
             <>
@@ -478,9 +526,27 @@ const TRIAGE: Record<NonNullable<ReviewFinding['triage']>, string> = { fixed: 'F
 
 /** Each finding of a review, to fix with Claude Code or mark as dealt with. */
 export function FindingsList({ id, findings, onChange, canFix = true }: { id: string; findings: ReviewFinding[]; onChange: (f: ReviewFinding[]) => void; canFix?: boolean }): React.JSX.Element {
-  const { act } = useApp()
+  const { act, notify } = useApp()
   const api = window.laramac
   const open = findings.filter((x) => !x.triage).length
+  // Everyday words first, with file names folded away. Remembered on this Mac.
+  const [simple, setSimpleState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('laramac.explainSimply') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setSimple = (v: boolean): void => {
+    setSimpleState(v)
+    try {
+      localStorage.setItem('laramac.explainSimply', v ? '1' : '0')
+    } catch {
+      // Not remembered; it still works.
+    }
+  }
+  const asIssue = (f: ReviewFinding): string =>
+    [`## ${f.title}`, '', `**Severity:** ${f.severity}`, ...(f.file ? [`**Where:** \`${f.file}${f.line ? `:${f.line}` : ''}\``] : []), ...(f.owasp ? [`**Reference:** ${f.owasp}`] : []), ...(f.what ? ['', '### What is wrong', f.what] : []), ...(f.fix ? ['', '### How to fix', f.fix] : []), '', 'Found by a Laramac code review.'].join('\n')
   const set = async (index: number, t: ReviewFinding['triage'] | null): Promise<void> => {
     const r = await act('triage', () => api.invoke('review:triage', id, index, t ?? null))
     if (r) onChange(r)
@@ -490,6 +556,9 @@ export function FindingsList({ id, findings, onChange, canFix = true }: { id: st
       <div className="findings-head">
         <b>{open} open</b>
         <span className="hint">of {findings.length} findings</span>
+        <label className="check-row" style={{ marginLeft: 'auto' }}>
+          <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} /> Explain simply
+        </label>
       </div>
       {findings.map((f) => (
         <details key={f.index} className="finding" data-done={!!f.triage}>
@@ -498,13 +567,25 @@ export function FindingsList({ id, findings, onChange, canFix = true }: { id: st
               {f.severity}
             </span>
             <span className="row-title">{f.title}</span>
-            {f.file && <span className="mono hint">{f.file}{f.line ? `:${f.line}` : ''}</span>}
+            {!simple && f.file && <span className="mono hint">{f.file}{f.line ? `:${f.line}` : ''}</span>}
             {f.triage && <span className="tag">{TRIAGE[f.triage]}</span>}
           </summary>
-          {f.what && <p>{f.what}</p>}
+          {f.what && (
+            <p>
+              {simple && <strong>What is wrong: </strong>}
+              {f.what}
+            </p>
+          )}
           {f.fix && (
             <p>
-              <strong>Fix:</strong> {f.fix}
+              <strong>{simple ? 'What to do:' : 'Fix:'}</strong> {f.fix}
+            </p>
+          )}
+          {simple && f.file && (
+            <p className="hint mono">
+              {f.file}
+              {f.line ? `:${f.line}` : ''}
+              {f.owasp ? ` · ${f.owasp}` : ''}
             </p>
           )}
           <div className="finding-actions">
@@ -513,6 +594,9 @@ export function FindingsList({ id, findings, onChange, canFix = true }: { id: st
                 <Sparkles size={12} /> Fix with Claude Code
               </button>
             )}
+            <button className="btn btn-sm" onClick={() => void navigator.clipboard.writeText(asIssue(f)).then(() => notify({ kind: 'info', text: 'Copied. Paste it into GitHub, Jira or wherever you track work.' }))}>
+              Copy as an issue
+            </button>
             {f.triage ? (
               <button className="btn btn-sm" onClick={() => void set(f.index, null)}>
                 Open again
@@ -744,7 +828,11 @@ function ClaudeConnect(): React.JSX.Element {
       <div>
         <div className="row-title">Skills</div>
         <div className="row-sub" style={{ whiteSpace: 'normal' }}>
-          Every Claude Code review loads Laramac’s {skills?.names.length ?? ''} security skills: {skills?.names.join(', ') ?? '…'}. Add your own in ~/.laramac/my-skills/skills.
+          Every Claude Code review loads Laramac’s {skills?.names.length ?? ''} security skills. Add your own in ~/.laramac/my-skills/skills.
+          <details className="hint" style={{ marginTop: 4 }}>
+            <summary>Show all {skills?.names.length ?? ''}</summary>
+            {skills?.names.map((n) => n.replace(/-/g, ' ')).join(', ') ?? '…'}
+          </details>
         </div>
       </div>
       <button

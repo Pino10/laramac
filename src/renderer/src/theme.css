@@ -7108,3 +7108,50 @@ html[data-glass='ion'][data-tone='dark'] .menu {
 .pkg-check { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 14px; }
 
 .toast-more { pointer-events: auto; justify-self: end; font-size: 11.5px; color: var(--ink-3); padding: 2px 8px; }
+
+/* ---------- 1.0: shorter pages, labelled controls, help text that wraps ---------- */
+.settings-body .row-sub, .row-set .row-sub, .row-sub.wrap, .tool-card .row-sub, .rev-card .row-sub { white-space: normal; overflow: visible; text-overflow: clip; }
+.settings-tabs { margin: 14px 0 6px; flex-wrap: wrap; }
+.site-subtabs { margin: 10px 0 2px; align-self: flex-start; display: inline-flex; }
+.foot-btn { height: 46px; gap: 1px; align-content: center; }
+.foot-btn .foot-word { font-size: 10.5px; line-height: 1; opacity: 0.85; }
+.sidebar[data-slim='true'] .foot-btn { height: 36px; }
+.sidebar:not([data-slim='true']) .foot-btn[data-tip]::after { display: none; }
+.recipes { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.icon-btn.icon-word { height: auto; min-height: 40px; width: auto; min-width: 40px; padding: 4px 6px 3px; display: inline-grid; justify-items: center; gap: 1px; border-radius: 10px; }
+.ib-word { font-size: 10px; line-height: 1.1; color: var(--ink-3); font-weight: 500; }
+.https-set { display: inline-grid; justify-items: center; gap: 3px; }
+@media (max-width: 1180px) { .site-row .ib-word { display: none; } }
+.copy-btn { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.copy-btn:hover { background: var(--surface-2); color: var(--ink); }
+.builds { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
+.tour-offer { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+.tour-offer .next-line { flex: 1; margin: 0; }
+/* Numbered steps, the same shape as MacSec's test pages. */
+.steps { display: grid; gap: 14px; margin-bottom: 14px; }
+.step { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 16px; padding: 20px 22px; border-radius: var(--r-lg, 22px); }
+.step-n { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; font-weight: 700; font-size: 15px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text, var(--accent)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.step-body { display: grid; gap: 12px; min-width: 0; }
+.step-title { margin: 0; font-size: 16px; font-weight: 650; }
+.step-sub { margin: -8px 0 0; color: var(--ink-3); font-size: 12.5px; }
+.step-go { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-top: 4px; }
+.step-body .field { display: grid; gap: 6px; }
+.step-body .seg { align-self: flex-start; justify-self: start; }
+.fold { margin: 14px 0; }
+.fold > summary { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; border-radius: 14px; background: var(--sel); cursor: pointer; list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸'; color: var(--ink-3); }
+.fold[open] > summary::before { content: '▾'; }
+.fold[open] > summary { margin-bottom: 12px; }
+@media (max-width: 760px) { .step { grid-template-columns: 1fr; } }
+.ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 4px 0 16px; }
+.way { display: grid; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 18px; border: 1px solid var(--line); color: var(--ink); cursor: pointer; }
+.way span { color: var(--ink-3); font-size: 12px; line-height: 1.4; }
+.way[aria-checked='true'] { border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.cs-item { flex-direction: column; }
+.cs-item > .tag { align-self: flex-start; }
+.packs-ask { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ide-more { display: grid; gap: 8px; margin-top: 8px; } .ide-more-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .ide-more-row strong { color: var(--ink); }
+.way.glass[aria-checked='true'] { border-color: color-mix(in srgb, var(--accent) 70%, transparent) !important; background: color-mix(in srgb, var(--accent) 16%, var(--surface, #fff)) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent) !important; }
+/* A pop-up floats over the page: it must never push the top bar around. */
+.topbar .popover.glass { position: absolute; }

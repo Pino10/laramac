@@ -177,6 +177,8 @@ function projectScripts(root) {
   return out
 }
 
+const saveTimers = new Map()
+
 function activate(context) {
   const vscode = require('vscode')
   const diags = vscode.languages.createDiagnosticCollection('laramac')
@@ -325,7 +327,17 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (cfg().get('checkOnSave', true)) void checkFile(doc)
+      if (!cfg().get('checkOnSave', true)) return
+      // Auto-save fires often. Wait for a pause, so the checkers run once, not on every keystroke.
+      const key = doc.uri.toString()
+      clearTimeout(saveTimers.get(key))
+      saveTimers.set(
+        key,
+        setTimeout(() => {
+          saveTimers.delete(key)
+          void checkFile(doc)
+        }, 1200)
+      )
     }),
     vscode.commands.registerCommand('laramac.checkFile', () => vscode.window.activeTextEditor && checkFile(vscode.window.activeTextEditor.document)),
     vscode.commands.registerCommand('laramac.checkProject', () => checkProject()),

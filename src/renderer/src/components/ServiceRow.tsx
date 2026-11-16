@@ -48,7 +48,7 @@ export default function ServiceRow({
           </div>
           <div className="row-sub">{statusText[s.status]}</div>
         </div>
-        {s.connection ? <CopyField value={s.connection} /> : <span />}
+        {s.connection && s.status !== 'not-installed' ? <CopyField value={s.connection} /> : <span className="hint">{s.status === 'not-installed' ? 'The address appears once it is installed' : ''}</span>}
         <div className="end">{control}</div>
         {s.status === 'error' && s.error && <div className="errbox">{s.error}</div>}
       </div>

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import * as phpdev from './phpdev'
 import { ideInstalled, ideLatest, ideLookChanged, ideNoteUpdate, ideOnStart, ideStatus, ideVersion, installApp, installExtensions, installIde, openIdeApp, openInIde } from './ide'
+import { IDE_EXTENSIONS } from './idecore'
 import { EDITORS, isAppBundle, isEditorChoice } from './seckit/editors'
 import { latestRelease } from './seckit/ghapi'
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs'
@@ -683,8 +684,15 @@ function registerIpc(): void {
   // ---- Laramac Code
   handle('ide:status', () => ideStatus())
   handle('ide:install', async () => {
-    await jobs.run(ideInstalled() ? 'Updating Laramac Code' : 'Installing Laramac Code', (u) => installIde(u))
+    await jobs.run(ideInstalled() ? 'Updating Laramac Code' : 'Installing Laramac Code', (u) => installIde(u, ideKinds()))
     activity.push('success', 'Laramac Code is ready', 'PHP Intelephense, PHP Debug, Blade, Prettier, ESLint and Tailwind are in.')
+    return ideStatus()
+  })
+  handle('ide:add-extension', async (id) => {
+    if (!ideInstalled()) throw new ValidationError('Install Laramac Code first.')
+    const ext = IDE_EXTENSIONS.find((e) => e.id === id)
+    if (!ext) throw new ValidationError('That extension is not one Laramac offers.')
+    await jobs.run(`Adding ${ext.name} to Laramac Code`, (u) => installExtensions(u, [ext.id]))
     return ideStatus()
   })
   handle('ide:extensions', async () => {
@@ -693,7 +701,7 @@ function registerIpc(): void {
     return ideStatus()
   })
   handle('ide:open', async (path) => {
-    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u))
+    if (!ideInstalled()) await jobs.run('Installing Laramac Code', (u) => installIde(u, ideKinds()))
     if (typeof path === 'string' && path) await openInIde(sitePath(path), undefined, projectRoots(), getSettings().wwwPath)
     else await openIdeApp()
   })
@@ -1480,7 +1488,7 @@ function registerIpc(): void {
       await installPhpMyAdmin()
       writePmaConfig()
     } else if (id === 'tool:cloudflared') await installCloudflared()
-    else if (id === 'tool:laramac-code') await installIde(update)
+    else if (id === 'tool:laramac-code') await installIde(update, ideKinds())
     else if (id === 'tool:claude') {
       const claude = findCli(['claude'])
       if (!claude) throw new ValidationError('Claude Code is not installed.')
@@ -1625,6 +1633,18 @@ function registerIpc(): void {
     })
   }
   handle('packs:list', () => packList())
+  handle('packs:asked', () => packsAnswer())
+  handle('packs:answer', async (yes) => {
+    setSettings({ packsAsk: yes === true ? 'yes' : 'no' })
+    if (yes === true) {
+      const declined = new Set(getSettings().packsDeclined ?? [])
+      for (const p of SKILL_PACKS) {
+        if (declined.has(p.id) || packState(review.packsRoot(), p.id).installed) continue
+        await jobs.run(`Getting the ${p.name} skills`, () => installPack(review.packsRoot(), p.id)).catch(() => undefined)
+      }
+    }
+    return packList()
+  })
   handle('packs:updates', () => packUpdates(review.packsRoot()))
   const checkUpdates = async (announce: boolean): Promise<ReturnType<typeof packUpdates>> => {
     const list = await checkPackUpdates(review.packsRoot())
@@ -3448,9 +3468,11 @@ app.whenReady().then(() => {
   ensureDirs()
   // The security teams' skill packs are part of every review by default: fetched quietly once, kept up to date with each app version.
   // Laramac Code: the app follows Laramac's version, new extensions (Claude Code, Cline) are added once.
-  setTimeout(() => void ideOnStart(() => undefined).catch(() => undefined), 40_000)
+  setTimeout(() => void ideOnStart(() => undefined, ideKinds()).catch(() => undefined), 40_000)
   setTimeout(() => {
     void (async () => {
+      // Nothing is downloaded until the person has said yes. People who already had the packs keep them up to date.
+      if (packsAnswer() !== 'yes') return
       const declined = new Set(getSettings().packsDeclined ?? [])
       for (const p of SKILL_PACKS) {
         if (declined.has(p.id) || packState(review.packsRoot(), p.id).installed) continue
@@ -3538,3 +3560,21 @@ app.on('before-quit', (event) => {
     app.exit(0)
   })
 })
+
+/** Whether the person agreed to download the security teams' skill packs: yes, no, or null when not asked yet. */
+function packsAnswer(): 'yes' | 'no' | null {
+  const a = getSettings().packsAsk
+  if (a === 'yes' || a === 'no') return a
+  // Before 1.0 the packs came on their own. Anyone who has one keeps that behaviour.
+  return SKILL_PACKS.some((p) => packState(review.packsRoot(), p.id).installed) ? 'yes' : null
+}
+
+
+/** The languages of the projects on this Mac, so Laramac Code only gets the extensions they need. */
+function ideKinds(): string[] {
+  try {
+    return [...new Set(listSites().map((x) => x.kind as string))]
+  } catch {
+    return []
+  }
+}

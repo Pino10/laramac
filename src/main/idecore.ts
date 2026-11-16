@@ -11,40 +11,50 @@ export interface IdeExtension {
   id: string
   name: string
   why: string
+  /** core: always installed. python, go, rust: when you have a project in that language. extra: only when you add it. */
+  group: 'core' | 'python' | 'go' | 'rust' | 'extra'
 }
 
 /** Installed with Laramac Code, for PHP first and the front end next to it. */
 export const IDE_EXTENSIONS: IdeExtension[] = [
-  { id: 'bmewburn.vscode-intelephense-client', name: 'PHP Intelephense', why: 'PHP completion, go to definition, find references, errors and formatting' },
-  { id: 'anthropic.claude-code', name: 'Claude Code', why: 'Claude in the side panel: ask, plan and edit with your Claude account' },
-  { id: 'saoudrizwan.claude-dev', name: 'Cline', why: 'An AI coding agent for any model: your local model, Free LLM API or an API key (open source)' },
-  { id: 'phpactor.vscode-phpactor', name: 'Phpactor', why: 'PHP refactoring: rename, extract, import classes, generate methods (open source)' },
-  { id: 'xdebug.php-debug', name: 'PHP Debug', why: 'Breakpoints and stepping through PHP with Xdebug' },
-  { id: 'onecentlin.laravel-blade', name: 'Laravel Blade', why: 'Blade templates with snippets' },
-  { id: 'mikestead.dotenv', name: 'DotENV', why: 'Colours for .env files' },
-  { id: 'editorconfig.editorconfig', name: 'EditorConfig', why: 'The project’s own indentation and line endings' },
-  { id: 'esbenp.prettier-vscode', name: 'Prettier', why: 'Formatting for JS, TS, CSS, HTML and more' },
-  { id: 'dbaeumer.vscode-eslint', name: 'ESLint', why: 'JavaScript and TypeScript problems as you type' },
-  { id: 'bradlc.vscode-tailwindcss', name: 'Tailwind CSS IntelliSense', why: 'Class name completion and previews' },
-  { id: 'vue.volar', name: 'Vue', why: 'Vue single-file components' },
-  { id: 'redhat.vscode-yaml', name: 'YAML', why: 'YAML with schema checks (Docker Compose, CI files)' },
-  { id: 'continue.continue', name: 'Continue', why: 'AI chat and agent with LM Studio, Ollama or the Free LLM API: it reads your project and edits many files at once (open source)' },
-  { id: 'laravel.vscode-laravel', name: 'Laravel', why: 'The Laravel team’s own: routes, views, config and translations with completion and links. It runs your app’s PHP to learn them' },
-  { id: 'recca0120.vscode-phpunit', name: 'PHPUnit and Pest', why: 'Run one test from its line with the ▶ next to it, or all of them from the Testing panel' },
-  { id: 'vitest.explorer', name: 'Vitest', why: 'Run JavaScript and TypeScript tests from their line' },
-  { id: 'ms-python.python', name: 'Python', why: 'Python: run, debug, virtual environments and Jupyter' },
-  { id: 'detachhead.basedpyright', name: 'basedpyright', why: 'Python completion, types and errors (the open-source Pylance)' },
-  { id: 'charliermarsh.ruff', name: 'Ruff', why: 'Fast Python lint and formatting' },
-  { id: 'golang.go', name: 'Go', why: 'Go: completion, tests and debugging' },
-  { id: 'rust-lang.rust-analyzer', name: 'rust-analyzer', why: 'Rust: completion, errors and refactoring' },
-  { id: 'redhat.java', name: 'Java', why: 'Java and Maven or Gradle projects' },
-  { id: 'ms-azuretools.vscode-docker', name: 'Docker', why: 'Dockerfiles and Compose files with completion' },
-  { id: 'mtxr.sqltools', name: 'SQLTools', why: 'Run SQL against your databases from the editor' },
-  { id: 'usernamehw.errorlens', name: 'Error Lens', why: 'Problems shown on the line itself, as you type' },
-  { id: 'mhutchie.git-graph', name: 'Git Graph', why: 'See branches and history as a graph' },
-  { id: 'miguelsolorio.fluent-icons', name: 'Fluent Icons', why: 'Softer, rounder icons for the whole window' },
-  { id: 'pkief.material-icon-theme', name: 'Material Icon Theme', why: 'A clear icon for every kind of file' }
+  { id: 'bmewburn.vscode-intelephense-client', group: 'core', name: 'PHP Intelephense', why: 'PHP completion, go to definition, find references, errors and formatting' },
+  { id: 'anthropic.claude-code', group: 'core', name: 'Claude Code', why: 'Claude in the side panel: ask, plan and edit with your Claude account' },
+  { id: 'saoudrizwan.claude-dev', group: 'core', name: 'Cline', why: 'An AI coding agent for any model: your local model, Free LLM API or an API key (open source)' },
+  { id: 'phpactor.vscode-phpactor', group: 'core', name: 'Phpactor', why: 'PHP refactoring: rename, extract, import classes, generate methods (open source)' },
+  { id: 'xdebug.php-debug', group: 'core', name: 'PHP Debug', why: 'Breakpoints and stepping through PHP with Xdebug' },
+  { id: 'onecentlin.laravel-blade', group: 'core', name: 'Laravel Blade', why: 'Blade templates with snippets' },
+  { id: 'mikestead.dotenv', group: 'core', name: 'DotENV', why: 'Colours for .env files' },
+  { id: 'editorconfig.editorconfig', group: 'core', name: 'EditorConfig', why: 'The project’s own indentation and line endings' },
+  { id: 'esbenp.prettier-vscode', group: 'core', name: 'Prettier', why: 'Formatting for JS, TS, CSS, HTML and more' },
+  { id: 'dbaeumer.vscode-eslint', group: 'core', name: 'ESLint', why: 'JavaScript and TypeScript problems as you type' },
+  { id: 'bradlc.vscode-tailwindcss', group: 'core', name: 'Tailwind CSS IntelliSense', why: 'Class name completion and previews' },
+  { id: 'vue.volar', group: 'core', name: 'Vue', why: 'Vue single-file components' },
+  { id: 'redhat.vscode-yaml', group: 'core', name: 'YAML', why: 'YAML with schema checks (Docker Compose, CI files)' },
+  { id: 'continue.continue', group: 'extra', name: 'Continue', why: 'AI chat and agent with LM Studio, Ollama or the Free LLM API: it reads your project and edits many files at once (open source)' },
+  { id: 'laravel.vscode-laravel', group: 'core', name: 'Laravel', why: 'The Laravel team’s own: routes, views, config and translations with completion and links. It runs your app’s PHP to learn them' },
+  { id: 'recca0120.vscode-phpunit', group: 'core', name: 'PHPUnit and Pest', why: 'Run one test from its line with the ▶ next to it, or all of them from the Testing panel' },
+  { id: 'vitest.explorer', group: 'extra', name: 'Vitest', why: 'Run JavaScript and TypeScript tests from their line' },
+  { id: 'ms-python.python', group: 'python', name: 'Python', why: 'Python: run, debug, virtual environments and Jupyter' },
+  { id: 'detachhead.basedpyright', group: 'python', name: 'basedpyright', why: 'Python completion, types and errors (the open-source Pylance)' },
+  { id: 'charliermarsh.ruff', group: 'python', name: 'Ruff', why: 'Fast Python lint and formatting' },
+  { id: 'golang.go', group: 'go', name: 'Go', why: 'Go: completion, tests and debugging' },
+  { id: 'rust-lang.rust-analyzer', group: 'rust', name: 'rust-analyzer', why: 'Rust: completion, errors and refactoring' },
+  { id: 'redhat.java', group: 'extra', name: 'Java', why: 'Java and Maven or Gradle projects' },
+  { id: 'ms-azuretools.vscode-docker', group: 'extra', name: 'Docker', why: 'Dockerfiles and Compose files with completion' },
+  { id: 'mtxr.sqltools', group: 'extra', name: 'SQLTools', why: 'Run SQL against your databases from the editor' },
+  { id: 'usernamehw.errorlens', group: 'core', name: 'Error Lens', why: 'Problems shown on the line itself, as you type' },
+  { id: 'mhutchie.git-graph', group: 'core', name: 'Git Graph', why: 'See branches and history as a graph' },
+  { id: 'miguelsolorio.fluent-icons', group: 'core', name: 'Fluent Icons', why: 'Softer, rounder icons for the whole window' },
+  { id: 'pkief.material-icon-theme', group: 'core', name: 'Material Icon Theme', why: 'A clear icon for every kind of file' }
 ]
+
+/**
+ * The extensions a new install gets: the core set, plus a language's set when one of your
+ * projects is written in it. The rest are offered, not installed, so the editor starts fast.
+ */
+export function extensionsFor(kinds: readonly string[]): string[] {
+  return IDE_EXTENSIONS.filter((e) => e.group === 'core' || kinds.includes(e.group)).map((e) => e.id)
+}
 
 export interface ReleaseAsset {
   name: string
@@ -142,7 +152,11 @@ export function ideSettings(o: IdeSettingsInput): { managed: Record<string, unkn
     'telemetry.telemetryLevel': 'off',
     'update.mode': 'none',
     'extensions.autoUpdate': true,
-    'security.workspace.trust.enabled': false,
+    // A project's own code (tasks, debuggers, extensions that run it) only runs after you say you trust the folder.
+    // You are asked once per folder, and one tick covers your whole projects folder.
+    'security.workspace.trust.enabled': true,
+    'security.workspace.trust.startupPrompt': 'once',
+    'security.workspace.trust.untrustedFiles': 'open',
     ...(o.phpPath ? { 'php.validate.executablePath': o.phpPath, 'php.debug.executablePath': o.phpPath, 'phpactor.executablePath': o.phpPath } : {}),
     'phpactor.config': phpactorConfig(),
     // Laramac's own look. The AI chat is Claude Code (and Cline) in the side panel on the right,

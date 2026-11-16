@@ -1,12 +1,11 @@
 import { useState } from 'react'
+import NextLine from '../components/NextLine'
 import Pulse from '../components/Pulse'
 import { ArrowUpRight, Database, FolderOpen, Info, Layers, Mail, Plus, Upload } from 'lucide-react'
 import SiteQuickView from '../components/SiteQuickView'
 import { useApp } from '../store'
-import { SERVICE_SECTIONS } from './Services'
 import Doctor from '../components/Doctor'
 import { Monogram } from '../ui'
-import ServiceRow from '../components/ServiceRow'
 
 
 function summary(running: number, installed: number, failing: string | null, off: string[]): { title: string; sub: string } {
@@ -16,8 +15,44 @@ function summary(running: number, installed: number, failing: string | null, off
   return { title: `${running} of ${installed} services running`, sub: `${off.join(', ')} ${off.length === 1 ? 'is' : 'are'} off.` }
 }
 
+type Builds = 'php' | 'js' | 'both'
+/** What the person said they build, remembered on this Mac. Null until they answer. */
+export function readBuilds(): Builds | null {
+  try {
+    const v = localStorage.getItem('laramac.builds')
+    return v === 'php' || v === 'js' || v === 'both' ? v : null
+  } catch {
+    return null
+  }
+}
+
+/** Offered once, never forced: the tour, with a way to say no. */
+function TourOffer(): React.JSX.Element | null {
+  const { settings, updateSettings, setTourOpen } = useApp()
+  if (!settings || settings.tourDone) return null
+  return (
+    <div className="tour-offer">
+      <NextLine action="Take the tour" onAction={() => setTourOpen(true)}>
+        <strong>New here?</strong> A one-minute tour shows where everything is.
+      </NextLine>
+      <button className="link" onClick={() => void updateSettings({ tourDone: true })}>
+        No thanks
+      </button>
+    </div>
+  )
+}
+
 export default function Dashboard(): React.JSX.Element {
   const { services, tools, settings, busy, act, setServices, setTools, jobs, setNewProject, setImportOpen, notify, php, setPage } = useApp()
+  const [builds, setBuildsState] = useState<Builds | null>(readBuilds)
+  const setBuilds = (b: Builds): void => {
+    setBuildsState(b)
+    try {
+      localStorage.setItem('laramac.builds', b)
+    } catch {
+      // Not remembered; it still works.
+    }
+  }
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
@@ -79,63 +114,107 @@ export default function Dashboard(): React.JSX.Element {
         <p className="page-desc">
           Laramac installs everything a PHP site needs, starts it, and gives every folder in your projects folder its own https://name.{tld} address.
         </p>
-        <ol className="plan">
-          <li>
-            <strong>PHP {latest}</strong>
-            <span>The newest release, with all common extensions</span>
-          </li>
-          <li>
-            <strong>Apache</strong>
-            <span>Serves your sites, with .htaccess support</span>
-          </li>
-          <li>
-            <strong>MySQL 8.4</strong>
-            <span>Plus phpMyAdmin, signed in for you</span>
-          </li>
-          <li>
-            <strong>Mailpit</strong>
-            <span>Catches every email your apps send</span>
-          </li>
-          <li>
-            <strong>.{tld} addresses and HTTPS</strong>
-            <span>macOS asks for your password twice</span>
-          </li>
-        </ol>
-        <div className="onboard-actions">
-          <button className="btn btn-primary btn-lg" disabled={busy.has('setup') || installing} onClick={runSetup}>
-            {busy.has('setup') ? 'Setting up…' : 'Set up my stack'}
-          </button>
-          <button className="btn btn-lg" onClick={() => setPage('starters')}>
-            Or start a project: Laramac sets up what it needs
-          </button>
-          <span className="hint">
-            {tools && !tools.homebrew ? (
-              <>
-                Apache installs with{' '}
-                <button className="link" onClick={() => api.invoke('tools:open-external', 'https://brew.sh')}>
-                  Homebrew
-                </button>
-                . Everything else downloads directly.
-              </>
-            ) : (
-              'Or install pieces one by one below.'
-            )}
-          </span>
+        <div className="builds">
+          <span className="row-title">What do you build?</span>
+          <div className="seg" role="radiogroup" aria-label="What do you build?">
+            {(
+              [
+                ['php', 'PHP sites'],
+                ['js', 'JavaScript apps'],
+                ['both', 'Both']
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} role="radio" aria-checked={(builds ?? 'php') === k} onClick={() => setBuilds(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="hint">Laravel, WordPress and Symfony are PHP. Next.js, React and Vue are JavaScript.</span>
         </div>
-        {SERVICE_SECTIONS.map((g) => {
-          const items = g.ids.map((id) => services.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s)
-          if (items.length === 0) return null
-          return (
-            <section key={g.title}>
-              <h2 className="section-title">{g.title}</h2>
-              <div className="group">
-                {items.map((s) => (
-                  <ServiceRow key={s.id} service={s} />
-                ))}
-              </div>
-            </section>
-          )
-        })}
+        {builds === 'js' ? (
+          <>
+            <ol className="plan">
+              <li>
+                <strong>Node.js</strong>
+                <span>Installed the first time a project needs it, kept in Laramac’s folder</span>
+              </li>
+              <li>
+                <strong>A dev server for each project</strong>
+                <span>Start and stop it from the Sites page</span>
+              </li>
+              <li>
+                <strong>No web server needed</strong>
+                <span>Add the PHP stack later, any time, from this page</span>
+              </li>
+            </ol>
+            <div className="onboard-actions">
+              <button className="btn btn-primary btn-lg" onClick={() => setPage('starters')}>
+                Start a project
+              </button>
+              <button className="btn btn-lg" onClick={() => setImportOpen(true)}>
+                Import a project
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <ol className="plan">
+              <li>
+                <strong>PHP {latest}</strong>
+                <span>The newest release, with all common extensions</span>
+              </li>
+              <li>
+                <strong>Apache</strong>
+                <span>Serves your sites, with .htaccess support</span>
+              </li>
+              <li>
+                <strong>MySQL 8.4</strong>
+                <span>Plus phpMyAdmin, signed in for you</span>
+              </li>
+              <li>
+                <strong>Mailpit</strong>
+                <span>Catches every email your apps send</span>
+              </li>
+              <li>
+                <strong>.{tld} addresses and HTTPS</strong>
+                <span>macOS asks for your password twice</span>
+              </li>
+              {builds === 'both' && (
+                <li>
+                  <strong>Node.js</strong>
+                  <span>Installed the first time a JavaScript project needs it</span>
+                </li>
+              )}
+            </ol>
+            <div className="onboard-actions">
+              <button className="btn btn-primary btn-lg" disabled={busy.has('setup') || installing} onClick={runSetup}>
+                {busy.has('setup') ? 'Setting up…' : 'Set up my stack'}
+              </button>
+              <button className="btn btn-lg" onClick={() => setPage('starters')}>
+                Or start a project: Laramac sets up what it needs
+              </button>
+              <span className="hint">
+                {tools && !tools.homebrew ? (
+                  <>
+                    Apache installs with{' '}
+                    <button className="link" onClick={() => api.invoke('tools:open-external', 'https://brew.sh')}>
+                      Homebrew
+                    </button>
+                    . Everything else downloads directly.
+                  </>
+                ) : null}
+              </span>
+            </div>
+          </>
+        )}
+        <p className="footnote">
+          Prefer to choose each piece yourself?{' '}
+          <button className="link" onClick={() => setPage('services')}>
+            Install them one by one on Services
+          </button>
+          .
+        </p>
+        <TourOffer />
       </div>
     )
   }
@@ -168,6 +247,7 @@ export default function Dashboard(): React.JSX.Element {
         </div>
       </div>
 
+      <TourOffer />
       <Pulse />
       <Doctor quietWhenFine />
       <YourSites />

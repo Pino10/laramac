@@ -14,7 +14,7 @@ type Engine = 'mysql' | 'mariadb'
 const ENGINE_NAME: Record<Engine, string> = { mysql: 'MySQL', mariadb: 'MariaDB' }
 
 export default function Databases(): React.JSX.Element {
-  const { services, tools, settings, act, busy, setTools, setServices, setImportOpen, notify } = useApp()
+  const { services, tools, settings, act, busy, setTools, setServices, setImportOpen, notify, setPage } = useApp()
   const [browse, setBrowse] = useState<string | null>(null)
   const api = window.laramac
   const tld = settings?.tld ?? 'test'
@@ -25,7 +25,10 @@ export default function Databases(): React.JSX.Element {
     void Promise.all([api.invoke('db:root-password', 'mysql'), api.invoke('db:root-password', 'mariadb')]).then(([a, b]) => setPw({ mysql: a.set, mariadb: b.set }))
   }, [api])
 
-  const engines = services.filter((s) => s.group === 'database')
+  // Real databases only. Search, queues, storage and AI models live on the Services page.
+  const REAL_DBS = ['mysql', 'mariadb', 'postgres', 'mongodb', 'redis']
+  const engines = services.filter((s) => s.group === 'database' && REAL_DBS.includes(s.id))
+  const enginesRunning = engines.filter((s) => s.status === 'running').length
   const sqlRunning = (['mysql', 'mariadb'] as Engine[]).filter((e) => services.find((s) => s.id === e)?.status === 'running')
   const runningKey = sqlRunning.join(',')
 
@@ -102,7 +105,7 @@ export default function Databases(): React.JSX.Element {
 
       <StatStrip
         stats={[
-          { label: 'Servers running', value: sqlRunning.length, unit: `of ${engines.length}`, tone: sqlRunning.length ? 'ok' : 'warn' },
+          { label: 'Database servers running', value: enginesRunning, unit: `of ${engines.filter((s) => s.status !== 'not-installed').length} installed`, tone: enginesRunning ? 'ok' : 'warn' },
           { label: 'Databases', value: (dbs ?? []).length },
           { label: 'Total size', value: (dbs ?? []).reduce((n, d) => n + d.bytes, 0), format: (n) => formatBytes(Math.round(n)) },
           { label: 'Tables', value: (dbs ?? []).reduce((n, d) => n + d.tables, 0), sub: `${(dbs ?? []).reduce((n, d) => n + d.rows, 0).toLocaleString()} rows` }
@@ -207,6 +210,13 @@ export default function Databases(): React.JSX.Element {
           <ServiceRow key={s.id} service={s} withConnection />
         ))}
       </div>
+      <p className="footnote">
+        Search, queues, file storage and AI models are on{' '}
+        <button className="link" onClick={() => setPage('services')}>
+          Services
+        </button>
+        .
+      </p>
 
       <h2 className="section-title">Root password</h2>
       <div className="group">

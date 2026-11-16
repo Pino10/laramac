@@ -215,7 +215,7 @@ export default function Updates(): React.JSX.Element {
       {error && <div className="group empty-state">{error}</div>}
       {notes === null && !error && <div className="group empty-state">Loading…</div>}
       <div className="changelog">
-        {[...newer, ...(showAll || !newer.length ? older : older.slice(0, 1))].map((n) => {
+        {[...newer, ...(showAll ? older : older.slice(0, newer.length ? 1 : 2))].map((n) => {
           const rel = relevance(n)
           return (
             <article key={n.version} className="release glass" data-current={n.version === current} data-new={newer.includes(n)}>
@@ -235,12 +235,12 @@ export default function Updates(): React.JSX.Element {
                   <ExternalLink />
                 </button>
               </header>
-              <Notes text={n.notes.split(/\n## Download/)[0]} />
+              <Notes text={n.notes.split(/\n## Download/)[0].replace(/^\s*##? (New in |Laramac )?v?[\d.]+\s*\n/, '')} />
             </article>
           )
         })}
       </div>
-      {!showAll && newer.length > 0 && older.length > 1 && (
+      {!showAll && older.length > (newer.length ? 1 : 2) && (
         <button className="btn" style={{ marginTop: 10 }} onClick={() => setShowAll(true)}>
           Show older versions
         </button>

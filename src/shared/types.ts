@@ -721,7 +721,7 @@ export interface IdeStatus {
   /** The Laramac Code app is in ~/Applications, and its version. */
   appInstalled: boolean
   appVersion: string | null
-  extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
+  extensions: { id: string; name: string; why: string; group: 'core' | 'python' | 'go' | 'rust' | 'extra'; state: 'installed' | 'failed' | 'missing' }[]
 }
 
 export interface FreeLlmInfo {
@@ -840,6 +840,8 @@ export interface AppSettings {
   editorApp?: string | null
   /** Skill packs you removed, so they are not fetched again by themselves. */
   packsDeclined?: string[]
+  /** Whether the person agreed to download the skill packs. Unset until they are asked. */
+  packsAsk?: 'yes' | 'no'
   /** The newest skill pack version already announced, so each update is announced once. */
   packsNotified?: Record<string, string>
   /** The accent colour of the Studio look and of Laramac Code's theme. */
@@ -1278,6 +1280,7 @@ export interface Channels {
   'ide:status': { args: []; result: IdeStatus }
   'ide:install': { args: []; result: IdeStatus }
   'ide:extensions': { args: []; result: IdeStatus }
+  'ide:add-extension': { args: [string]; result: IdeStatus }
   'ide:open': { args: [string | null]; result: void }
   /** Installs or updates the Laramac Code app from this version's release. */
   'ide:install-app': { args: []; result: IdeStatus }
@@ -1371,6 +1374,8 @@ export interface Channels {
   'db:backup-reveal': { args: []; result: void }
   'claude:status': { args: []; result: ClaudeSetupStatus }
   'packs:list': { args: []; result: SkillPackInfo[] }
+  'packs:asked': { args: []; result: 'yes' | 'no' | null }
+  'packs:answer': { args: [boolean]; result: SkillPackInfo[] }
   'packs:install': { args: [string]; result: SkillPackInfo[] }
   'packs:remove': { args: [string]; result: SkillPackInfo[] }
   'claude:setup': { args: [{ lmToken?: string }]; result: ClaudeSetupStatus }

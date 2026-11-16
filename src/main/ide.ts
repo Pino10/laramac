@@ -24,7 +24,7 @@ import { runtimeEnv } from './runtimes'
 import { githubApi } from './seckit/ghapi'
 import { getSettings } from './settings'
 import { defaultMinor, phpBinary } from './php'
-import { IDE_EXTENSIONS, aiLaunch, checksPackage, codeAppAsset, folderFor, ideSettings, launchEnv, macAsset, mergeSettings, openRequestUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
+import { IDE_EXTENSIONS, extensionsFor, aiLaunch, checksPackage, codeAppAsset, folderFor, ideSettings, launchEnv, macAsset, mergeSettings, openRequestUrl, serverArgs, sha256Of, workbenchCss, type ReleaseAsset } from './idecore'
 import { ensurePlugins } from './review'
 import { listServers } from './models'
 import { FREELLM_DEFAULT_URL, FREELLM_MODELS, freeLlmUrl } from './seckit/freellm'
@@ -110,7 +110,7 @@ function run(cmd: string, args: string[], timeout = 300_000): Promise<string> {
 }
 
 /** Downloads (or updates) code-server, checked against GitHub's SHA-256, then its extensions and theme. */
-export async function installIde(update: (p: number | null, l?: string) => void): Promise<void> {
+export async function installIde(update: (p: number | null, l?: string) => void, kinds: readonly string[] = []): Promise<void> {
   update(2, 'Looking for the newest Laramac Code')
   const latest = await ideLatest()
   const want = sha256Of(latest.asset.digest)
@@ -135,7 +135,7 @@ export async function installIde(update: (p: number | null, l?: string) => void)
   rmSync(file, { force: true })
   await removeQuarantine(serverDir())
   writeFileSync(versionFile(), latest.version)
-  await installExtensions((p, l) => update(Math.round(72 + (p ?? 0) * 0.18), l))
+  await installExtensions((p, l) => update(Math.round(72 + (p ?? 0) * 0.18), l), extensionsFor(kinds))
   await installApp((p, l) => update(Math.round(90 + (p ?? 0) * 0.1), l))
   writeLaunch()
   update(100, 'Laramac Code is ready')
@@ -409,7 +409,7 @@ export interface IdeStatus {
   version: string | null
   appInstalled: boolean
   appVersion: string | null
-  extensions: { id: string; name: string; why: string; state: 'installed' | 'failed' | 'missing' }[]
+  extensions: { id: string; name: string; why: string; group: 'core' | 'python' | 'go' | 'rust' | 'extra'; state: 'installed' | 'failed' | 'missing' }[]
 }
 
 export function ideStatus(): IdeStatus {
@@ -431,10 +431,12 @@ export async function ideLookChanged(accentChanged: boolean): Promise<void> {
 }
 
 /** When Laramac starts: a Laramac Code app from an older Laramac is replaced, and the new extensions are added. */
-export async function ideOnStart(update: (p: number | null, l?: string) => void): Promise<void> {
+export async function ideOnStart(update: (p: number | null, l?: string) => void, kinds: readonly string[] = []): Promise<void> {
   if (!ideInstalled()) return
   const st = readState()
-  const missing = IDE_EXTENSIONS.filter((e) => !st.extensions[e.id]).map((e) => e.id)
+  // Only what this Mac's projects need. Extras are added from the Laramac Code page, never on their own.
+  const wanted = extensionsFor(kinds)
+  const missing = IDE_EXTENSIONS.filter((e) => wanted.includes(e.id) && !st.extensions[e.id]).map((e) => e.id)
   if (missing.length) await installExtensions(update, missing)
   if (existsSync(appPath()) && appVersion() !== app.getVersion()) await installApp(update).catch(() => undefined)
   await prepare()

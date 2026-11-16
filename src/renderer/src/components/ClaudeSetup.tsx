@@ -35,7 +35,7 @@ export default function ClaudeSetup(): React.JSX.Element {
         <div className="cs-grid">
           {items.map((i) => (
             <div key={i.label} className="cs-item" data-ok={i.ok}>
-              {i.ok ? <Check size={14} /> : <X size={14} />}
+              <span className={i.ok ? 'tag tag-ok' : 'tag'}>{i.ok ? <><Check size={11} /> Ready</> : 'Not set up'}</span>
               <div>
                 <code>{i.label}</code>
                 <span>{i.text}</span>

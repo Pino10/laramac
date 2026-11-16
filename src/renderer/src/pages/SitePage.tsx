@@ -9,6 +9,7 @@ import type { OutdatedPackage, ReviewFinding, SiteFacts, SiteInfo } from '@share
 import { useApp } from '../store'
 import { Monogram } from '../ui'
 import Doctor from '../components/Doctor'
+import SiteNames from '../components/SiteNames'
 import { NodeChooser } from '../components/NodeVersions'
 import DbBrowser from '../components/DbBrowser'
 import { BackendRow, DeployDialog, kindLabel, PushDialog, SiteDoctor, SnapshotsDialog } from './Sites'
@@ -30,6 +31,17 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'tests', label: 'Tests', icon: <FlaskConical size={14} /> },
   { id: 'security', label: 'Security', icon: <ShieldCheck size={14} /> },
   { id: 'deploy', label: 'Ship', icon: <Rocket size={14} /> }
+]
+
+/** The tabs in a few groups, so they fit on one row. */
+const TAB_GROUPS: { label: string; icon: React.ReactNode; tabs: Tab[] }[] = [
+  { label: 'Overview', icon: <Globe size={14} />, tabs: ['overview'] },
+  { label: 'Run', icon: <SquareTerminal size={14} />, tabs: ['commands', 'workers', 'tests'] },
+  { label: 'Data', icon: <Database size={14} />, tabs: ['database', 'env'] },
+  { label: 'Logs', icon: <ScrollText size={14} />, tabs: ['logs', 'requests', 'profiler'] },
+  { label: 'Packages', icon: <Package size={14} />, tabs: ['packages'] },
+  { label: 'Security', icon: <ShieldCheck size={14} />, tabs: ['security'] },
+  { label: 'Ship', icon: <Rocket size={14} />, tabs: ['deploy'] }
 ]
 
 /** Everything about one site in one place. */
@@ -90,25 +102,41 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
           <button className="btn" onClick={() => api.invoke('sites:open-claude', site.path)}>
             <Sparkles size={14} /> Claude Code
           </button>
-          <button className="icon-btn" aria-label="Claude Code on your model (claudelm)" data-tip="claudelm: on your model" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
-            <Bot />
+          <button className="btn btn-sm" title="Claude Code on a model on this Mac (claudelm)" onClick={() => act('open-lm', () => api.invoke('claude:open-lm', site.name))}>
+            <Bot size={14} /> My model
           </button>
-          <button className="icon-btn" aria-label="Claude Code on Free LLM API (claudefree)" data-tip="claudefree: on Free LLM API" onClick={() => act('open-free', () => api.invoke('claude:open-free', site.name))}>
-            <Network />
+          <button className="btn btn-sm" title="Claude Code on your free keys (claudefree)" onClick={() => act('open-free', () => api.invoke('claude:open-free', site.name))}>
+            <Network size={14} /> Free keys
           </button>
-          <button className="icon-btn" aria-label="Show folder" data-tip="Show folder" onClick={() => api.invoke('sites:open-folder', site.path)}>
-            <FolderOpen />
+          <button className="btn btn-sm" onClick={() => api.invoke('sites:open-folder', site.path)}>
+            <FolderOpen size={14} /> Folder
           </button>
         </div>
       </div>
 
       <div className="seg-tabs site-tabs" role="tablist">
-        {TABS.filter((t) => t.id !== 'profiler' || !!site.php).map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
-            {t.icon} {t.label}
+        {TAB_GROUPS.map((g) => (
+          <button key={g.label} role="tab" aria-selected={g.tabs.includes(tab)} onClick={() => !g.tabs.includes(tab) && setTab(g.tabs[0])}>
+            {g.icon} {g.label}
           </button>
         ))}
       </div>
+      {(() => {
+        const inGroup = (TAB_GROUPS.find((g) => g.tabs.includes(tab))?.tabs ?? []).filter((t) => t !== 'profiler' || !!site.php)
+        if (inGroup.length < 2) return null
+        return (
+          <div className="seg site-subtabs" role="tablist" aria-label="In this group">
+            {inGroup.map((id) => {
+              const t = TABS.find((x) => x.id === id)!
+              return (
+                <button key={id} role="tab" aria-selected={tab === id} aria-checked={tab === id} onClick={() => setTab(id)}>
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {tab === 'overview' && (
         <div className="site-grid">
@@ -129,6 +157,7 @@ export default function SitePage({ site, tab: first, onBack }: { site: SiteInfo;
             </div>
           )}
           <SiteExtras site={site} />
+          <SiteNames only={site.name} />
           <div className="quick-grid">
             <Quick icon={<Stethoscope size={18} />} title="Ask the Site Doctor" text="Reads the logs and explains what is wrong." onClick={() => setDialog('doctor')} />
             <Quick icon={<Camera size={18} />} title="Snapshots" text="Save the files and database, and go back." onClick={() => setDialog('snap')} />

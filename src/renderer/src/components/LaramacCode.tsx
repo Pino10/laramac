@@ -46,13 +46,37 @@ export default function LaramacCode(): React.JSX.Element {
         )}
         {s.installed && (
           <div className="ide-exts">
-            {s.extensions.map((e) => (
-              <span key={e.id} className="ide-ext" data-state={e.state} title={e.why}>
-                {e.state === 'installed' ? <Check size={12} /> : e.state === 'failed' ? <X size={12} /> : <Puzzle size={12} />}
-                {e.name}
-              </span>
-            ))}
+            {s.extensions
+              .filter((e) => e.state !== 'missing')
+              .map((e) => (
+                <span key={e.id} className="ide-ext" data-state={e.state} title={e.why}>
+                  {e.state === 'installed' ? <Check size={12} /> : <X size={12} />}
+                  {e.name}
+                </span>
+              ))}
           </div>
+        )}
+        {s.installed && s.extensions.some((e) => e.state === 'missing') && (
+          <details className="hint">
+            <summary>
+              {s.extensions.filter((e) => e.state === 'missing').length} more you can add: {s.extensions.filter((e) => e.state === 'missing').map((e) => e.name).slice(0, 4).join(', ')}
+              {s.extensions.filter((e) => e.state === 'missing').length > 4 ? ' and more' : ''}
+            </summary>
+            <div className="ide-more">
+              {s.extensions
+                .filter((e) => e.state === 'missing')
+                .map((e) => (
+                  <div key={e.id} className="ide-more-row">
+                    <span>
+                      <strong>{e.name}</strong> {e.why}
+                    </span>
+                    <button className="btn btn-sm" disabled={!!job || busy.has(`ide-add-${e.id}`)} onClick={async () => setS((await act(`ide-add-${e.id}`, () => api.invoke('ide:add-extension', e.id))) ?? s)}>
+                      Add
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </details>
         )}
         <div className="ide-prefs">
           <label className="field">
@@ -94,7 +118,7 @@ export default function LaramacCode(): React.JSX.Element {
               <Download size={14} /> {job ? 'Installing…' : 'Install Laramac Code'}
             </button>
           )}
-          <span className="hint">{s.installed ? 'Updates appear on the Updates page. Extensions update themselves.' : 'About 100 MB, checked against its published checksum.'}</span>
+          <span className="hint">{s.installed ? 'Updates appear on the Updates page. Extensions update themselves.' : 'About 300 MB with the extensions, checked against its published checksum.'}</span>
         </div>
       </div>
     </div>

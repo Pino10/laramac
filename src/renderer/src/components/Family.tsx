@@ -5,7 +5,7 @@ import type { IdeStatus } from '@shared/types'
 import { useApp } from '../store'
 
 /** Laramac Code and MacSec: the two apps that go with Laramac. */
-export default function Family(): React.JSX.Element {
+export default function Family({ only }: { only?: 'macsec' }): React.JSX.Element {
   const { act, busy, setPage } = useApp()
   const api = window.laramac
   const [ide, setIde] = useState<IdeStatus | null>(null)
@@ -16,7 +16,7 @@ export default function Family(): React.JSX.Element {
   }, [api])
   return (
     <div className="family">
-      <div className="family-card" style={{ ['--g1' as string]: '#60a5fa', ['--g2' as string]: '#7c3aed' }}>
+      {!only && <div className="family-card" style={{ ['--g1' as string]: '#60a5fa', ['--g2' as string]: '#7c3aed' }}>
         <img className="family-logo" src={codeIcon} alt="" width={46} height={46} />
         <div className="family-text">
           <strong>Laramac Code</strong>
@@ -33,7 +33,7 @@ export default function Family(): React.JSX.Element {
             </button>
           )}
         </div>
-      </div>
+      </div>}
       <div className="family-card" style={{ ['--g1' as string]: '#22d3ee', ['--g2' as string]: '#ec4899' }}>
         <span className="family-icon">
           <ShieldHalf size={22} />
