@@ -23,7 +23,7 @@ const startOfToday = (): number => {
 const iconFor = (kind: ActivityItem['kind'], size: number): React.JSX.Element => (kind === 'error' ? <CircleAlert size={size} /> : kind === 'success' ? <CircleCheck size={size} /> : <Sparkles size={size} />)
 
 /** One notification in full: the whole message, when it happened, and a way to copy it. */
-function Detail({ item, onClose }: { item: ActivityItem; onClose: () => void }): React.JSX.Element {
+function Detail({ item, onClose, onAct }: { item: ActivityItem; onClose: () => void; onAct: (a: ActivityItem) => void }): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {
@@ -50,7 +50,7 @@ function Detail({ item, onClose }: { item: ActivityItem; onClose: () => void }):
             <X size={15} />
           </button>
         </div>
-        <div className="notice-body">{item.body || 'There is nothing more to say about this one.'}</div>
+        {item.body && <div className="notice-body">{item.body}</div>}
         <div className="notice-actions">
           <button
             className="btn btn-sm"
@@ -63,7 +63,18 @@ function Detail({ item, onClose }: { item: ActivityItem; onClose: () => void }):
           >
             <Copy size={13} /> {copied ? 'Copied' : 'Copy'}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={onClose}>
+          {item.action && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                onAct(item)
+                onClose()
+              }}
+            >
+              {item.action.label}
+            </button>
+          )}
+          <button className={item.action ? 'btn btn-sm' : 'btn btn-primary btn-sm'} onClick={onClose}>
             Close
           </button>
         </div>
@@ -78,7 +89,7 @@ function Detail({ item, onClose }: { item: ActivityItem; onClose: () => void }):
  * the page itself, so no panel can hide them). Errors stay until you close them; the others stay
  * a while longer, and stay as long as the pointer is on them. Click one to read it in full.
  */
-function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem) => void }): React.JSX.Element | null {
+function Toasts({ hidden, onOpen, onAct }: { hidden: boolean; onOpen: (a: ActivityItem) => void; onAct: (a: ActivityItem) => void }): React.JSX.Element | null {
   const { activity } = useApp()
   const [since] = useState(() => Date.now())
   const [shown, setShown] = useState<ActivityItem[]>([])
@@ -124,23 +135,47 @@ function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem)
     <div className="toasts" role="status" aria-live="polite" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {shown.map((a) => (
         <div key={a.id} className="toast-mini glass" data-kind={a.kind}>
-          <button
-            className="toast-open"
-            onClick={() => {
-              drop(a.id)
-              onOpen(a)
-            }}
-            title="Read it in full"
-          >
-            <span className="event-icon" data-kind={a.kind}>
-              {iconFor(a.kind, 15)}
-            </span>
-            <span className="toast-text">
-              <strong>{a.title}</strong>
-              {a.body && <small>{a.body}</small>}
-              <em>Click to read it in full</em>
-            </span>
-          </button>
+          {/* Only a notice with more to say can be opened. One that says it all is just shown. */}
+          {a.kind === 'error' || (a.body && a.body.length > 90) ? (
+            <button
+              className="toast-open"
+              onClick={() => {
+                drop(a.id)
+                onOpen(a)
+              }}
+              title="Read it in full"
+            >
+              <span className="event-icon" data-kind={a.kind}>
+                {iconFor(a.kind, 15)}
+              </span>
+              <span className="toast-text">
+                <strong>{a.title}</strong>
+                {a.body && <small>{a.body}</small>}
+                <em>{a.kind === 'error' ? 'Details and copy' : 'Read it all'}</em>
+              </span>
+            </button>
+          ) : (
+            <div className="toast-open toast-plain">
+              <span className="event-icon" data-kind={a.kind}>
+                {iconFor(a.kind, 15)}
+              </span>
+              <span className="toast-text">
+                <strong>{a.title}</strong>
+                {a.body && <small>{a.body}</small>}
+              </span>
+            </div>
+          )}
+          {a.action && (
+            <button
+              className="btn btn-sm toast-action"
+              onClick={() => {
+                drop(a.id)
+                onAct(a)
+              }}
+            >
+              {a.action.label}
+            </button>
+          )}
           <button className="icon-btn toast-x" aria-label="Dismiss" onClick={() => drop(a.id)}>
             <X size={13} />
           </button>
@@ -154,17 +189,24 @@ function Toasts({ hidden, onOpen }: { hidden: boolean; onOpen: (a: ActivityItem)
 
 /** The bell: one quiet line per event, details on click. */
 export default function Activity(): React.JSX.Element {
-  const { activity, clearActivity } = useApp()
+  const { activity, clearActivity, setPage } = useApp()
   const [open, setOpen] = useState(false)
   const [seen, setSeen] = useState(0)
+  // What counted as new when the bell was opened, so new lines keep their dot while you read them.
+  const [prevSeen, setPrevSeen] = useState(0)
   const [detail, setDetail] = useState<ActivityItem | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
+  const act = (a: ActivityItem): void => {
+    if (a.action?.page) setPage(a.action.page as never)
+    else if (a.action?.reveal) void window.laramac.invoke('activity:act', a.id)
+  }
   const unseen = activity.filter((a) => a.at > seen)
   const hasError = unseen.some((a) => a.kind === 'error')
 
   useEffect(() => {
     if (!open) return
+    setPrevSeen(seen)
     setSeen(Date.now())
     const close = (e: MouseEvent | KeyboardEvent): void => {
       if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false)
@@ -186,12 +228,12 @@ export default function Activity(): React.JSX.Element {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <Toasts hidden={false} onOpen={(a) => setDetail(a)} />
-      {detail && <Detail item={detail} onClose={() => setDetail(null)} />}
+      <Toasts hidden={false} onOpen={(a) => setDetail(a)} onAct={act} />
+      {detail && <Detail item={detail} onClose={() => setDetail(null)} onAct={act} />}
       <button
         className="bell"
         data-new={unseen.length > 0 && !open}
-        aria-label={`Activity${unseen.length ? `, ${unseen.length} new` : ''}`}
+        aria-label={`Notifications${unseen.length ? `, ${unseen.length} new` : ''}`}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
@@ -203,9 +245,9 @@ export default function Activity(): React.JSX.Element {
         )}
       </button>
       {open && (
-        <div className="popover glass activity-pop" role="dialog" aria-label="Activity" style={{ top: 44, right: 0 }}>
+        <div className="popover glass activity-pop" role="dialog" aria-label="Notifications" style={{ top: 44, right: 0 }}>
           <div className="popover-head">
-            Activity
+            Notifications
             {activity.length > 0 && (
               <button className="btn btn-quiet" style={{ height: 26 }} onClick={clearActivity}>
                 Clear all
@@ -215,7 +257,7 @@ export default function Activity(): React.JSX.Element {
           <div className="popover-list">
             {activity.length === 0 && (
               <div className="empty dim" style={{ padding: '34px 24px' }}>
-                Installs, updates, shared links and anything that stops unexpectedly will show up here.
+                Nothing new. Finished copies, installs, updates and anything that stops unexpectedly show up here.
               </div>
             )}
             {groups.map(([label, items]) =>
@@ -223,24 +265,37 @@ export default function Activity(): React.JSX.Element {
                 <div key={label}>
                   <div className="event-group">{label}</div>
                   {items.slice(0, 40).map((a) => (
-                    <button
-                      key={a.id}
-                      className="event event-line"
-                      title="Read it in full"
-                      onClick={() => {
-                        setOpen(false)
-                        setDetail(a)
-                      }}
-                    >
-                      <span className="event-icon" data-kind={a.kind}>
-                        {iconFor(a.kind, 13)}
-                      </span>
-                      <span className="event-main">
-                        <span className="event-title">{a.title}</span>
-                        {a.body && <span className="event-preview">{a.body}</span>}
-                      </span>
-                      <span className="event-time">{ago(a.at, now)}</span>
-                    </button>
+                    <div key={a.id} className="event event-line" data-unread={a.at > prevSeen}>
+                      <button
+                        className="event-hit"
+                        title={a.body ? 'Read it in full' : undefined}
+                        disabled={!a.body && a.kind !== 'error'}
+                        onClick={() => {
+                          setOpen(false)
+                          setDetail(a)
+                        }}
+                      >
+                        <span className="event-icon" data-kind={a.kind}>
+                          {iconFor(a.kind, 13)}
+                        </span>
+                        <span className="event-main">
+                          <span className="event-title">{a.title}</span>
+                          {a.body && <span className="event-preview">{a.body}</span>}
+                        </span>
+                        <span className="event-time">{ago(a.at, now)}</span>
+                      </button>
+                      {a.action && (
+                        <button
+                          className="btn btn-sm event-act"
+                          onClick={() => {
+                            setOpen(false)
+                            act(a)
+                          }}
+                        >
+                          {a.action.label}
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )

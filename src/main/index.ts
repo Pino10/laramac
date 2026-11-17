@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, systemPreferences, Tray, type IpcMainInvokeEvent } from 'electron'
 import * as phpdev from './phpdev'
 import { ideInstalled, ideLatest, ideLookChanged, ideNoteUpdate, ideOnStart, ideStatus, ideVersion, installApp, installExtensions, installIde, openIdeApp, openInIde } from './ide'
 import { IDE_EXTENSIONS } from './idecore'
@@ -12,6 +12,14 @@ import { ensureRuntimes, locate } from './runtimes'
 import * as dbadmin from './dbadmin'
 import { cleanAlias, needsHostsEntry, syncHostsFile } from './hosts'
 import { cleanRemotePath, deploy } from './deploy'
+import * as remoteFiles from './remote/files'
+import { cleanPath, formatBytes } from './remote/ops'
+import { transfers } from './remote/transfers'
+import * as serverLog from './remote/audit'
+import { generateKey } from './remote/keys'
+import { redact } from './remote/redact'
+import { parseSshConfig } from './remote/sshconfig'
+import { buildPrompt, buildReport, DIAG_COMMAND } from './remote/claudehelp'
 import { posix } from 'path'
 import * as api from './apiclient'
 import * as github from './github'
@@ -77,7 +85,7 @@ import { installAiTool, launchAiTool, listAiTools, refreshLoginShellPaths } from
 import * as ssh from './ssh'
 import { customIniPath, ensureCustomIni, ensureXdebug, importPhp, xdebugPath } from './php'
 import { safeStorage } from 'electron'
-import type { CommandsInfo, ProfilerInfo, SiteInfo as SiteInfoT, OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, SwapChoice, PackageInfo, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, SshServerInput, UpdateInfo } from '../shared/types'
+import type { CommandsInfo, ProfilerInfo, SiteInfo as SiteInfoT, OverviewPulse, FreeLlmInfo, PhpQuick, PhpToolInfo, IntegrationsInfo, HostingConfig, WorkerConfig, SkillPackInfo, ApiEnvironment, AzureAccount, AzureRepo, ClaudeSetupStatus, UpdateItem, UpdatesReport, SwapChoice, PackageInfo, RuntimeId, NodeVersionsInfo, SiteNodeInfo, HealthIssue, ReviewFinding, ReviewInfo, ReconRequest, ReviewerKind, ReviewFocus, ApiRequest, ApiRunResult, ApiStore, GitPushOptions, KV, DatabaseInfo, McpStatus, ResetOptions, ServiceId, ServerCommand, SshClaudeRequest, SshServerInput, TransferInfo, UpdateInfo } from '../shared/types'
 import { activeMysql, installedMysqlVersions, mysqlClientPath, createDatabase as createMysqlDb } from './svc/mysql'
 import { mariadbClient } from './svc/mariadb'
 import { runStreaming } from './creator'
@@ -1909,23 +1917,56 @@ function registerIpc(): void {
   handle('health:close', (sid) => ssh.closeHealth(String(sid)))
   handle('sftp:connect', (id, passphrase) => ssh.connectSftp(String(id), typeof passphrase === 'string' ? passphrase : null, keychain))
   handle('sftp:list', (sid, path) => ssh.listDir(String(sid), String(path)))
-  handle('sftp:download', async (sid, paths) => {
-    if (!mainWindow || !Array.isArray(paths)) return 0
+  // Copies run in the background through one queue. Its progress bar is at the bottom of the window.
+  const applyTransferSettings = (): void => {
+    const st = getSettings()
+    transfers.parallel = Math.min(6, Math.max(1, Math.round(st.transferParallel ?? 3)))
+    transfers.limitBps = Math.max(0, Math.round((st.transferLimitMb ?? 0) * 1_000_000))
+  }
+  transfers.on('changed', (list) => send('transfers:changed', list))
+  transfers.on('finished', (t: TransferInfo) => {
+    if (t.status === 'done') {
+      const detail = t.direction === 'archive' ? `On ${t.server}.` : `${t.files} ${t.files === 1 ? 'file' : 'files'}${t.total ? `, ${formatBytes(t.total)}` : ''} on ${t.server}.`
+      activity.push('success', t.doneLabel ?? t.label, detail, t.reveal ? { label: 'Show in Finder', reveal: t.reveal } : { label: 'Open Remote servers', page: 'servers' })
+    } else if (t.status === 'error') activity.push('error', `${t.label} stopped`, t.error ?? 'The copy did not finish.', { label: 'Open Remote servers', page: 'servers' })
+  })
+  handle('activity:act', (id) => {
+    const a = activity.list().find((x) => x.id === String(id))?.action
+    if (a?.reveal && existsSync(a.reveal)) shell.showItemInFolder(a.reveal)
+  })
+  handle('transfers:list', () => transfers.list())
+  handle('transfers:pause', (id) => transfers.pause(String(id)))
+  handle('transfers:resume', (id) => transfers.resume(String(id)))
+  handle('transfers:cancel', (id) => transfers.cancel(String(id)))
+  handle('transfers:clear', () => transfers.clear())
+  handle('transfers:reveal', (id) => {
+    const t = transfers.list().find((x) => x.id === String(id))
+    if (t?.reveal && existsSync(t.reveal)) shell.showItemInFolder(t.reveal)
+  })
+  const remoteDir = (v: unknown): string => {
+    try {
+      return cleanPath(v)
+    } catch (err) {
+      throw new ValidationError((err as Error).message)
+    }
+  }
+  handle('sftp:download', async (sid, items) => {
+    if (!mainWindow || !Array.isArray(items) || items.length === 0 || items.length > 5000) return null
     const res = await dialog.showOpenDialog(mainWindow, { title: 'Download to…', buttonLabel: 'Download here', properties: ['openDirectory', 'createDirectory'] })
-    if (res.canceled || !res.filePaths[0]) return 0
-    const n = await ssh.download(String(sid), paths.map(String), res.filePaths[0])
-    activity.push('success', `Downloaded ${n} ${n === 1 ? 'file' : 'files'}`, res.filePaths[0])
-    return n
+    if (res.canceled || !res.filePaths[0]) return null
+    applyTransferSettings()
+    const kinds = new Map<string, 'file' | 'dir'>()
+    for (const it of items) kinds.set(remoteDir(it?.path), it?.dir === true ? 'dir' : 'file')
+    return remoteFiles.startDownload(String(sid), [...kinds.keys()], res.filePaths[0], kinds)
   })
-  handle('sftp:upload', async (sid, remoteDir) => {
-    if (!mainWindow) return 0
+  handle('sftp:upload', async (sid, dir) => {
+    if (!mainWindow) return null
     const res = await dialog.showOpenDialog(mainWindow, { title: 'Upload files', buttonLabel: 'Upload', defaultPath: ensureWww(), properties: ['openFile', 'multiSelections'] })
-    if (res.canceled || res.filePaths.length === 0) return 0
-    const n = await ssh.upload(String(sid), res.filePaths, String(remoteDir))
-    activity.push('success', `Uploaded ${n} ${n === 1 ? 'file' : 'files'}`, String(remoteDir))
-    return n
+    if (res.canceled || res.filePaths.length === 0) return null
+    applyTransferSettings()
+    return remoteFiles.startUpload(String(sid), remoteDir(dir), res.filePaths)
   })
-  handle('sftp:upload-folder', async (sid, remoteDir) => {
+  handle('sftp:upload-folder', async (sid, dir) => {
     if (!mainWindow) return null
     const res = await dialog.showOpenDialog(mainWindow, {
       title: 'Upload a folder',
@@ -1935,16 +1976,103 @@ function registerIpc(): void {
       properties: ['openDirectory']
     })
     if (res.canceled || !res.filePaths[0]) return null
-    const local = res.filePaths[0]
-    const target = posix.join(String(remoteDir), local.split('/').pop()!)
-    const result = await jobs.run(`Uploading ${local.split('/').pop()}`, (update) => deploy(ssh.sessionFs(String(sid)), local, target, {}, update))
-    activity.push('success', `Uploaded ${local.split('/').pop()}`, `${result.uploaded} files to ${target}`)
-    return result
+    applyTransferSettings()
+    return remoteFiles.startUpload(String(sid), remoteDir(dir), [res.filePaths[0]])
   })
-  handle('sftp:mkdir', (sid, dir, name) => ssh.mkdir(String(sid), String(dir), String(name)))
-  handle('sftp:rename', (sid, from, to) => ssh.rename(String(sid), String(from), String(to)))
-  handle('sftp:delete', (sid, path, isDir) => ssh.remove(String(sid), String(path), isDir === true))
+  // Files dropped on the window: the page hands over the paths, and anything private on this Mac is refused.
+  handle('sftp:upload-paths', (sid, dir, paths) => {
+    if (!Array.isArray(paths) || paths.length === 0 || paths.length > 500) throw new ValidationError('Drop some files or folders to upload them.')
+    applyTransferSettings()
+    return remoteFiles.startUpload(String(sid), remoteDir(dir), paths.map(String))
+  })
+  handle('sftp:zip', (sid, dir, items, name) => {
+    if (!Array.isArray(items)) throw new ValidationError('Choose something to zip.')
+    return remoteFiles.zip(String(sid), remoteDir(dir), items.map(String), String(name))
+  })
+  handle('sftp:unzip', (sid, file, into) => remoteFiles.unzip(String(sid), remoteDir(file), remoteDir(into)))
+  handle('sftp:chmod', (sid, path, mode, recursive) => remoteFiles.chmod(String(sid), remoteDir(path), String(mode), recursive === true))
+  handle('sftp:stat', (sid, path) => remoteFiles.stat(String(sid), remoteDir(path)))
+  handle('sftp:search', (sid, dir, term) => remoteFiles.search(String(sid), remoteDir(dir), String(term)))
+  handle('sftp:read', (sid, path) => remoteFiles.readText(String(sid), remoteDir(path)))
+  handle('sftp:write', (sid, path, text) => {
+    if (typeof text !== 'string') throw new ValidationError('Nothing to save.')
+    return remoteFiles.writeText(String(sid), remoteDir(path), text)
+  })
+  handle('sftp:trash', (sid, path) => remoteFiles.trash(String(sid), remoteDir(path)))
+  handle('sftp:copy-path', (path) => clipboard.writeText(String(path).slice(0, 2000)))
+  handle('sftp:bookmarks', (id, list) => ssh.setBookmarks(String(id), Array.isArray(list) ? list.map(String) : []))
+  handle('sftp:install-key', async (sid, keyPath) => {
+    if (typeof keyPath !== 'string') throw new ValidationError('Choose a key.')
+    return remoteFiles.installKey(String(sid), keyPath.startsWith('~/') ? join(homedir(), keyPath.slice(2)) : keyPath)
+  })
+  handle('sftp:read-only-guard', (sid) => ssh.sessionInfo(String(sid)).readOnly)
+  handle('sftp:mkdir', (sid, dir, name) => {
+    const r = ssh.mkdir(String(sid), String(dir), String(name))
+    remoteFiles.audited(String(sid), 'new folder', `${name} in ${dir}`)
+    return r
+  })
+  handle('sftp:rename', (sid, from, to) => {
+    const r = ssh.rename(String(sid), String(from), String(to))
+    remoteFiles.audited(String(sid), 'rename', `${from} to ${to}`)
+    return r
+  })
+  handle('sftp:delete', (sid, path, isDir) => {
+    const r = ssh.remove(String(sid), String(path), isDir === true)
+    remoteFiles.audited(String(sid), 'delete', String(path))
+    return r
+  })
   handle('sftp:disconnect', (sid) => ssh.disconnect(String(sid)))
+  handle('ssh:keygen', (name, passphrase) => generateKey(String(name), typeof passphrase === 'string' && passphrase ? passphrase : null))
+  handle('ssh:config-import', () => {
+    const file = join(homedir(), '.ssh', 'config')
+    if (!existsSync(file)) return []
+    const saved = ssh.listServers()
+    return parseSshConfig(readFileSync(file, 'utf8')).hosts.filter((h) => !saved.some((s) => s.host === h.host && s.port === h.port && s.user === h.user))
+  })
+  handle('ssh:audit', (id) => serverLog.read(ssh.serverById(String(id)).name))
+  handle('ssh:commands', (id, list) => ssh.setCommands(String(id), Array.isArray(list) ? (list as ServerCommand[]) : []))
+  handle('ssh:save-log', async (name, text) => {
+    if (!mainWindow || typeof text !== 'string') return false
+    const res = await dialog.showSaveDialog(mainWindow, { title: 'Save the terminal log', defaultPath: join(homedir(), 'Documents', `${String(name).replace(/[^\w.-]+/g, '-').slice(0, 40) || 'server'}-terminal.txt`) })
+    if (res.canceled || !res.filePath) return false
+    // Keys, passwords and tokens that showed up on the screen are taken out before the log is written.
+    writeFileSync(res.filePath, redact(text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).slice(-2_000_000), { mode: 0o600 })
+    return true
+  })
+  handle('remote:touchid-available', () => systemPreferences.canPromptTouchID())
+  handle('remote:touchid', async () => {
+    if (!systemPreferences.canPromptTouchID()) return 'unavailable'
+    try {
+      await systemPreferences.promptTouchID('unlock your remote servers in Laramac')
+      return 'ok'
+    } catch {
+      return 'denied'
+    }
+  })
+  handle('ssh:claude-ready', () => ({ ready: findCli(['claude']) !== null }))
+  handle('ssh:claude-help', async (req) => {
+    if (!getSettings().serversClaude) throw new ValidationError('Switch on "Help from Claude on servers" in Settings first.')
+    const r = (req ?? {}) as Partial<SshClaudeRequest>
+    if (typeof r.id !== 'string' || !['ask', 'troubleshoot'].includes(r.kind as string) || !['terminal', 'desktop'].includes(r.where as string)) throw new ValidationError('Choose a server and what you need.')
+    if (r.where === 'desktop' && !existsSync('/Applications/Claude.app') && !existsSync(join(homedir(), 'Applications', 'Claude.app'))) throw new ValidationError('The Claude desktop app is not installed. Get it at claude.ai/download, or use Claude Code in Terminal.')
+    if (r.where === 'terminal' && !findCli(['claude'])) throw new ValidationError('Claude Code is not installed. Set it up under AI tools first.')
+    const srv = ssh.serverById(r.id)
+    const out = await jobs.run(`Reading ${srv.name}`, () => ssh.runScript(srv.id, typeof r.passphrase === 'string' ? r.passphrase : null, keychain, DIAG_COMMAND))
+    if (out.status === 'unknown-host') return out
+    const folder = join(dirs.root(), 'server-reports')
+    mkdirSync(folder, { recursive: true, mode: 0o700 })
+    const report = join(folder, `${srv.id}.md`)
+    writeFileSync(report, buildReport(srv, out.out), { mode: 0o600 })
+    chmodSync(report, 0o600)
+    const prompt = buildPrompt(r.kind as 'ask' | 'troubleshoot', typeof r.question === 'string' ? r.question : null, report, srv)
+    serverLog.record(srv.name, 'claude', r.kind === 'ask' ? 'Asked Claude about this server (read only report)' : 'Troubleshoot with Claude (read only report)')
+    if (r.where === 'desktop') {
+      clipboard.writeText(prompt)
+      await shell.openPath(existsSync('/Applications/Claude.app') ? '/Applications/Claude.app' : join(homedir(), 'Applications', 'Claude.app'))
+      activity.push('info', 'Request copied for Claude', `In the Claude app, open the Code tab on the folder ${folder}, then paste.`)
+    } else await openTerminal(folder, `claude ${shellQuote(prompt.slice(0, 2500))}`)
+    return { status: 'opened', where: r.where as 'terminal' | 'desktop', report }
+  })
   handle('shell:open', (id, passphrase, cols, rows) =>
     ssh.openShell(
       String(id),

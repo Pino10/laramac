@@ -1,34 +1,41 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
-import {
-  ArrowUp,
-  Download,
-  ExternalLink,
-  File,
-  Folder,
-  FolderPlus,
-  FolderUp,
-  KeyRound,
-  Link2,
-  Activity,
-  Pencil,
-  Plus,
-  RefreshCw,
-  ShieldCheck,
-  SquareTerminal,
-  Trash2,
-  Upload,
-  X
-} from 'lucide-react'
-import type { SftpEntry, SftpListing, SshServer, SshServerInput } from '@shared/types'
+import { useEffect, useRef, useState } from 'react'
+import { Activity, Bot, ClipboardList, ExternalLink, FileText, Folder, KeyRound, Lock, Pencil, Plus, ShieldAlert, ShieldCheck, SquareTerminal, Trash2, X } from 'lucide-react'
+import type { SshServer, SshServerInput } from '@shared/types'
 import { useApp } from '../store'
-import { formatBytes, PageHead } from '../ui'
+import { PageHead } from '../ui'
 import { useAsk } from '../components/Ask'
 import ServerHealth from '../components/ServerHealth'
+import FileBrowser from '../components/remote/FileBrowser'
+import TerminalTabs from '../components/remote/Terminal'
+import { AuditDialog, ClaudeDialog, ImportConfigDialog } from '../components/remote/ServerTools'
 
 const api = (): Window['laramac'] => window.laramac
+
+const toInput = (s: SshServer): SshServerInput => ({
+  id: s.id,
+  name: s.name,
+  host: s.host,
+  port: s.port,
+  user: s.user,
+  auth: s.auth,
+  keyPath: s.keyPath,
+  protocol: s.protocol,
+  tag: s.tag,
+  group: s.group,
+  readOnly: s.readOnly,
+  notes: s.notes,
+  startDir: s.startDir
+})
+
+/** Left the Remote page at this time, so coming back after a while asks for Touch ID again. */
+let leftAt = 0
+
+/** Servers under their group names, groups in order, the ones without a group last. */
+function groupsOf(list: SshServer[]): [string, SshServer[]][] {
+  const by = new Map<string, SshServer[]>()
+  for (const s of list) by.set(s.group ?? '', [...(by.get(s.group ?? '') ?? []), s])
+  return [...by.entries()].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+}
 
 export default function Servers(): React.JSX.Element {
   const { act } = useApp()
@@ -46,10 +53,53 @@ export default function Servers(): React.JSX.Element {
     retry: () => void
   } | null>(null)
   const [ask, askDialog] = useAsk()
+  const [importing, setImporting] = useState(false)
+  const { settings } = useApp()
+  const lockAfter = settings?.remoteLockMinutes ?? 0
+  const [locked, setLocked] = useState(() => lockAfter > 0 && leftAt > 0 && Date.now() - leftAt > lockAfter * 60_000)
+  const lastSeen = useRef(Date.now())
 
   useEffect(() => {
     api().invoke('ssh:list').then(setServers)
   }, [])
+
+  // Touch ID again after a quiet while, or after being away from this page for as long.
+  useEffect(() => {
+    if (lockAfter <= 0) return
+    const touch = (): void => {
+      lastSeen.current = Date.now()
+    }
+    window.addEventListener('mousemove', touch)
+    window.addEventListener('keydown', touch)
+    const id = setInterval(() => {
+      if (Date.now() - lastSeen.current > lockAfter * 60_000) setLocked(true)
+    }, 15_000)
+    return () => {
+      window.removeEventListener('mousemove', touch)
+      window.removeEventListener('keydown', touch)
+      clearInterval(id)
+      leftAt = Date.now()
+    }
+  }, [lockAfter])
+  const lockView = locked && lockAfter > 0 && (
+    <div className="remote-lock glass" role="dialog" aria-label="Remote servers are locked">
+      <Lock size={26} />
+      <strong>Remote servers are locked</strong>
+      <span className="hint">Locked after {lockAfter} quiet {lockAfter === 1 ? 'minute' : 'minutes'}. Connections stay open behind this.</span>
+      <button
+        className="btn btn-primary"
+        onClick={async () => {
+          const r = await api().invoke('remote:touchid')
+          if (r === 'ok') {
+            lastSeen.current = Date.now()
+            setLocked(false)
+          } else if (r === 'unavailable') setLocked(false)
+        }}
+      >
+        Unlock with Touch ID
+      </button>
+    </div>
+  )
 
   const openWorkspace = async (srv: SshServer, tab: 'terminal' | 'files' | 'health'): Promise<void> => {
     let passphrase: string | null = null
@@ -118,13 +168,18 @@ export default function Servers(): React.JSX.Element {
           onClose={() => setWorkspace(null)}
         />
         {trustDialog}
+        {lockView}
       </>
     )
   }
 
   return (
     <>
+      {lockView}
       <PageHead title="Remote servers" desc="Your remote machines in one place: open a terminal over SSH, or browse and move files over SFTP.">
+        <button className="btn" title="Add servers you already use with ssh in Terminal" onClick={() => setImporting(true)}>
+          From SSH settings
+        </button>
         <button
           className="btn btn-primary"
           onClick={() =>
@@ -163,9 +218,13 @@ export default function Servers(): React.JSX.Element {
           </button>
         </div>
       ) : (
-        <div className="grid-3">
-          {servers.map((s) => (
-            <div key={s.id} className="server-card glass">
+        <>
+          {groupsOf(servers).map(([group, list]) => (
+            <div key={group || 'none'}>
+              {groupsOf(servers).length > 1 && <div className="srv-group">{group || 'Other servers'}</div>}
+              <div className="grid-3" style={{ marginBottom: 14 }}>
+          {list.map((s) => (
+            <div key={s.id} className="server-card glass" data-tag={s.tag}>
               <div className="card-head">
                 <span className="mono-tile lg" style={{ ['--hue' as string]: '#4a7bb5' }} aria-hidden>
                   {s.name.slice(0, 2)}
@@ -181,23 +240,23 @@ export default function Servers(): React.JSX.Element {
                   className="btn btn-quiet btn-icon"
                   aria-label={`Edit ${s.name}`}
                   title="Edit"
-                  onClick={() =>
-                    setEditing({
-                      id: s.id,
-                      name: s.name,
-                      host: s.host,
-                      port: s.port,
-                      user: s.user,
-                      auth: s.auth,
-                      keyPath: s.keyPath,
-                      protocol: s.protocol
-                    })
-                  }
+                  onClick={() => setEditing(toInput(s))}
                 >
                   <Pencil size={14} />
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {s.tag && (
+                  <span className="tag srv-tag" data-tag={s.tag}>
+                    {s.tag === 'production' ? <ShieldAlert size={11} style={{ marginRight: 3 }} /> : null}
+                    {s.tag === 'production' ? 'Production' : s.tag === 'staging' ? 'Staging' : 'Development'}
+                  </span>
+                )}
+                {s.readOnly && (
+                  <span className="tag">
+                    <Lock size={11} style={{ marginRight: 3 }} /> Read only
+                  </span>
+                )}
                 <span className="tag tag-accent">{s.protocol === 'sftp' ? 'SSH' : s.protocol.toUpperCase()}</span>
                 <span className="tag">
                   {s.auth === 'agent' ? 'SSH agent' : s.auth === 'key' ? 'Key file' : s.hasPassword ? 'Password in Keychain' : 'Password'}
@@ -210,8 +269,9 @@ export default function Servers(): React.JSX.Element {
                   <span className="tag">Not connected yet</span>
                 )}
               </div>
+              {s.notes && <div className="hint srv-notes">{s.notes}</div>}
               <div className="card-foot">
-                {s.protocol === 'sftp' ? (
+                {s.protocol === 'sftp' && !s.readOnly ? (
                   <button className="btn" onClick={() => openWorkspace(s, 'terminal')}>
                     <SquareTerminal size={14} /> Terminal
                   </button>
@@ -229,7 +289,10 @@ export default function Servers(): React.JSX.Element {
               </div>
             </div>
           ))}
-        </div>
+              </div>
+            </div>
+          ))}
+        </>
       )}
 
       {editing && (
@@ -252,6 +315,7 @@ export default function Servers(): React.JSX.Element {
         />
       )}
 
+      {importing && <ImportConfigDialog onClose={() => setImporting(false)} onAdded={setServers} />}
       {askDialog}
       {trustDialog}
     </>
@@ -275,9 +339,12 @@ function Workspace({
   onUnknownHost: Unknown
   onClose: () => void
 }): React.JSX.Element {
-  const { act } = useApp()
+  const { act, settings } = useApp()
+  const [tool, setTool] = useState<null | 'audit' | 'ask' | 'troubleshoot'>(null)
   // Each pane connects the first time it is shown and stays alive while you switch.
   const [seen, setSeen] = useState<Set<string>>(new Set([tab]))
+  // "Open a terminal here" from the file browser: the terminal moves to that folder.
+  const [cd, setCd] = useState<{ path: string; n: number } | null>(null)
   useEffect(() => setSeen((s) => (s.has(tab) ? s : new Set([...s, tab]))), [tab])
 
   return (
@@ -292,7 +359,7 @@ function Workspace({
         }
       >
         <div className="seg-tabs" role="tablist">
-          {server.protocol === 'sftp' && (
+          {server.protocol === 'sftp' && !server.readOnly && (
             <button role="tab" aria-selected={tab === 'terminal'} onClick={() => onTab('terminal')}>
               <SquareTerminal size={14} /> Terminal
             </button>
@@ -306,7 +373,20 @@ function Workspace({
             </button>
           )}
         </div>
-        {server.protocol === 'sftp' && (
+        {settings?.serversClaude && server.protocol === 'sftp' && (
+          <>
+            <button className="btn btn-quiet" title="Have Claude look for trouble. It reads a cleaned, read only report and never gets a way in." onClick={() => setTool('troubleshoot')}>
+              <Bot size={14} /> Troubleshoot
+            </button>
+            <button className="btn btn-quiet" onClick={() => setTool('ask')}>
+              <Bot size={14} /> Ask Claude
+            </button>
+          </>
+        )}
+        <button className="btn btn-quiet" title="What was done on this server from Laramac" onClick={() => setTool('audit')}>
+          <ClipboardList size={14} /> Record
+        </button>
+        {server.protocol === 'sftp' && !server.readOnly && (
           <button
             className="btn btn-quiet"
             title="Open in the macOS Terminal app"
@@ -320,17 +400,19 @@ function Workspace({
         </button>
       </PageHead>
       <div style={{ display: tab === 'terminal' ? 'block' : 'none' }}>
-        {seen.has('terminal') && <TerminalPane server={server} passphrase={passphrase} visible={tab === 'terminal'} onUnknownHost={onUnknownHost} />}
+        {seen.has('terminal') && <TerminalTabs server={server} passphrase={passphrase} visible={tab === 'terminal'} onUnknownHost={onUnknownHost} cd={cd} />}
       </div>
       <div style={{ display: tab === 'files' ? 'block' : 'none' }}>
-        {seen.has('files') && <FilesPane server={server} passphrase={passphrase} onUnknownHost={onUnknownHost} />}
+        {seen.has('files') && <FilesPane server={server} passphrase={passphrase} onUnknownHost={onUnknownHost} onTerminalHere={server.protocol === 'sftp' && !server.readOnly ? (path) => (setCd({ path, n: Date.now() }), onTab('terminal')) : undefined} />}
       </div>
       {tab === 'health' && <ServerHealth server={server} passphrase={passphrase} onUnknownHost={onUnknownHost} />}
+      {tool === 'audit' && <AuditDialog server={server} onClose={() => setTool(null)} />}
+      {(tool === 'ask' || tool === 'troubleshoot') && <ClaudeDialog server={server} passphrase={passphrase} kind={tool} onUnknownHost={onUnknownHost} onClose={() => setTool(null)} />}
     </>
   )
 }
 
-function FilesPane({ server, passphrase, onUnknownHost }: { server: SshServer; passphrase: string | null; onUnknownHost: Unknown }): React.JSX.Element {
+function FilesPane({ server, passphrase, onUnknownHost, onTerminalHere }: { server: SshServer; passphrase: string | null; onUnknownHost: Unknown; onTerminalHere?: (path: string) => void }): React.JSX.Element {
   const { act } = useApp()
   const [conn, setConn] = useState<{ session: string; home: string } | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -371,205 +453,7 @@ function FilesPane({ server, passphrase, onUnknownHost }: { server: SshServer; p
         </div>
       </div>
     )
-  return <FileBrowser server={server} session={conn.session} home={conn.home} />
-}
-
-function TerminalPane({
-  server,
-  passphrase,
-  visible,
-  onUnknownHost
-}: {
-  server: SshServer
-  passphrase: string | null
-  visible: boolean
-  onUnknownHost: Unknown
-}): React.JSX.Element {
-  const host = useRef<HTMLDivElement>(null)
-  const termRef = useRef<Terminal | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
-  const sidRef = useRef<string | null>(null)
-  const [state, setState] = useState<'connecting' | 'live' | 'ended' | 'failed'>('connecting')
-  const [error, setError] = useState('')
-  const [attempt, setAttempt] = useState(0)
-
-  useEffect(() => {
-    const term = new Terminal({
-      fontFamily: "'SF Mono', ui-monospace, Menlo, monospace",
-      fontSize: 12.5,
-      lineHeight: 1.25,
-      cursorBlink: true,
-      allowTransparency: true,
-      scrollback: 5000,
-      // The terminal is always dark, in both themes, like a real one.
-      theme: {
-        background: 'rgba(0,0,0,0)',
-        foreground: '#ece9f6',
-        cursor: '#ff7a4c',
-        cursorAccent: '#0d0b1a',
-        selectionBackground: 'rgba(255,122,76,0.3)',
-        black: '#1b1830',
-        red: '#ff6b6b',
-        green: '#5be0a0',
-        yellow: '#ffd27a',
-        blue: '#8aa8ff',
-        magenta: '#c79bff',
-        cyan: '#6fe0ef',
-        white: '#e7e4f2',
-        brightBlack: '#6f6a8a',
-        brightRed: '#ff8f8f',
-        brightGreen: '#86f0bd',
-        brightYellow: '#ffe2a6',
-        brightBlue: '#adc2ff',
-        brightMagenta: '#dab9ff',
-        brightCyan: '#9cf0f8',
-        brightWhite: '#ffffff'
-      }
-    })
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    term.open(host.current!)
-    termRef.current = term
-    fitRef.current = fit
-    try {
-      fit.fit()
-    } catch {
-      /* hidden */
-    }
-    const input = term.onData((d) => sidRef.current && void api().invoke('shell:write', sidRef.current, d))
-    // PuTTY-style clipboard: selecting copies, right-click pastes. ⌘C and ⌘V work too.
-    const paste = async (): Promise<void> => {
-      const text = await api().invoke('clipboard:read')
-      if (text && sidRef.current) term.paste(text)
-    }
-    const copySelection = (): void => {
-      const sel = term.getSelection()
-      if (sel) void api().invoke('clipboard:write', sel)
-    }
-    const selection = term.onSelectionChange(copySelection)
-    term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== 'keydown' || !e.metaKey) return true
-      const k = e.key.toLowerCase()
-      if (k === 'v') {
-        void paste()
-        e.preventDefault()
-        return false
-      }
-      if (k === 'c' && term.hasSelection()) {
-        copySelection()
-        return false
-      }
-      if (k === 'a') {
-        term.selectAll()
-        return false
-      }
-      if (k === 'k') {
-        term.clear()
-        return false
-      }
-      return true
-    })
-    const onContext = (e: MouseEvent): void => {
-      e.preventDefault()
-      void paste()
-    }
-    host.current!.addEventListener('contextmenu', onContext)
-    const offData = api().on('shell:data', (p) => p.session === sidRef.current && term.write(p.data))
-    const offExit = api().on('shell:exit', (p) => {
-      if (p.session !== sidRef.current) return
-      sidRef.current = null
-      setState('ended')
-    })
-    const ro = new ResizeObserver(() => {
-      try {
-        fit.fit()
-      } catch {
-        return
-      }
-      if (sidRef.current) void api().invoke('shell:resize', sidRef.current, term.cols, term.rows)
-    })
-    ro.observe(host.current!)
-    return () => {
-      ro.disconnect()
-      input.dispose()
-      selection.dispose()
-      offData()
-      offExit()
-      if (sidRef.current) void api().invoke('shell:close', sidRef.current)
-      sidRef.current = null
-      term.dispose()
-    }
-  }, [])
-
-  useEffect(() => {
-    const term = termRef.current!
-    let live = true
-    setState('connecting')
-    term.reset()
-    term.write('\x1b[38;2;157;140;255mConnecting to ' + server.user + '@' + server.host + '…\x1b[0m\r\n')
-    api()
-      .invoke('shell:open', server.id, passphrase, term.cols, term.rows)
-      .then((res) => {
-        if (res.status === 'unknown-host') {
-          setState('failed')
-          setError('Confirm the server identity to continue.')
-          onUnknownHost(res.fingerprint, () => setAttempt((n) => n + 1))
-          return
-        }
-        if (!live) return void api().invoke('shell:close', res.session)
-        sidRef.current = res.session
-        setState('live')
-        term.focus()
-      })
-      .catch((e: Error) => {
-        setState('failed')
-        setError(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
-      })
-    return () => {
-      live = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [server.id, passphrase, attempt])
-
-  useEffect(() => {
-    if (!visible) return
-    try {
-      fitRef.current?.fit()
-    } catch {
-      /* not laid out yet */
-    }
-    termRef.current?.focus()
-  }, [visible])
-
-  return (
-    <div className="term">
-      <div className="term-bar">
-        <span className="dots">
-          <i data-live={state === 'live'} />
-          <i />
-          <i />
-        </span>
-        <span className="mono" style={{ color: 'inherit' }}>
-          {server.user}@{server.host}
-        </span>
-        <span className="term-tip">Select to copy, right-click to paste</span>
-        <span style={{ marginLeft: 'auto' }}>
-          {state === 'live' ? 'Connected' : state === 'connecting' ? 'Connecting' : state === 'ended' ? 'Session ended' : 'Not connected'}
-        </span>
-        {(state === 'ended' || state === 'failed') && (
-          <button className="btn btn-accent" style={{ height: 26 }} onClick={() => setAttempt((n) => n + 1)}>
-            Reconnect
-          </button>
-        )}
-      </div>
-      {state === 'failed' && error && (
-        <div className="errbox" style={{ margin: '10px 14px 0', gridColumn: 'auto' }}>
-          {error}
-        </div>
-      )}
-      <div className="term-body" ref={host} />
-    </div>
-  )
+  return <FileBrowser server={server} session={conn.session} home={conn.home} onTerminalHere={onTerminalHere} />
 }
 
 export function ServerDialog({
@@ -585,6 +469,8 @@ export function ServerDialog({
 }): React.JSX.Element {
   const { act, busy } = useApp()
   const [v, setV] = useState<SshServerInput>(initial)
+  const [newKey, setNewKey] = useState<string | null>(null)
+  const [ask, askDialog] = useAsk()
   const set = (patch: Partial<SshServerInput>): void => setV((x) => ({ ...x, ...patch }))
 
   return (
@@ -668,6 +554,36 @@ export function ServerDialog({
               value={v.keyPath ?? ''}
               onChange={(e) => set({ keyPath: e.target.value })}
             />
+            <div className="keymaker">
+              <button
+                className="btn btn-sm"
+                onClick={async () => {
+                  const pass = await ask({ title: 'A passphrase for the new key', label: 'Recommended: it protects the key if your Mac is ever lost. Leave empty for none.', secret: true, confirm: 'Make the key' })
+                  if (pass === null) return
+                  const made = await act('ssh-keygen', () => api().invoke('ssh:keygen', v.name || 'server', pass || null))
+                  if (made) {
+                    set({ keyPath: made.keyPath })
+                    setNewKey(made.publicKey)
+                  }
+                }}
+              >
+                <KeyRound size={13} /> Make a new key
+              </button>
+              <span className="hint">Saved in ~/.ssh and readable only by you.</span>
+            </div>
+            {newKey && (
+              <div className="okbox">
+                Key made. To use it, add this public line to the server's ~/.ssh/authorized_keys (or open the server with a password and use More, Add my key to this server):
+                <div className="copyfield" style={{ height: 'auto', padding: '8px 10px', marginTop: 6 }}>
+                  <span className="mono" style={{ whiteSpace: 'normal', wordBreak: 'break-all', fontSize: 11 }}>
+                    {newKey}
+                  </span>
+                  <button className="btn btn-quiet btn-sm" onClick={() => void api().invoke('clipboard:write', newKey)}>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {v.auth === 'password' && (
@@ -682,6 +598,35 @@ export function ServerDialog({
             />
           </div>
         )}
+        <details className="fold" style={{ marginTop: 6 }}>
+          <summary>Organise and protect</summary>
+          <div className="field">
+            <span className="field-label">What is it for?</span>
+            <div className="seg" role="radiogroup" aria-label="What is it for" style={{ alignSelf: 'flex-start' }}>
+              {([undefined, 'production', 'staging', 'development'] as const).map((t) => (
+                <button key={t ?? 'none'} role="radio" aria-checked={v.tag === t} onClick={() => set({ tag: t })}>
+                  {t === undefined ? 'Not set' : t === 'production' ? 'Production' : t === 'staging' ? 'Staging' : 'Development'}
+                </button>
+              ))}
+            </div>
+            <span className="hint">Production shows a red bar and asks before uploads, deletes and risky commands.</span>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={v.readOnly === true} onChange={(e) => set({ readOnly: e.target.checked })} /> Read only: browse and download, no changes, no terminal
+          </label>
+          <div className="field" style={{ marginTop: 8 }}>
+            <label htmlFor="sv-group">Group</label>
+            <input id="sv-group" className="input" placeholder="A client or project name" maxLength={40} value={v.group ?? ''} onChange={(e) => set({ group: e.target.value })} />
+          </div>
+          <div className="field">
+            <label htmlFor="sv-start">Open the files in this folder</label>
+            <input id="sv-start" className="input mono" placeholder="/var/www" value={v.startDir ?? ''} onChange={(e) => set({ startDir: e.target.value })} />
+          </div>
+          <div className="field">
+            <label htmlFor="sv-notes">Notes</label>
+            <textarea id="sv-notes" className="input" rows={2} maxLength={2000} placeholder="What runs here, who to call" value={v.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} />
+          </div>
+        </details>
         <div className="end" style={{ marginTop: 8 }}>
           {onDelete && (
             <button className="btn btn-quiet" style={{ marginRight: 'auto', color: 'var(--bad)' }} onClick={onDelete}>
@@ -703,214 +648,7 @@ export function ServerDialog({
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function FileBrowser({ server, session, home }: { server: SshServer; session: string; home: string }): React.JSX.Element {
-  const { act, busy, notify } = useApp()
-  const [listing, setListing] = useState<SftpListing | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [ask, askDialog] = useAsk()
-
-  const load = useCallback(
-    async (path: string) => {
-      const l = await act('sftp-list', () => api().invoke('sftp:list', session, path))
-      if (l) {
-        setListing(l)
-        setSelected(new Set())
-      }
-    },
-    [act, session]
-  )
-
-  useEffect(() => {
-    void load(home)
-  }, [load, home])
-
-  const path = listing?.path ?? home
-  const join = (name: string): string => (path.endsWith('/') ? path + name : `${path}/${name}`)
-  const parts = path.split('/').filter(Boolean)
-  const chosen = (listing?.entries ?? []).filter((e) => selected.has(e.name))
-
-  const open = (e: SftpEntry): void => {
-    if (e.type === 'dir' || e.type === 'link') void load(join(e.name))
-  }
-
-  return (
-    <>
-      <div className="fb glass">
-        <div className="fb-bar">
-          <button
-            className="btn btn-quiet btn-icon"
-            title="Up one folder"
-            aria-label="Up one folder"
-            disabled={path === '/'}
-            onClick={() => load(path.replace(/\/[^/]+\/?$/, '') || '/')}
-          >
-            <ArrowUp size={15} />
-          </button>
-          <div className="crumbs" aria-label="Path">
-            <button className="crumb" onClick={() => load('/')}>
-              /
-            </button>
-            {parts.map((p, i) => (
-              <span key={i} style={{ display: 'contents' }}>
-                <button className="crumb" onClick={() => load('/' + parts.slice(0, i + 1).join('/'))}>
-                  {p}
-                </button>
-                {i < parts.length - 1 && <span className="dim">/</span>}
-              </span>
-            ))}
-          </div>
-          <button className="btn btn-quiet btn-icon" title="Refresh" aria-label="Refresh" onClick={() => load(path)}>
-            <RefreshCw size={14} />
-          </button>
-          <button
-            className="btn btn-quiet btn-icon"
-            title="New folder"
-            aria-label="New folder"
-            onClick={async () => {
-              const name = await ask({
-                title: 'New folder',
-                label: 'Name',
-                confirm: 'Create'
-              })
-              if (!name) return
-              await act('sftp-mkdir', () => api().invoke('sftp:mkdir', session, path, name))
-              await load(path)
-            }}
-          >
-            <FolderPlus size={15} />
-          </button>
-          <button
-            className="btn"
-            onClick={async () => {
-              const n = await act('sftp-up', () => api().invoke('sftp:upload', session, path))
-              if (n) {
-                notify({
-                  kind: 'info',
-                  text: `Uploaded ${n} ${n === 1 ? 'file' : 'files'}.`
-                })
-                await load(path)
-              }
-            }}
-          >
-            <Upload size={14} /> Files
-          </button>
-          <button
-            className="btn"
-            title="Upload a whole folder, such as one of your projects"
-            disabled={busy.has('sftp-up-folder')}
-            onClick={async () => {
-              const r = await act('sftp-up-folder', () => api().invoke('sftp:upload-folder', session, path))
-              if (r) {
-                notify({ kind: 'info', text: `Uploaded ${r.uploaded} ${r.uploaded === 1 ? 'file' : 'files'}${r.skipped ? `, ${r.skipped} already up to date` : ''}.` })
-                await load(path)
-              }
-            }}
-          >
-            <FolderUp size={14} /> {busy.has('sftp-up-folder') ? 'Uploading…' : 'Folder'}
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={chosen.filter((e) => e.type === 'file').length === 0 || busy.has('sftp-down')}
-            onClick={async () => {
-              const files = chosen.filter((e) => e.type === 'file').map((e) => join(e.name))
-              const n = await act('sftp-down', () => api().invoke('sftp:download', session, files))
-              if (n)
-                notify({
-                  kind: 'info',
-                  text: `Downloaded ${n} ${n === 1 ? 'file' : 'files'}.`
-                })
-            }}
-          >
-            <Download size={14} /> Download
-          </button>
-        </div>
-        <div className="fb-list" role="listbox" aria-label="Files" aria-multiselectable>
-          {listing?.entries.length === 0 && <div className="empty dim">This folder is empty.</div>}
-          {listing?.entries.map((e) => (
-            <button
-              key={e.name}
-              className="fb-row"
-              role="option"
-              data-type={e.type}
-              aria-selected={selected.has(e.name)}
-              onClick={(ev) =>
-                setSelected((s) => {
-                  const next = new Set(ev.metaKey || ev.shiftKey ? s : [])
-                  if (s.has(e.name) && (ev.metaKey || ev.shiftKey)) next.delete(e.name)
-                  else next.add(e.name)
-                  return next
-                })
-              }
-              onDoubleClick={() => open(e)}
-            >
-              {e.type === 'dir' ? <Folder size={16} /> : e.type === 'link' ? <Link2 size={16} /> : <File size={16} />}
-              <span
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {e.name}
-              </span>
-              <span className="num hint" style={{ textAlign: 'right' }}>
-                {e.type === 'file' ? formatBytes(e.size) : ''}
-              </span>
-              <span className="hint">{new Date(e.modified).toLocaleString()}</span>
-            </button>
-          ))}
-        </div>
-        {chosen.length === 1 && (
-          <div className="fb-bar" style={{ borderTop: '1px solid var(--line)', borderBottom: 0 }}>
-            <span className="hint" style={{ flex: 1 }}>
-              {chosen[0].name}
-            </span>
-            <button
-              className="btn btn-quiet"
-              onClick={async () => {
-                const name = await ask({
-                  title: `Rename ${chosen[0].name}`,
-                  label: 'New name',
-                  initial: chosen[0].name,
-                  confirm: 'Rename'
-                })
-                if (!name || name === chosen[0].name) return
-                await act('sftp-rename', () => api().invoke('sftp:rename', session, join(chosen[0].name), name))
-                await load(path)
-              }}
-            >
-              <Pencil size={14} /> Rename
-            </button>
-            <button
-              className="btn btn-quiet"
-              style={{ color: 'var(--bad)' }}
-              onClick={async () => {
-                if (
-                  !(await ask({
-                    title: `Delete ${chosen[0].name} on ${server.name}? This cannot be undone.`,
-                    yesNo: true,
-                    confirm: 'Delete',
-                    danger: true
-                  }))
-                )
-                  return
-                await act('sftp-delete', () => api().invoke('sftp:delete', session, join(chosen[0].name), chosen[0].type === 'dir'))
-                await load(path)
-              }}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
-        )}
-      </div>
       {askDialog}
-      <p className="hint" style={{ marginTop: 10 }}>
-        Double-click a folder to open it. Hold ⌘ to select several files. Folders can be deleted once they are empty.
-      </p>
-    </>
+    </div>
   )
 }

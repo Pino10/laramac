@@ -13,6 +13,7 @@ export const SETTINGS_TABS: { id: string; label: string; sections: string[] }[] 
   { id: 'sites', label: 'Sites and addresses', sections: ['Sites', 'Addresses'] },
   { id: 'servers', label: 'Web servers', sections: ['Web servers', 'Downloads'] },
   { id: 'connect', label: 'Connections', sections: ['Connections', 'Integrations'] },
+  { id: 'remote', label: 'Remote servers', sections: ['Remote servers'] },
   { id: 'editor', label: 'Editor and Terminal', sections: ['Terminal and editor'] },
   { id: 'updates', label: 'Updates and reset', sections: ['Updates', 'Start over'] }
 ]
@@ -22,6 +23,8 @@ export default function Settings(): React.JSX.Element {
   const { settings, updateSettings, tools, appInfo, act, busy, setUpdate, notify, setTourOpen } = useApp()
   const api = window.laramac
   const [resetOpen, setResetOpen] = useState(false)
+  const [touchId, setTouchId] = useState(false)
+  useEffect(() => void window.laramac.invoke('remote:touchid-available').then(setTouchId), [])
   const [q, setQ] = useState(() => {
     try {
       const v = sessionStorage.getItem('laramac.settingsQuery') ?? ''
@@ -258,6 +261,56 @@ export default function Settings(): React.JSX.Element {
       <h2 className="section-title">Terminal and editor</h2>
       <Family only="macsec" />
       <Tools part="more" />
+
+      <h2 className="section-title">Remote servers</h2>
+      <div className="panel">
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Help from Claude on servers</div>
+            <div className="row-sub">Adds Ask Claude and Troubleshoot to your servers. Claude reads a cleaned, read only report. It never gets a password, a key or a way in.</div>
+          </div>
+          <Switch on={settings.serversClaude === true} label="Help from Claude on servers" onChange={() => updateSettings({ serversClaude: !settings.serversClaude })} />
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Lock with Touch ID</div>
+            <div className="row-sub">{touchId ? 'Ask for Touch ID again after the Remote page has been quiet for a while. Open connections stay open behind the lock.' : 'This Mac has no Touch ID available, so the lock cannot be used.'}</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Lock after">
+            {[0, 5, 15, 30].map((m) => (
+              <button key={m} role="radio" aria-checked={(settings.remoteLockMinutes ?? 0) === m} disabled={!touchId && m > 0} onClick={() => updateSettings({ remoteLockMinutes: m })}>
+                {m === 0 ? 'Never' : `${m} min`}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="row row-set">
+          <div className="row-main">
+            <div className="row-title">Files copied at once</div>
+            <div className="row-sub">More is faster for many small files. FTP servers always copy one at a time.</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Files copied at once">
+            {[1, 2, 3, 4, 6].map((n) => (
+              <button key={n} role="radio" aria-checked={(settings.transferParallel ?? 3) === n} onClick={() => updateSettings({ transferParallel: n })}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="row row-set" style={{ borderBottom: 0 }}>
+          <div className="row-main">
+            <div className="row-title">Top speed</div>
+            <div className="row-sub">Keeps a big copy from using all of your connection. Applies to SSH servers.</div>
+          </div>
+          <div className="seg" role="radiogroup" aria-label="Top speed">
+            {[0, 1, 5, 20].map((n) => (
+              <button key={n} role="radio" aria-checked={(settings.transferLimitMb ?? 0) === n} onClick={() => updateSettings({ transferLimitMb: n })}>
+                {n === 0 ? 'No limit' : `${n} MB/s`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <h2 className="section-title">Appearance and alerts</h2>
       <div className="panel">

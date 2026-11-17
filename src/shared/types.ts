@@ -304,12 +304,24 @@ export interface JobInfo {
   error?: string
 }
 
+export interface ActivityAction {
+  label: string
+  /** A page of the app to open. */
+  page?: string
+  /** A file or folder to show in Finder. */
+  reveal?: string
+}
+
 export interface ActivityItem {
   id: string
   at: number
   kind: 'info' | 'success' | 'error'
   title: string
   body?: string
+  /** One button under the notice, like "Show in Finder". */
+  action?: ActivityAction
+  /** Seen in the notification centre. */
+  read?: boolean
 }
 
 /** How the window is drawn: native Liquid Glass (macOS 26), classic vibrancy, or plain. */
@@ -379,6 +391,26 @@ export interface SshServer {
   hasPassword: boolean
   /** Pinned SHA-256 host key fingerprint, set the first time you trust the server. */
   hostKey?: string
+  /** What the server is for. Production gets a red bar and extra questions before anything is changed. */
+  tag?: ServerTag
+  /** A name to sort servers under, like a client. */
+  group?: string
+  /** Browsing and downloads only. Enforced in the app itself, not only in the buttons. */
+  readOnly?: boolean
+  notes?: string
+  /** The folder the file browser opens first. */
+  startDir?: string
+  /** One-click terminal commands. */
+  commands?: ServerCommand[]
+  /** Folders you pinned in the file browser. */
+  bookmarks?: string[]
+}
+
+export type ServerTag = 'production' | 'staging' | 'development'
+
+export interface ServerCommand {
+  label: string
+  command: string
 }
 
 export interface SshServerInput {
@@ -392,6 +424,86 @@ export interface SshServerInput {
   keyPath?: string
   /** Only sent when changed; stored encrypted with the macOS Keychain. */
   password?: string
+  tag?: ServerTag
+  group?: string
+  readOnly?: boolean
+  notes?: string
+  startDir?: string
+  commands?: ServerCommand[]
+  bookmarks?: string[]
+}
+
+/** One copy job in the transfer bar: a file, a folder, a zip. */
+export interface TransferInfo {
+  id: string
+  label: string
+  server: string
+  direction: 'upload' | 'download' | 'archive'
+  status: 'queued' | 'running' | 'paused' | 'done' | 'error' | 'cancelled'
+  /** Bytes finished and bytes in all. total is 0 while still counting. */
+  done: number
+  total: number
+  files: number
+  filesDone: number
+  /** Bytes per second, smoothed. */
+  speed: number
+  /** Seconds left, or null when not known yet. */
+  eta: number | null
+  current?: string
+  error?: string
+  /** Folder or file to show when done. */
+  reveal?: string
+  /** What the finished notice says, like "Uploaded site.zip". */
+  doneLabel?: string
+}
+
+export interface RemoteSearchHit {
+  path: string
+  type: 'file' | 'dir'
+}
+
+export interface RemoteFileText {
+  text: string
+  /** The file is bigger than the editor reads, so only the start is shown and saving is off. */
+  truncated: boolean
+  size: number
+}
+
+export interface ServerAuditEntry {
+  at: number
+  server: string
+  action: string
+  detail: string
+}
+
+export interface SshConfigHost {
+  alias: string
+  host: string
+  port: number
+  user: string
+  keyPath?: string
+}
+
+export interface GeneratedKey {
+  /** The private key file, in ~/.ssh. Never shown. */
+  keyPath: string
+  /** The public half, safe to paste into a server's authorized_keys. */
+  publicKey: string
+}
+
+export interface SshClaudeRequest {
+  id: string
+  kind: 'ask' | 'troubleshoot'
+  question: string | null
+  where: 'terminal' | 'desktop'
+  passphrase: string | null
+}
+
+export type SshClaudeResult = { status: 'opened'; where: 'terminal' | 'desktop'; report: string } | { status: 'unknown-host'; fingerprint: string }
+
+export interface ClaudeHelpInfo {
+  /** Claude Code is installed, so the button can open it. */
+  ready: boolean
 }
 
 /** A server's health, read over SSH. */
@@ -842,6 +954,14 @@ export interface AppSettings {
   packsDeclined?: string[]
   /** Whether the person agreed to download the skill packs. Unset until they are asked. */
   packsAsk?: 'yes' | 'no'
+  /** Show the Ask Claude and Troubleshoot buttons on remote servers. Off until you switch it on. */
+  serversClaude?: boolean
+  /** Close idle Remote pages behind Touch ID or your Mac password after this many minutes. 0 is never. */
+  remoteLockMinutes?: number
+  /** How many files copy at once to a server. */
+  transferParallel?: number
+  /** Top speed for transfers in MB per second. 0 is no limit. */
+  transferLimitMb?: number
   /** The newest skill pack version already announced, so each update is announced once. */
   packsNotified?: Record<string, string>
   /** The accent colour of the Studio look and of Laramac Code's theme. */
@@ -1440,6 +1560,8 @@ export interface Channels {
   'import:cancel': { args: [string]; result: void }
   'activity:list': { args: []; result: ActivityItem[] }
   'activity:clear': { args: []; result: ActivityItem[] }
+  /** Runs the button under a notice, like showing a file in Finder. */
+  'activity:act': { args: [string]; result: void }
   'activity:push': { args: ['info' | 'success' | 'error', string, string | undefined]; result: void }
   'app:info': { args: []; result: AppInfo }
   'app:check-update': { args: []; result: UpdateInfo | null }
@@ -1462,13 +1584,41 @@ export interface Channels {
   'health:close': { args: [string]; result: void }
   'sftp:connect': { args: [string, string | null]; result: SftpConnectResult }
   'sftp:list': { args: [string, string]; result: SftpListing }
-  'sftp:download': { args: [string, string[]]; result: number }
-  'sftp:upload': { args: [string, string]; result: number }
-  'sftp:upload-folder': { args: [string, string]; result: DeployResult | null }
+  'sftp:download': { args: [string, { path: string; dir: boolean }[]]; result: string | null }
+  'sftp:upload': { args: [string, string]; result: string | null }
+  'sftp:upload-folder': { args: [string, string]; result: string | null }
   'sftp:mkdir': { args: [string, string, string]; result: void }
   'sftp:rename': { args: [string, string, string]; result: void }
   'sftp:delete': { args: [string, string, boolean]; result: void }
   'sftp:disconnect': { args: [string]; result: void }
+  'sftp:upload-paths': { args: [string, string, string[]]; result: string }
+  'sftp:zip': { args: [string, string, string[], string]; result: string }
+  'sftp:unzip': { args: [string, string, string]; result: string }
+  'sftp:chmod': { args: [string, string, string, boolean]; result: void }
+  'sftp:stat': { args: [string, string]; result: { mode: string; owner: string; group: string; size: number } }
+  'sftp:search': { args: [string, string, string]; result: RemoteSearchHit[] }
+  'sftp:read': { args: [string, string]; result: RemoteFileText }
+  'sftp:write': { args: [string, string, string]; result: void }
+  'sftp:trash': { args: [string, string]; result: string }
+  'sftp:copy-path': { args: [string]; result: void }
+  'sftp:bookmarks': { args: [string, string[]]; result: SshServer[] }
+  'sftp:read-only-guard': { args: [string]; result: boolean }
+  'transfers:list': { args: []; result: TransferInfo[] }
+  'transfers:pause': { args: [string]; result: void }
+  'transfers:resume': { args: [string]; result: void }
+  'transfers:cancel': { args: [string]; result: void }
+  'transfers:clear': { args: []; result: void }
+  'transfers:reveal': { args: [string]; result: void }
+  'ssh:keygen': { args: [string, string | null]; result: GeneratedKey }
+  'sftp:install-key': { args: [string, string]; result: string }
+  'ssh:config-import': { args: []; result: SshConfigHost[] }
+  'ssh:audit': { args: [string]; result: ServerAuditEntry[] }
+  'ssh:commands': { args: [string, ServerCommand[]]; result: SshServer[] }
+  'ssh:save-log': { args: [string, string]; result: boolean }
+  'remote:touchid': { args: []; result: 'unavailable' | 'ok' | 'denied' }
+  'remote:touchid-available': { args: []; result: boolean }
+  'ssh:claude-help': { args: [SshClaudeRequest]; result: SshClaudeResult }
+  'ssh:claude-ready': { args: []; result: ClaudeHelpInfo }
   'shell:open': { args: [string, string | null, number, number]; result: SshShellResult }
   'shell:write': { args: [string, string]; result: void }
   'shell:resize': { args: [string, number, number]; result: void }
@@ -1543,6 +1693,7 @@ export interface Events {
   'sites:changed': SiteInfo[]
   'updates:changed': UpdatesReport
   'activity:changed': ActivityItem[]
+  'transfers:changed': TransferInfo[]
   'update:available': UpdateInfo
   'shell:data': { session: string; data: string }
   'shell:exit': { session: string }
@@ -1744,4 +1895,6 @@ export interface LaramacApi {
   ) => Promise<Channels[K]['result']>
   on: <K extends keyof Events>(event: K, cb: (payload: Events[K]) => void) => () => void
   platform: string
+  /** Where files dropped on the window live on this Mac. */
+  pathsOf: (files: File[]) => string[]
 }

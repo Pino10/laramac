@@ -4,9 +4,9 @@ import { homedir } from 'os'
 import { basename, join, posix } from 'path'
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2'
 import { Client as FtpClient } from 'basic-ftp'
-import { ftpFs, sftpFs, type RemoteFs } from './remotefs'
+import { ftpFs, sftpFs, type ExecResult, type RemoteFs } from './remotefs'
 import { StringDecoder } from 'string_decoder'
-import type { HealthOpenResult, ServerHealth, SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
+import type { HealthOpenResult, ServerCommand, ServerHealth, ServerTag, SftpConnectResult, SftpEntry, SftpListing, SshServer, SshServerInput, SshShellResult } from '../shared/types'
 import { dirs } from './paths'
 import { HEALTH_COMMAND, parseHealth } from './serverhealth'
 import { openTerminal, shellQuote } from './integrations'
@@ -65,6 +65,34 @@ export function validateServer(input: SshServerInput): void {
   if (input.protocol !== undefined && !['sftp', 'ftp', 'ftps'].includes(input.protocol)) throw new Error('Choose SFTP, FTP or FTPS.')
   if ((input.protocol === 'ftp' || input.protocol === 'ftps') && input.auth !== 'password') throw new Error('FTP servers sign in with a password.')
   if (input.auth === 'key' && (!input.keyPath || input.keyPath.includes('\0'))) throw new Error('Choose a key file.')
+  if (input.tag !== undefined && !['production', 'staging', 'development'].includes(input.tag)) throw new Error('Choose production, staging or development.')
+  if (input.group !== undefined && (input.group.length > 40 || /[\0\r\n]/.test(input.group))) throw new Error('Group names are up to 40 letters.')
+  if (input.notes !== undefined && input.notes.length > 2000) throw new Error('Notes are up to 2000 letters.')
+  if (input.startDir !== undefined && input.startDir !== '' && (!input.startDir.startsWith('/') || /[\0\r\n]/.test(input.startDir))) throw new Error('The start folder is a full path like /var/www.')
+  cleanCommands(input.commands)
+  cleanBookmarks(input.bookmarks)
+}
+
+/** Saved terminal commands: a short label and one line. A line cannot carry a second command by line break. */
+export function cleanCommands(list: ServerCommand[] | undefined): ServerCommand[] {
+  if (list === undefined) return []
+  if (!Array.isArray(list) || list.length > 30) throw new Error('Up to 30 saved commands.')
+  return list.map((c) => {
+    const label = String(c?.label ?? '').trim()
+    const command = String(c?.command ?? '').trim()
+    if (!label || label.length > 40) throw new Error('Each saved command needs a short name.')
+    if (!command || command.length > 500 || /[\0\r\n]/.test(command)) throw new Error('A saved command is one line, up to 500 letters.')
+    return { label, command }
+  })
+}
+
+export function cleanBookmarks(list: string[] | undefined): string[] {
+  if (list === undefined) return []
+  if (!Array.isArray(list) || list.length > 50) throw new Error('Up to 50 pinned folders.')
+  return list.map((b) => {
+    if (typeof b !== 'string' || !b.startsWith('/') || b.length > 500 || /[\0\r\n]/.test(b)) throw new Error('Pinned folders are full paths.')
+    return b
+  })
 }
 
 export function saveServer(input: SshServerInput, crypto: Crypto): SshServer[] {
@@ -82,7 +110,14 @@ export function saveServer(input: SshServerInput, crypto: Crypto): SshServer[] {
     keyPath: input.auth === 'key' ? input.keyPath : undefined,
     // A different host or port is a different machine: forget the pinned key.
     hostKey: existing && existing.host === input.host.trim() && existing.port === input.port ? existing.hostKey : undefined,
-    passwordEnc: input.auth === 'password' ? existing?.passwordEnc : undefined
+    passwordEnc: input.auth === 'password' ? existing?.passwordEnc : undefined,
+    tag: (input.tag as ServerTag | undefined) || undefined,
+    group: input.group?.trim() || undefined,
+    readOnly: input.readOnly === true ? true : undefined,
+    notes: input.notes?.trim() || undefined,
+    startDir: input.startDir?.trim() || undefined,
+    commands: input.commands !== undefined ? cleanCommands(input.commands) : existing?.commands,
+    bookmarks: input.bookmarks !== undefined ? cleanBookmarks(input.bookmarks) : existing?.bookmarks
   }
   if (input.auth === 'password' && input.password) {
     if (!crypto.available()) throw new Error('The macOS Keychain is not available, so the password cannot be stored safely.')
@@ -103,6 +138,22 @@ export function trustHostKey(id: string, fingerprint: string): SshServer[] {
   return listServers()
 }
 
+export function setBookmarks(id: string, list: string[]): SshServer[] {
+  const clean = cleanBookmarks(list)
+  save(load().map((s) => (s.id === id ? { ...s, bookmarks: clean } : s)))
+  return listServers()
+}
+
+export function setCommands(id: string, list: ServerCommand[]): SshServer[] {
+  const clean = cleanCommands(list)
+  save(load().map((s) => (s.id === id ? { ...s, commands: clean } : s)))
+  return listServers()
+}
+
+export function serverById(id: string): SshServer {
+  return publicView(server(id))
+}
+
 function server(id: string): Stored {
   const s = load().find((x) => x.id === id)
   if (!s) throw new Error('That server is not saved.')
@@ -112,6 +163,7 @@ function server(id: string): Stored {
 /** Uses your system ssh in Terminal, so your ~/.ssh/config, keys and known_hosts all apply. */
 export function openSshTerminal(id: string): Promise<void> {
   const s = server(id)
+  if (s.readOnly) throw new Error(`${s.name} is set to read only, so it has no terminal.`)
   const parts = ['ssh', '-p', String(s.port)]
   if (s.auth === 'key' && s.keyPath) parts.push('-i', shellQuote(s.keyPath))
   parts.push(shellQuote(`${s.user}@${s.host}`))
@@ -126,6 +178,8 @@ export function fingerprintOf(key: Buffer): string {
 
 interface Session {
   fs: RemoteFs
+  /** The saved server this connection belongs to. */
+  serverId: string
 }
 const sessions = new Map<string, Session>()
 
@@ -185,11 +239,37 @@ async function openClient(id: string, passphrase: string | null, crypto: Crypto)
   return outcome
 }
 
+/** Runs one command on a server over an open SSH connection and collects what it prints. */
+function clientExec(client: Client): NonNullable<RemoteFs['exec']> {
+  return (command, timeoutMs = 60_000) =>
+    new Promise<ExecResult>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('The server took too long to answer.')), timeoutMs)
+      client.exec(command, (err, stream) => {
+        if (err) {
+          clearTimeout(timer)
+          return reject(err)
+        }
+        let out = ''
+        let errOut = ''
+        stream.on('data', (d: Buffer) => {
+          if (out.length < 2_000_000) out += d.toString('utf8')
+        })
+        stream.stderr.on('data', (d: Buffer) => {
+          if (errOut.length < 20_000) errOut += d.toString('utf8')
+        })
+        stream.on('close', (code: number | null) => {
+          clearTimeout(timer)
+          resolve({ out, err: errOut, code: code ?? 0 })
+        })
+      })
+    })
+}
+
 export async function connectSftp(id: string, passphrase: string | null, crypto: Crypto): Promise<SftpConnectResult> {
   if (server(id).protocol === 'ftp' || server(id).protocol === 'ftps') {
     const fs = await connectFtp(id, crypto)
     const sid = randomBytes(8).toString('hex')
-    sessions.set(sid, { fs })
+    sessions.set(sid, { fs, serverId: id })
     return { status: 'connected', session: sid, home: await fs.realpath('.') }
   }
   const opened = await openClient(id, passphrase, crypto)
@@ -202,7 +282,7 @@ export async function connectSftp(id: string, passphrase: string | null, crypto:
         return reject(err)
       }
       const sid = randomBytes(8).toString('hex')
-      sessions.set(sid, { fs: sftpFs(sftp, () => client.end()) })
+      sessions.set(sid, { fs: sftpFs(sftp, () => client.end(), clientExec(client)), serverId: id })
       sftp.realpath('.', (e, home) => resolve({ status: 'connected', session: sid, home: e ? '/' : home }))
     })
   })
@@ -254,6 +334,19 @@ export function closeHealth(sid: string): void {
   c?.end()
 }
 
+/** Runs one fixed read only script on a server and closes the connection again. */
+export async function runScript(id: string, passphrase: string | null, crypto: Crypto, script: string): Promise<{ status: 'ok'; out: string } | { status: 'unknown-host'; fingerprint: string }> {
+  if ((server(id).protocol ?? 'sftp') !== 'sftp') throw new Error('This needs a server you connect to with SSH.')
+  const opened = await openClient(id, passphrase, crypto)
+  if (!('client' in opened)) return opened
+  try {
+    const r = await clientExec(opened.client)(script, 45_000)
+    return { status: 'ok', out: r.out + (r.err ? `\n#stderr\n${r.err}` : '') }
+  } finally {
+    opened.client.end()
+  }
+}
+
 // ------------------------------------------------------------ terminal
 
 interface Shell {
@@ -271,6 +364,7 @@ export async function openShell(
   onData: (sid: string, data: string) => void,
   onExit: (sid: string) => void
 ): Promise<SshShellResult> {
+  if (server(id).readOnly) throw new Error(`${server(id).name} is set to read only, so it has no terminal. Turn that off in the server's settings to open one.`)
   const opened = await openClient(id, passphrase, crypto)
   if (!('client' in opened)) return opened
   const { client } = opened
@@ -341,6 +435,7 @@ export async function download(sid: string, remotePaths: string[], localDir: str
 }
 
 export async function upload(sid: string, localFiles: string[], remoteDir: string): Promise<number> {
+  assertWritable(sid)
   const { fs } = session(sid)
   for (const local of localFiles) await fs.put(local, posix.join(remoteDir, basename(local)))
   return localFiles.length
@@ -351,11 +446,24 @@ const safeName = (name: string): string => {
   return name
 }
 
-export const mkdir = async (sid: string, dir: string, name: string): Promise<void> => session(sid).fs.mkdir(posix.join(dir, safeName(name)))
+export const mkdir = async (sid: string, dir: string, name: string): Promise<void> => (assertWritable(sid), session(sid).fs).mkdir(posix.join(dir, safeName(name)))
 
-export const rename = async (sid: string, from: string, toName: string): Promise<void> => session(sid).fs.rename(from, posix.join(posix.dirname(from), safeName(toName)))
+export const rename = async (sid: string, from: string, toName: string): Promise<void> => (assertWritable(sid), session(sid).fs).rename(from, posix.join(posix.dirname(from), safeName(toName)))
 
-export const remove = async (sid: string, path: string, isDir: boolean): Promise<void> => session(sid).fs.remove(path, isDir)
+export const remove = async (sid: string, path: string, isDir: boolean): Promise<void> => (assertWritable(sid), session(sid).fs).remove(path, isDir)
+
+/** What a connection is for, so the app can refuse changes on read only servers and say which server it did them on. */
+export function sessionInfo(sid: string): { serverId: string; name: string; tag?: ServerTag; readOnly: boolean; protocol: SshServer['protocol'] } {
+  const s = session(sid)
+  const v = publicView(server(s.serverId))
+  return { serverId: v.id, name: v.name, tag: v.tag, readOnly: v.readOnly === true, protocol: v.protocol }
+}
+
+/** Stops anything that would change a server that is set to read only. Called before every change. */
+export function assertWritable(sid: string): void {
+  const info = sessionInfo(sid)
+  if (info.readOnly) throw new Error(`${info.name} is set to read only. Turn that off in the server's settings to make changes.`)
+}
 
 /** The open file connection of a browser session. */
 export const sessionFs = (sid: string): RemoteFs => session(sid).fs
@@ -373,7 +481,7 @@ export async function openFs(id: string, passphrase: string | null, crypto: Cryp
         client.end()
         return reject(err)
       }
-      resolve(sftpFs(sftp, () => client.end()))
+      resolve(sftpFs(sftp, () => client.end(), clientExec(client)))
     })
   )
 }

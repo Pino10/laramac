@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './store'
 import Sidebar, { PAGE_ORDER } from './components/Sidebar'
 import Tour from './components/Tour'
 import Dumps from './components/Dumps'
+import TransferDock from './components/TransferDock'
 import JobsBar from './components/JobsBar'
 import CommandPalette from './components/CommandPalette'
 import Activity from './components/Activity'
@@ -113,6 +114,7 @@ function Shell(): React.JSX.Element {
           </div>
         </main>
       </div>
+      <TransferDock />
       <JobsBar />
       <CommandPalette />
       {newProject && <NewProject onClose={() => setNewProject(false)} />}

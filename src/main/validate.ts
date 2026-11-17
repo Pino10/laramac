@@ -70,8 +70,27 @@ export function sanitizeSettingsPatch(patch: unknown): Partial<AppSettings> {
       case 'hostLocalhostFolders':
       case 'hostDotLocalhost':
       case 'tourDone':
+      case 'serversClaude':
         out[key] = bool(value, key)
         break
+      case 'remoteLockMinutes': {
+        const n = Number(value)
+        if (!Number.isInteger(n) || n < 0 || n > 240) fail('Lock after 0 to 240 minutes.')
+        out.remoteLockMinutes = n
+        break
+      }
+      case 'transferParallel': {
+        const n = Number(value)
+        if (!Number.isInteger(n) || n < 1 || n > 6) fail('Copy 1 to 6 files at once.')
+        out.transferParallel = n
+        break
+      }
+      case 'transferLimitMb': {
+        const n = Number(value)
+        if (!Number.isFinite(n) || n < 0 || n > 10000) fail('The speed limit is 0 to 10000 MB per second.')
+        out.transferLimitMb = n
+        break
+      }
       case 'accent':
         out.accent = oneOf(value, ['blue', 'violet', 'teal', 'amber', 'rose'] as const, 'The accent colour')
         break

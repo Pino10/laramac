@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import { Notification } from 'electron'
-import type { ActivityItem } from '../shared/types'
+import type { ActivityAction, ActivityItem } from '../shared/types'
 import { getSettings } from './settings'
 
 const MAX = 60
@@ -24,8 +24,8 @@ class Activity extends EventEmitter {
     return this.items
   }
 
-  push(kind: ActivityItem['kind'], title: string, body?: string): void {
-    const item: ActivityItem = { id: `a${++this.counter}`, at: Date.now(), kind, title, body }
+  push(kind: ActivityItem['kind'], title: string, body?: string, action?: ActivityAction): void {
+    const item: ActivityItem = { id: `a${++this.counter}`, at: Date.now(), kind, title, body, action }
     this.items = [item, ...this.items].slice(0, MAX)
     this.emit('changed', this.items)
 

@@ -1,3 +1,45 @@
+## New in 1.1.0
+
+Remote servers, rebuilt: faster and safer file copying, a real terminal, and help from Claude when you ask for it.
+
+### Copying files
+- **A progress bar at the bottom** whenever something is copying: percent, files, size, speed and time left, with Pause, Resume and Stop.
+- Several files copy at once, and a failed copy tries again by itself. Settings lets you pick how many at once and a top speed.
+- Copies are safe: a half-finished file never replaces a good one, and Stop cleans up after itself.
+- Uploading again skips files that have not changed. Folders skip junk like node_modules.
+- Drag files in from Finder. Download files and whole folders.
+- Uploaded files keep sensible permissions and are no longer open to everyone.
+
+### The file browser
+- Sort, filter, search the whole server, show hidden files, pin favourite folders.
+- Right-click for: edit in the app, download, zip, open an archive, rename, permissions, copy path, move to the bin, delete forever.
+- A bin on the server (`~/.laramac-trash`) so a delete can be undone.
+- A text editor that keeps the file's permissions when saving.
+- "Open a terminal here" and "Add my key to this server".
+
+### The terminal
+- Up to six tabs, saved commands as one-click buttons, font size, save the session to a file.
+- It reconnects by itself if the line drops.
+- **Asks before risky commands**: a big paste, or something that deletes folders, wipes a disk or switches the server off, shows what it will do first. This also covers your saved command buttons.
+
+### Safer servers
+- Mark a server as Production, Staging or Development. Production shows a red stripe, and deleting there asks you to type the server's name.
+- **Read only** servers: you can look and download, nothing else.
+- **Touch ID lock** for the Remote servers page (Settings).
+- A private activity log of what Laramac did on each server, kept on your Mac with secrets removed.
+- Laramac refuses to upload your own keys and password folders (.ssh, .aws and so on).
+- Make a new key right in the app, and import servers from your SSH settings.
+
+### Claude help (off until you turn it on)
+- Settings, Remote servers, Claude help. Then **Troubleshoot** and **Ask Claude** appear on a server.
+- Laramac runs a fixed read-only check, removes secrets from the result, and saves a report on your Mac. Claude Code or the Claude app reads that report. Claude never gets your password, key or access.
+
+### Notifications
+- Notifications are now clear and professional: no more empty notices. Unread dots, and buttons like Show in Finder or Open.
+
+### Known limits
+- The speed limit works for SFTP, not FTP.
+- Touch ID and opening Claude from the app could not be tested outside a real Mac.
 ## New in 1.0.0
 
 Version 1.0: a full review of every screen, with pages made shorter and clearer.
