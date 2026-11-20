@@ -28,8 +28,8 @@ env:
   RELEASE_TAG: php-builds
   # static-php-cli normally also patches PHP for its "micro" single-file mode. Laramac does not build that,
   # and the micro "cli_checks" patch does not fit a brand new PHP, which stopped PHP 8.6.0 from building.
-  # Keep only the macOS iconv patch.
-  SPC_MICRO_PATCHES: 'macos_iconv'
+  # So no micro patches are applied. The result is still checked for Homebrew links before it is published.
+  SPC_MICRO_PATCHES: ''
 
 jobs:
   plan:
