@@ -92,6 +92,10 @@ jobs:
       matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    # The daily check stays quiet when a brand new PHP cannot be built yet (an extension may need an
+    # update first). The older build stays in place and the next day tries again. A run you start by
+    # hand still shows a failure so you can see why.
+    continue-on-error: ${{ github.event_name == 'schedule' }}
     steps:
       - name: Get static-php-cli
         run: |
@@ -185,6 +189,16 @@ jobs:
           KEEP: ${{ needs.plan.outputs.keep }}
         run: |
           [ -n "$KEEP" ] || exit 0
+          # Safety: only remove older builds once the newest PHP is really published for both Macs.
+          assets=$(gh api "repos/$REPO/releases/tags/$RELEASE_TAG" --jq '.assets[].name')
+          for minor in ${KEEP//,/ }; do
+            for arch in aarch64 x86_64; do
+              if ! grep -Eq "^php-${minor//./\\.}\\.[0-9]+-fpm-macos-$arch\\.tar\\.gz$" <<<"$assets"; then
+                echo "PHP $minor for $arch is not published yet, so the older builds are kept."
+                exit 0
+              fi
+            done
+          done
           pattern=$(sed 's/\./\\./g; s/,/|/g' <<<"$KEEP")
           gh api "repos/$REPO/releases/tags/$RELEASE_TAG" --jq '.assets[] | "\(.id) \(.name)"' | while read -r id name; do
             if ! grep -Eq "^php-($pattern)\." <<<"$name"; then
