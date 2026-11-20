@@ -131,7 +131,7 @@ jobs:
         if: steps.full.outcome != 'success'
         run: |
           rm -rf buildroot
-          ./spc build "$EXTENSIONS" --build-cli --build-fpm
+          ./spc build "$EXTENSIONS" --build-cli --build-fpm --debug
 
       - name: Check the result
         run: |
