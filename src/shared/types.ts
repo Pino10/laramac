@@ -887,7 +887,7 @@ export interface SnapshotInfo {
 
 export interface PackageInfo {
   id: string
-  group: 'php' | 'database' | 'tool' | 'brew' | 'cache'
+  group: 'php' | 'database' | 'language' | 'tool' | 'brew' | 'cache'
   name: string
   detail: string
   bytes: number

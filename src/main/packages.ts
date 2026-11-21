@@ -5,6 +5,7 @@ import type { PackageInfo, ServiceId } from '../shared/types'
 import { dirs } from './paths'
 import { brewPrefix } from './platform'
 import { brew } from './brew'
+import { runtimesRoot } from './runtimes'
 
 /**
  * Everything Laramac has downloaded or installed, with its size, and a way to
@@ -113,6 +114,21 @@ function entries(): Entry[] {
         remove: () => brew(['uninstall', '--ignore-dependencies', f.formula], () => undefined)
       })
     }
+  }
+  // Languages Laramac installed for itself (the Languages page adds and updates them).
+  const LANGS: { dir: string; name: string; desc: string }[] = [
+    { dir: 'node', name: 'Node.js', desc: 'JavaScript runtime and npm' },
+    { dir: 'bun', name: 'Bun', desc: 'JavaScript runtime' },
+    { dir: 'python', name: 'Python', desc: 'Laramac\'s own Python, used by your Python projects' },
+    { dir: 'uv', name: 'uv', desc: 'Installs Python versions and packages' },
+    { dir: 'go', name: 'Go', desc: 'Go language' },
+    { dir: 'dotnet', name: '.NET', desc: '.NET SDK' },
+    { dir: 'cargo', name: 'Rust (cargo)', desc: 'Rust tools' },
+    { dir: 'rustup', name: 'Rust (toolchains)', desc: 'Rust compilers' }
+  ]
+  for (const l of LANGS) {
+    const p = join(runtimesRoot(), l.dir)
+    if (existsSync(p) && list(p).length) out.push({ id: `lang:${l.dir}`, group: 'language', name: l.name, detail: l.desc, bytes: 0, path: p })
   }
   if (list(dirs.downloads()).length) {
     out.push({ id: 'cache:downloads', group: 'cache', name: 'Download cache', detail: 'Leftover installer files, safe to clear', bytes: 0, path: dirs.downloads() })

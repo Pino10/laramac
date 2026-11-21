@@ -1,3 +1,11 @@
+## New in 1.1.1
+
+Python projects now work properly in Laramac.
+
+- **Laramac's own Python for your projects.** A project's setup such as `python3 -m venv .venv` and `pip install` used to run with the old Python that comes with macOS, or ask you to install developer tools first. Laramac now puts its own `python`, `python3` and `pip` first, so Python projects set up the same way on every Mac.
+- **Python stays inside Laramac.** It is kept in Laramac's own folder, not in your home folder. If you already had Python from the Languages page, Laramac adds the missing pieces once in the background.
+- **Languages in Packages.** The Packages page now lists Python, Node.js, Bun, uv, Go, .NET and Rust, with their size and a way to remove each one.
+
 ## New in 1.1.0
 
 Remote servers, rebuilt: faster and safer file copying, a real terminal, and help from Claude when you ask for it.

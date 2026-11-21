@@ -47,7 +47,7 @@ import { readdirSync } from 'fs'
 import { dirs } from './paths'
 import { homedir } from 'os'
 import { checkForUpdate, installUpdate, releaseNotes } from './updater'
-import { installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
+import { ensurePython, installRuntime, latestVersions, listRuntimes, refreshRuntimeShims, RUNTIME_IDS } from './runtimes'
 import { createFromStarter, prepareWeb, starterReadiness } from './starterrun'
 import { backendStatus, setupFirebase, setupSupabase, startBackend, stopAllBackends, stopBackend } from './backends'
 import { devFromScript, devLogFile, devLogs, isDevRunning, pickDevPort, startDev, stopAllDev, stopDev } from './devservers'
@@ -3615,6 +3615,8 @@ app.whenReady().then(() => {
   ensureWww()
   refreshShims()
   refreshRuntimeShims()
+  // Older installs get Laramac's own python and python3 once, so a project's setup does not use the old macOS Python.
+  void ensurePython().then(() => refreshRuntimeShims()).catch(() => undefined)
   if (existsSync(cli.cliBin())) cli.installCli(process.execPath)
   try {
     if (desktopConnected()) {

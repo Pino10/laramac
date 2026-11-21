@@ -33,6 +33,9 @@ export function managedBinDirs(): Partial<Record<RuntimeId, string>> {
   }
 }
 
+/** Where Laramac's own python, python3 and pip shortcuts live, so projects use it and not the old Python that ships with macOS. */
+export const pythonBinDir = (): string => join(runtimesRoot(), 'python', 'bin')
+
 const COMMAND: Record<RuntimeId, string> = { node: 'node', bun: 'bun', python: 'uv', dotnet: 'dotnet', go: 'go', rust: 'cargo', swift: 'swift', php: 'php' }
 
 /** Where tools usually live when installed by hand or by their own installers. */
@@ -43,7 +46,7 @@ const commonDirs = (): string[] => {
 
 /** PATH and variables that let setup tools and dev servers find every runtime. */
 export function runtimeEnv(): NodeJS.ProcessEnv {
-  const managed = Object.values(managedBinDirs()).filter((d) => existsSync(d))
+  const managed = [pythonBinDir(), ...Object.values(managedBinDirs())].filter((d) => existsSync(d))
   const brew = brewPrefix()
   const path = [...managed, dirs.bin(), join(dirs.root(), 'composer', 'vendor', 'bin'), ...(brew ? [join(brew, 'bin'), join(brew, 'sbin')] : []), ...commonDirs(), process.env.PATH ?? '', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
     .filter(Boolean)
@@ -62,6 +65,11 @@ export function runtimeEnv(): NodeJS.ProcessEnv {
     COMPOSER_NO_INTERACTION: '1'
   }
   const r = runtimesRoot()
+  // uv keeps its Pythons and the python/python3 shortcuts inside Laramac's folder, not in ~/.local.
+  if (existsSync(join(r, 'uv', 'bin', 'uv'))) {
+    env.UV_PYTHON_INSTALL_DIR = join(r, 'python', 'versions')
+    env.UV_PYTHON_BIN_DIR = pythonBinDir()
+  }
   if (existsSync(join(r, 'dotnet', 'dotnet'))) env.DOTNET_ROOT = join(r, 'dotnet')
   if (existsSync(join(r, 'cargo', 'bin'))) {
     env.CARGO_HOME = join(r, 'cargo')
@@ -310,7 +318,16 @@ async function installUv(update: Update): Promise<void> {
   const archive = await fetchVerified(asset.url, file, sha, 'uv', update)
   await unpackInto(archive, join(runtimesRoot(), 'uv', 'bin'))
   update(null, 'Installing Python')
-  await runLogged(join(runtimesRoot(), 'uv', 'bin', 'uv'), ['python', 'install'], runtimeEnv(), update, 'Python')
+  await runLogged(join(runtimesRoot(), 'uv', 'bin', 'uv'), ['python', 'install', '--default'], runtimeEnv(), update, 'Python')
+}
+
+/**
+ * Older installs have uv but not the python and python3 shortcuts, so a project's setup such as
+ * "python3 -m venv .venv" fell back to the old Python that ships with macOS. This adds them once.
+ */
+export async function ensurePython(): Promise<void> {
+  if (!existsSync(join(runtimesRoot(), 'uv', 'bin', 'uv')) || existsSync(join(pythonBinDir(), 'python3'))) return
+  await runLogged(join(runtimesRoot(), 'uv', 'bin', 'uv'), ['python', 'install', '--default'], runtimeEnv(), () => undefined, 'Python')
 }
 
 async function installGo(update: Update): Promise<void> {
@@ -411,7 +428,7 @@ export function refreshRuntimeShims(): void {
         chmodSync(file, 0o755)
         continue
       }
-      const vars = id === 'dotnet' ? `DOTNET_ROOT="${extra.DOTNET_ROOT}" ` : id === 'rust' ? `CARGO_HOME="${extra.CARGO_HOME}" RUSTUP_HOME="${extra.RUSTUP_HOME}" ` : ''
+      const vars = id === 'python' ? `UV_PYTHON_INSTALL_DIR="${extra.UV_PYTHON_INSTALL_DIR}" UV_PYTHON_BIN_DIR="${extra.UV_PYTHON_BIN_DIR}" ` : id === 'dotnet' ? `DOTNET_ROOT="${extra.DOTNET_ROOT}" ` : id === 'rust' ? `CARGO_HOME="${extra.CARGO_HOME}" RUSTUP_HOME="${extra.RUSTUP_HOME}" ` : ''
       writeFileSync(file, `#!/bin/sh\n# Written by Laramac.\nPATH="${dir}:$PATH" ${vars}exec "${real}" "$@"\n`)
       chmodSync(file, 0o755)
     }

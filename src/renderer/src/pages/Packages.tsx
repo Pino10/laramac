@@ -10,12 +10,13 @@ import { offerSwaps } from '../components/swap'
 const GROUPS: { id: PackageInfo['group']; title: string; note?: string }[] = [
   { id: 'php', title: 'PHP versions' },
   { id: 'database', title: 'Database servers', note: 'Removing a server keeps your databases. They come back when you install it again.' },
+  { id: 'language', title: 'Languages', note: 'Node.js, Python and the rest that Laramac installed for itself. Add or update them on the Languages page.' },
   { id: 'tool', title: 'Tools' },
   { id: 'brew', title: 'Homebrew', note: 'Installed through Homebrew for Laramac. Removing one uninstalls it from Homebrew too.' },
   { id: 'cache', title: 'Cache' }
 ]
 
-const LETTERS: Record<PackageInfo['group'], string> = { php: 'Php', database: 'Db', tool: 'Tl', brew: 'Br', cache: 'Ca' }
+const LETTERS: Record<PackageInfo['group'], string> = { php: 'Php', database: 'Db', language: 'Ln', tool: 'Tl', brew: 'Br', cache: 'Ca' }
 
 export default function Packages(): React.JSX.Element {
   const { act, busy, notify, setServices, updates, setUpdates } = useApp()
