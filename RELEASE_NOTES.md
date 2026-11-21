@@ -1,3 +1,8 @@
+## New in 1.1.3
+
+- **Remove a site.** The menu on every site has a new Remove site option. Laramac stops the site, moves its folder to the Trash so you can put it back, and tells you plainly that anything the app saved inside that folder goes with it. Your languages and packages stay.
+- **Your apps on the Services page.** Python, Node.js and other apps that run their own server now show at the top of Services, with their port, whether they are running and a switch to start or stop them.
+
 ## New in 1.1.2
 
 Python apps now go from "not found" to running in one click.

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Code, ExternalLink, FileCog, MoreHorizontal, RefreshCw, ScrollText, Search, Stethoscope, Terminal, X } from 'lucide-react'
+import { Code, ExternalLink, FileCog, MoreHorizontal, RefreshCw, ScrollText, Search, Stethoscope, Terminal, Trash2, X } from 'lucide-react'
 import type { ProjectFile, ProjectPlan, SiteInfo, SiteLogSource } from '@shared/types'
 import { useApp } from '../store'
+import { useAsk } from './Ask'
 import { Monogram } from '../ui'
 
 /** The ⋯ menu on each site: the less frequent actions, logs, the project file and the site doctor. */
@@ -13,7 +14,8 @@ export interface MenuAction {
 
 export function SiteMenu({ site, onLogs, onProject, onDoctor, extra = [] }: { site: SiteInfo; onLogs: () => void; onProject: () => void; onDoctor: () => void; extra?: MenuAction[] }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const { act, notify } = useApp()
+  const { act, notify, setSites } = useApp()
+  const [ask, askDialog] = useAsk()
   const item = (label: string, icon: React.ReactNode, fn: () => void): React.JSX.Element => (
     <button
       className="menu-item"
@@ -46,9 +48,23 @@ export function SiteMenu({ site, onLogs, onProject, onDoctor, extra = [] }: { si
                   const p = await act(`proj-${site.name}`, () => window.laramac.invoke('project:export', site.name))
                   if (p) notify({ kind: 'info', text: 'Saved laramac.yml in the project. Commit it so others get the same setup.' })
                 })}
+            <span className="menu-sep" />
+            {item('Remove site…', <Trash2 size={14} />, async () => {
+              const yes = await ask({
+                title: `Remove ${site.name}?`,
+                label: 'Laramac stops it and moves its folder to the Trash, so you can put it back. Anything the app saved inside that folder (accounts, reports, databases) goes with it. Languages and packages you installed stay.',
+                yesNo: true,
+                confirm: 'Move to Trash',
+                danger: true
+              })
+              if (!yes) return
+              const next = await act(`remove-${site.name}`, () => window.laramac.invoke('sites:remove', site.name))
+              if (next) setSites(next)
+            })}
           </span>
         </>
       )}
+      {askDialog}
     </span>
   )
 }

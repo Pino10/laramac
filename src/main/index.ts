@@ -583,6 +583,25 @@ function registerIpc(): void {
     notifySitesChanged()
     return listSites()
   })
+  handle('sites:remove', async (name) => {
+    const site = siteByName(name)
+    if (dirname(site.path) !== ensureWww()) throw new ValidationError('Only sites inside your www folder can be removed here.')
+    // Stop whatever is running for it, then move the folder to the Trash so it can be put back.
+    await stopDev(site.name).catch(() => undefined)
+    await unshareSite(site.name).catch(() => undefined)
+    await shell.trashItem(site.path)
+    const { siteConfig } = getSettings()
+    const gone = siteConfig[site.name]
+    const { [site.name]: _removed, ...rest } = siteConfig
+    setSettings({ siteConfig: rest })
+    if (gone?.aliases?.length) {
+      const { tld } = getSettings()
+      await syncHostsFile(Object.values(rest).flatMap((c) => c.aliases ?? []).filter((n) => needsHostsEntry(n, tld))).catch(() => undefined)
+    }
+    activity.push('success', `${site.name} was moved to the Trash`, 'Open the Trash in Finder to put it back.')
+    notifySitesChanged()
+    return listSites()
+  })
   handle('sites:create', async (kind, name) => {
     if (!PROJECT_KINDS.includes(kind)) throw new ValidationError('Unknown project type.')
     await createProject(kind, name)

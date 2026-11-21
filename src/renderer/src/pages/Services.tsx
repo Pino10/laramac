@@ -1,6 +1,6 @@
 import type { ServiceId, ServiceInfo } from '@shared/types'
 import { useApp } from '../store'
-import { PageHead } from '../ui'
+import { Monogram, PageHead, Switch } from '../ui'
 import StatStrip from '../components/StatStrip'
 import NextLine from '../components/NextLine'
 import ServiceRow from '../components/ServiceRow'
@@ -24,11 +24,12 @@ export function sectionOf(id: ServiceId): string {
 
 /** Every service Laramac runs, grouped by what it is for, with one place to start and stop them. */
 export default function Services(): React.JSX.Element {
-  const { services, busy, act, setServices, jobs } = useApp()
+  const { services, busy, act, setServices, jobs, sites, setSites } = useApp()
   const api = window.laramac
   const installed = services.filter((s) => s.status !== 'not-installed')
   const running = installed.filter((s) => s.status === 'running').length
   const installing = jobs.some((j) => j.status === 'running')
+  const apps = sites.filter((x) => x.dev)
   const known = new Set(SERVICE_SECTIONS.flatMap((s) => s.ids))
   const others = services.filter((s) => !known.has(s.id))
   const sections: { title: string; hint: string; items: ServiceInfo[] }[] = [
@@ -67,6 +68,41 @@ export default function Services(): React.JSX.Element {
         </NextLine>
       )}
       {installed.length > 0 && <StackMap />}
+
+      {apps.length > 0 && (
+        <section className="svc-section">
+          <div className="section-head">
+            <h2 className="section-title">Your apps</h2>
+            <span className="hint">Python, Node.js and other apps that run their own server. Sites has the same switches.</span>
+          </div>
+          <div className="group">
+            {apps.map((x) => (
+              <div key={x.name} className="row row-svc">
+                <Monogram id={x.kind === 'python' ? 'python' : x.kind === 'node' ? 'node' : x.name} />
+                <div className="row-main">
+                  <div className="row-title">
+                    {x.name}
+                    <span className="tag">{x.kind === 'python' ? 'Python' : x.kind === 'node' ? 'Node.js' : x.kind}</span>
+                  </div>
+                  <div className="row-sub">{x.dev!.command}</div>
+                </div>
+                <span className="num">{`Port ${x.dev!.port}`}</span>
+                <span className="status" data-s={x.dev!.running ? 'running' : 'stopped'}>
+                  {x.dev!.running ? 'Running' : 'Stopped'}
+                </span>
+                <div className="end">
+                  <Switch
+                    on={x.dev!.running}
+                    disabled={busy.has(`dev-${x.name}`)}
+                    label={`${x.name} ${x.dev!.running ? 'on' : 'off'}`}
+                    onChange={() => act(`dev-${x.name}`, () => api.invoke(x.dev!.running ? 'dev:stop' : 'dev:start', x.name).then(setSites))}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {sections.map((sec) => (
         <section key={sec.title} className="svc-section">

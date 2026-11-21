@@ -1370,6 +1370,7 @@ export interface Channels {
   'jobs:list': { args: []; result: JobInfo[] }
   'sites:list': { args: []; result: SiteInfo[] }
   'sites:set-config': { args: [string, SiteConfig]; result: SiteInfo[] }
+  'sites:remove': { args: [string]; result: SiteInfo[] }
   'sites:create': { args: [ProjectKind, string]; result: SiteInfo[] }
   'runtimes:list': { args: []; result: RuntimeInfo[] }
   'runtimes:latest': { args: []; result: Partial<Record<RuntimeId, string>> }
