@@ -326,8 +326,25 @@ async function installUv(update: Update): Promise<void> {
  * "python3 -m venv .venv" fell back to the old Python that ships with macOS. This adds them once.
  */
 export async function ensurePython(): Promise<void> {
-  if (!existsSync(join(runtimesRoot(), 'uv', 'bin', 'uv')) || existsSync(join(pythonBinDir(), 'python3'))) return
-  await runLogged(join(runtimesRoot(), 'uv', 'bin', 'uv'), ['python', 'install', '--default'], runtimeEnv(), () => undefined, 'Python')
+  const uv = join(runtimesRoot(), 'uv', 'bin', 'uv')
+  if (!existsSync(uv) || existsSync(join(pythonBinDir(), 'python3'))) return
+  const env = runtimeEnv()
+  try {
+    await runLogged(uv, ['python', 'install', '--default'], env, () => undefined, 'Python')
+  } catch (first) {
+    // A newer uv may word that option differently. Install plainly and write the shortcuts ourselves.
+    await runLogged(uv, ['python', 'install'], env, () => undefined, 'Python').catch(() => {
+      throw first
+    })
+    const found = (await capture(uv, ['python', 'find'], env))?.trim().split('\n').pop()
+    if (!found || !existsSync(found)) throw first
+    mkdirSync(pythonBinDir(), { recursive: true })
+    for (const name of ['python', 'python3']) {
+      const file = join(pythonBinDir(), name)
+      writeFileSync(file, `#!/bin/sh\n# Written by Laramac.\nexec "${found}" "$@"\n`)
+      chmodSync(file, 0o755)
+    }
+  }
 }
 
 async function installGo(update: Update): Promise<void> {

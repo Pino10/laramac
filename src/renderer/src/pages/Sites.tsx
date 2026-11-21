@@ -441,6 +441,11 @@ export default function Sites(): React.JSX.Element {
               { label: 'Waiting for setup', value: sites.filter((x) => x.devSuggestion && !x.dev).length, sub: 'Dev command found, not set up', tone: sites.some((x) => x.devSuggestion && !x.dev) ? 'warn' : undefined }
             ]}
           />
+          {sites.some((x) => x.projectFile === 'new') && (
+            <NextLine action="Set it up" onAction={() => setProjectFor(sites.find((x) => x.projectFile === 'new')!)}>
+              <strong>{sites.filter((x) => x.projectFile === 'new').map((x) => x.name).join(', ')} comes with a setup file.</strong> Set it up and Laramac installs what it needs and starts it.
+            </NextLine>
+          )}
           {sites.some((x) => x.dev && !x.dev.running) && (
             <NextLine action="Start them" onAction={() => void Promise.all(sites.filter((x) => x.dev && !x.dev.running).map((x) => act(`dev-${x.name}`, () => api.invoke('dev:start', x.name).then(setSites))))}>
               <strong>{sites.filter((x) => x.dev && !x.dev.running).length} dev {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'server is' : 'servers are'} stopped.</strong> Start {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'it' : 'them'} to open {sites.filter((x) => x.dev && !x.dev.running).length === 1 ? 'that site' : 'those sites'} in the browser.

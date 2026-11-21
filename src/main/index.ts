@@ -1779,6 +1779,9 @@ function registerIpc(): void {
       setSiteConfig(site.name, { projectHash: read.hash })
     })
     activity.push('success', `${site.name} is set up`, 'Applied its laramac.yml.')
+    // A project with a dev command is started right away, so the site opens without another click.
+    const devCfg = getSettings().siteConfig[site.name]?.dev
+    if (read.file.dev && devCfg) await startDev(site, devCfg).catch((err) => activity.push('error', `${site.name} did not start`, (err as Error).message.slice(0, 300)))
     notifySitesChanged()
     return listSites()
   })
@@ -3616,7 +3619,9 @@ app.whenReady().then(() => {
   refreshShims()
   refreshRuntimeShims()
   // Older installs get Laramac's own python and python3 once, so a project's setup does not use the old macOS Python.
-  void ensurePython().then(() => refreshRuntimeShims()).catch(() => undefined)
+  void ensurePython()
+    .then(() => refreshRuntimeShims())
+    .catch((e: Error) => activity.push('error', 'Could not set up Laramac\'s Python', `${String(e.message).slice(0, 200)} Try again from the Languages page.`))
   if (existsSync(cli.cliBin())) cli.installCli(process.execPath)
   try {
     if (desktopConnected()) {

@@ -57,3 +57,28 @@ describe('Packages shows the languages Laramac installed', () => {
     expect((await listPackages()).filter((p) => p.group === 'language')).toEqual([])
   })
 })
+
+describe('Python apps are recognised', () => {
+  const make = (files: string[]): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'laramac-kind-'))
+    for (const f of files) {
+      mkdirSync(join(dir, f, '..'), { recursive: true })
+      writeFileSync(join(dir, f), '')
+    }
+    return dir
+  }
+  it('treats a folder of Python scripts (requirements in a subfolder) as Python', async () => {
+    const { detectKind } = await import('../src/main/sites')
+    expect(detectKind(make(['mcp_server.py', 'console/app.py', 'console/requirements.txt', 'README.md']))).toBe('python')
+  })
+  it('keeps a website with a helper script static', async () => {
+    const { detectKind } = await import('../src/main/sites')
+    expect(detectKind(make(['index.html', 'build.py']))).toBe('static')
+  })
+  it('still picks PHP and Node first', async () => {
+    const { detectKind } = await import('../src/main/sites')
+    expect(detectKind(make(['index.php', 'tool.py']))).toBe('php')
+    expect(detectKind(make(['package.json', 'tool.py']))).toBe('node')
+    expect(detectKind(make(['manage.py']))).toBe('python')
+  })
+})

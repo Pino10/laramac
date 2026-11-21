@@ -1,3 +1,12 @@
+## New in 1.1.2
+
+Python apps now go from "not found" to running in one click.
+
+- **A clear "set it up" banner.** A project that comes with a `laramac.yml` now shows a banner at the top of Sites, not only a small tag.
+- **It starts the app for you.** After you press Set it up, Laramac installs what the project needs and starts its dev server, so the site opens without another step.
+- **Python apps are recognised.** A folder of Python scripts, such as Invariant, is now labelled Python instead of Static. Websites with a home page and a helper script stay static.
+- **Python setup tells you when it fails.** If Laramac cannot add its own Python after an update, you now get a notice, and it works around a changed uv option.
+
 ## New in 1.1.1
 
 Python projects now work properly in Laramac.

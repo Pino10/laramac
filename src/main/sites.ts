@@ -16,6 +16,13 @@ export function detectKind(dir: string): SiteKind {
   if (existsSync(join(dir, 'package.json')) && !existsSync(join(dir, 'index.php'))) return 'node'
   if (existsSync(join(dir, 'index.php')) || existsSync(join(dir, 'public', 'index.php'))) return 'php'
   if (existsSync(join(dir, 'pyproject.toml')) || existsSync(join(dir, 'manage.py')) || existsSync(join(dir, 'requirements.txt'))) return 'python'
+  try {
+    // A folder of Python scripts (such as an app with its requirements in a subfolder).
+    // Never for a folder that has a home page: that is a website with a helper script, and it stays static.
+    if (!existsSync(join(dir, 'index.html')) && !existsSync(join(dir, 'public', 'index.html')) && readdirSync(dir).some((f) => f.endsWith('.py') && f !== 'conf.py')) return 'python'
+  } catch {
+    // Unreadable folder; fall through.
+  }
   if (existsSync(join(dir, 'go.mod'))) return 'go'
   if (existsSync(join(dir, 'Cargo.toml'))) return 'rust'
   if (existsSync(join(dir, 'Package.swift')) || existsSync(join(dir, 'project.yml'))) return 'swift'
