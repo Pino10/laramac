@@ -1,3 +1,9 @@
+## New in 1.1.4
+
+- **DeepSeek for Claude Code.** A new ready-made server, "DeepSeek for Claude Code", uses your DeepSeek key in the format Claude Code speaks. Add it in Model servers, pick its model in the Assistant, then choose the reviewer "Claude Code on your own model". The key stays in the Keychain and goes to Claude Code only for that run. The existing "DeepSeek" server still works for the reviewer "Your model" (the API).
+- Reviews and recon that run on an online model now say that the code is sent to that provider.
+- Not tried against a live DeepSeek account here. The model names (deepseek-v4-pro, deepseek-v4-flash) come from DeepSeek's documentation.
+
 ## New in 1.1.3
 
 - **Remove a site.** The menu on every site has a new Remove site option. Laramac stops the site, moves its folder to the Trash so you can put it back, and tells you plainly that anything the app saved inside that folder goes with it. Your languages and packages stay.

@@ -42,7 +42,7 @@ function Counts({ counts, secrets }: { counts: ReviewInfo['counts']; secrets: nu
 
 const REVIEWER_ABOUT: Record<string, string> = {
   claude: 'Your Claude account. The strongest choice.',
-  'claude-local': 'Claude Code on your own model. Private, slower.',
+  'claude-local': 'Claude Code on your own model: on this Mac (private, slower) or an online one such as DeepSeek (the code is sent to it).',
   'claude-free': 'Claude Code on your free keys, behind one address.',
   codex: 'OpenAI’s agent, in read-only mode.',
   gemini: 'Google’s agent, in read-only mode.',
@@ -342,7 +342,7 @@ export default function Security(): React.JSX.Element {
               {reviewer === 'claude-free'
                 ? 'Claude Code does the review with all its tools and Laramac’s security skills, through Free LLM API: your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) behind one address. The code goes to whichever provider your Free LLM API chain picks.'
                 : reviewer === 'claude-local'
-                ? 'Claude Code does the review with all its tools and Laramac’s security skills, but every request goes to your own model in LM Studio. Nothing leaves this Mac. Load the model with a context length of 32,000 or more.'
+                ? 'Claude Code does the review with all its tools and Laramac’s security skills, but every request goes to the model you chose in the Assistant. In LM Studio nothing leaves this Mac (load the model with a context length of 32,000 or more). If you chose an online one, such as DeepSeek with the “DeepSeek for Claude Code” server, the code it reads is sent to that provider.'
                 : reviewer === 'codex' || reviewer === 'gemini'
                   ? `${reviewer === 'codex' ? 'Codex' : 'Gemini CLI'} reads the project in its read-only mode, with Laramac’s review method in the prompt.`
                   : reviewer === 'coderabbit'

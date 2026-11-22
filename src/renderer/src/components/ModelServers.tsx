@@ -12,6 +12,7 @@ const PRESETS: { label: string; name: string; baseUrl: string; api: ModelApi; ke
   { label: 'Anthropic API', name: 'Claude API', baseUrl: 'https://api.anthropic.com', api: 'anthropic', key: true },
   { label: 'OpenAI API', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', api: 'openai', key: true },
   { label: 'DeepSeek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', api: 'openai', key: true },
+  { label: 'DeepSeek (for Claude Code)', name: 'DeepSeek for Claude Code', baseUrl: 'https://api.deepseek.com/anthropic', api: 'anthropic', key: true },
   { label: 'Groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', api: 'openai', key: true },
   { label: 'OpenRouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', api: 'openai', key: true },
   { label: 'Other', name: '', baseUrl: 'http://127.0.0.1:', api: 'openai' }

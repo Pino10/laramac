@@ -1058,7 +1058,7 @@ function registerIpc(): void {
   /** The server Claude Code talks to: LM Studio for claude-local, Free LLM API for claude-free. */
   const reviewServer = async (reviewer: ReviewerKind): Promise<{ baseUrl: string; model: string; token?: string }> => {
     const st = getSettings()
-    if (reviewer !== 'claude-free') return { baseUrl: st.llm.baseUrl, model: st.llm.model }
+    if (reviewer !== 'claude-free') return models.chosenLocal()
     const key = await readFreeKey()
     if (!key) throw new ValidationError('Paste your Free LLM API key on the AI tools page first.')
     return { baseUrl: freeLlmUrl(st.freellm?.baseUrl ?? FREELLM_DEFAULT_URL), model: st.freellm?.model || 'auto', token: key }

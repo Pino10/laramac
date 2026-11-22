@@ -39,7 +39,7 @@ export default function DeepAudit({ source, canRun, site, onResult }: { source: 
   const choices: { id: DeepReviewerKind; title: string; text: string; icon: React.ReactNode; ok: boolean }[] = [
     { id: 'claude', title: 'Claude Code', text: 'Your Claude account. The strongest choice for the long audit.', icon: <Sparkles size={16} />, ok: ok('claude') },
     { id: 'claude-desktop', title: 'Claude Desktop', text: site ? 'Copies the request and opens the Claude app: you paste it in its Code tab.' : 'Needs a site from www: the Claude app reads folders on this Mac.', icon: <MonitorUp size={16} />, ok: desktop && !!site },
-    { id: 'claude-local', title: model ? `claudelm: ${model.split('/').pop()}` : 'claudelm', text: model ? 'Claude Code on your model in LM Studio. Private, but slower and shallower.' : 'Choose a model in the Assistant first.', icon: <Cpu size={16} />, ok: ok('claude-local') },
+    { id: 'claude-local', title: model ? `claudelm: ${model.split('/').pop()}` : 'claudelm', text: model ? 'Claude Code on the model you chose: private in LM Studio but slower and shallower, or online (such as DeepSeek), where the code is sent to that provider.' : 'Choose a model in the Assistant first.', icon: <Cpu size={16} />, ok: ok('claude-local') },
     { id: 'claude-free', title: 'claudefree', text: ok('claude-free') ? 'Claude Code on Free LLM API. Free, with the limits of your free keys.' : (note('claude-free') ?? 'Connect Free LLM API first.'), icon: <Network size={16} />, ok: ok('claude-free') }
   ]
   const start = async (): Promise<void> => {

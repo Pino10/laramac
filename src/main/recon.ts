@@ -3,6 +3,7 @@
  * ~/.laramac/recon/<id> with its hosts, scripts, findings and the AI's write-up, so you can come
  * back to it. Read-only, and anything that is not on this Mac needs your confirmation.
  */
+import { chosenLocal } from './models'
 import { assetUrl, latestRelease } from './seckit/ghapi'
 import { ensureLmContext } from './seckit/lmstudio'
 import { spawn } from 'child_process'
@@ -248,7 +249,7 @@ async function aiReport(result: ReconResult, reviewer: ReconRequest['reviewer'],
     const ctx = await ensureLmContext(st.llm.baseUrl, st.llm.model)
     if (!ctx.ok) throw new Error(ctx.note)
   }
-  const run = reviewerRun(id, bin, prompt + method, { plugins: id === 'claude' || id === 'claude-local' ? ensurePlugins() : [], name: `Laramac recon: ${result.domain}`, local: { baseUrl: st.llm.baseUrl, model: st.llm.model }, outFile: join(cwd, 'codex.md') })
+  const run = reviewerRun(id, bin, prompt + method, { plugins: id === 'claude' || id === 'claude-local' ? ensurePlugins() : [], name: `Laramac recon: ${result.domain}`, local: chosenLocal(), outFile: join(cwd, 'codex.md') })
   onLine(`${REVIEWER_NAMES[id]} is reading the recon`)
   return new Promise((resolve, reject) => {
     const c = spawn(run.bin, run.args, { cwd, env: { ...process.env, ...runtimeEnv(), ...run.env }, stdio: ['ignore', 'pipe', 'pipe'] })
