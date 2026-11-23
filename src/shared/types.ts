@@ -1133,6 +1133,8 @@ export interface ReviewerOption {
   installed: boolean
   /** Why it cannot run yet, in words. */
   note?: string
+  /** Choosing this also picks this model server and model (for example DeepSeek), so no other setting is needed first. */
+  llm?: { baseUrl: string; model: string }
 }
 
 export interface SecretHit {

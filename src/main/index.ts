@@ -1141,7 +1141,7 @@ function registerIpc(): void {
     const p = review.skillPlan(root)
     return { stack: p.stack, recommended: p.recommended, files: p.files, items: p.items.map(({ id, name, source, about, guides }) => ({ id, name, source, about, guides })) }
   })
-  handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model, claudeFreeInstalled()))
+  handle('review:reviewers', () => review.reviewerOptions(getSettings().llm.model, claudeFreeInstalled(), models.listServers(), getSettings().llm.baseUrl))
   handle('review:continue', async (id, where) => {
     const info = review.listReviews().find((r) => r.id === id)
     if (!info) throw new ValidationError('That review is gone.')

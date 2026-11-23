@@ -1,3 +1,7 @@
+## New in 1.1.5
+
+- **DeepSeek shows up as a reviewer.** Once the DeepSeek servers and your key are saved, "Claude Code on DeepSeek" and "DeepSeek (API)" appear in the reviewer lists of code review, the deep audit and recon. One click picks the server and the model too, so nothing else has to be set first. Code sent to DeepSeek is said so in the description.
+
 ## New in 1.1.4
 
 - **DeepSeek for Claude Code.** A new ready-made server, "DeepSeek for Claude Code", uses your DeepSeek key in the format Claude Code speaks. Add it in Model servers, pick its model in the Assistant, then choose the reviewer "Claude Code on your own model". The key stays in the Keychain and goes to Claude Code only for that run. The existing "DeepSeek" server still works for the reviewer "Your model" (the API).

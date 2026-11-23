@@ -245,9 +245,15 @@ export function runAgent(bin: string, args: string[], env: Record<string, string
 
 const CLI_NAMES: Record<ReviewerId, string[]> = { claude: ['claude'], 'claude-local': ['claude'], 'claude-free': ['claude'], codex: ['codex'], gemini: ['gemini'], coderabbit: ['coderabbit', 'cr'] }
 
-export function reviewerOptions(model: string, free = false): { id: ReviewerKind; name: string; installed: boolean; note?: string }[] {
+export function reviewerOptions(model: string, free = false, servers: { baseUrl: string; api: string; hasKey: boolean }[] = [], current = ''): { id: ReviewerKind; name: string; installed: boolean; note?: string; llm?: { baseUrl: string; model: string } }[] {
   const has = (id: ReviewerId): boolean => !!findCli(CLI_NAMES[id])
-  return [
+  // DeepSeek: shown as its own choices, so picking one sets the server and the model in the same click.
+  const ds = (api: string): { baseUrl: string; api: string; hasKey: boolean } | undefined => servers.find((x) => /^https:\/\/api\.deepseek\.com(\/|$)/i.test(x.baseUrl) && x.api === api && x.hasKey)
+  const dsClaude = ds('anthropic')
+  const dsApi = ds('openai')
+  const onDeepSeek = /^https:\/\/api\.deepseek\.com(\/|$)/i.test(current)
+  const dsModel = (u: string): string => (current === u && model ? model : 'deepseek-v4-pro')
+  const list: { id: ReviewerKind; name: string; installed: boolean; note?: string }[] = [
     { id: 'claude', name: 'Claude Code', installed: has('claude'), note: has('claude') ? undefined : 'Install Claude Code on the AI tools page.' },
     { id: 'claude-local', name: model ? `Claude Code on ${model.split('/').pop()}` : 'Claude Code on your model', installed: has('claude') && !!model, note: !has('claude') ? 'Install Claude Code first.' : !model ? 'Choose a model (LM Studio) in the Assistant first.' : 'Your model, through LM Studio 0.4.1 or newer. Load it with 32k context or more.' },
     { id: 'claude-free', name: 'Claude Code on Free LLM API', installed: has('claude') && free, note: !has('claude') ? 'Install Claude Code first.' : !free ? 'Connect Free LLM API on the AI tools page first.' : 'Your free keys (Google AI Studio, Groq, NVIDIA, OpenRouter and more) through Free LLM API.' },
@@ -256,6 +262,12 @@ export function reviewerOptions(model: string, free = false): { id: ReviewerKind
     { id: 'coderabbit', name: 'CodeRabbit (changes only)', installed: has('coderabbit'), note: has('coderabbit') ? 'Reviews the changes in a Git project.' : 'curl -fsSL https://cli.coderabbit.ai/install.sh | sh' },
     { id: 'model', name: model ? `${model.split('/').pop()} directly` : 'Your model directly', installed: !!model }
   ]
+  const extra: ReturnType<typeof reviewerOptions> = []
+  if (dsClaude) extra.push({ id: 'claude-local', name: 'Claude Code on DeepSeek', installed: has('claude'), note: has('claude') ? 'Claude Code with your DeepSeek key. The code it reads is sent to DeepSeek.' : 'Install Claude Code first.', llm: { baseUrl: dsClaude.baseUrl, model: dsModel(dsClaude.baseUrl) } })
+  if (dsApi) extra.push({ id: 'model', name: 'DeepSeek (API)', installed: true, note: 'Your DeepSeek key, over its API. The findings are sent to DeepSeek.', llm: { baseUrl: dsApi.baseUrl, model: dsModel(dsApi.baseUrl) } })
+  // While a DeepSeek model is the chosen one, its own choices stand in for the two generic ones.
+  const base = onDeepSeek && extra.length ? list.filter((r) => r.id !== 'claude-local' && r.id !== 'model') : list
+  return [...base, ...extra]
 }
 
 /** Splits files into pieces small enough for a local model, risky files first. */

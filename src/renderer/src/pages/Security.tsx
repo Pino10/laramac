@@ -51,7 +51,7 @@ const REVIEWER_ABOUT: Record<string, string> = {
 }
 
 export default function Security(): React.JSX.Element {
-  const { sites, settings, act, busy, llms, setPage, notify, reviewSite, setReviewSite } = useApp()
+  const { sites, settings, act, busy, llms, setPage, notify, reviewSite, setReviewSite, updateSettings } = useApp()
   const api = window.laramac
   const [tab, setTab] = useState<'review' | 'scan' | 'deps'>('review')
   const [kind, setKind] = useState<SourceKind>('site')
@@ -288,11 +288,22 @@ export default function Security(): React.JSX.Element {
                 <label>Reviewer</label>
                 <div className="reviewer-grid" role="radiogroup" aria-label="Reviewer">
                   {(reviewers.length ? reviewers.filter((r) => r.installed || r.id === 'claude') : [{ id: 'claude', name: 'Claude Code', installed: true } as ReviewerOption]).map((r) => (
-                    <button key={r.id} className="reviewer-card" role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
+                    <button
+                      key={`${r.id}-${r.llm?.baseUrl ?? ''}`}
+                      className="reviewer-card"
+                      role="radio"
+                      aria-checked={reviewer === r.id && (!r.llm || settings?.llm.baseUrl === r.llm.baseUrl)}
+                      disabled={!r.installed}
+                      title={r.note}
+                      onClick={async () => {
+                        if (r.llm) await updateSettings({ llm: r.llm })
+                        setReviewer(r.id)
+                      }}
+                    >
                       <span className="reviewer-ic">{r.id === 'model' ? <Bot size={16} /> : <Sparkles size={16} />}</span>
                       <span className="reviewer-text">
                         <strong>{r.name}</strong>
-                        <small>{r.installed ? (REVIEWER_ABOUT[r.id] ?? r.note ?? '') : (r.note ?? 'Not set up yet')}</small>
+                        <small>{r.installed ? (r.llm ? r.note : (REVIEWER_ABOUT[r.id] ?? r.note ?? '')) : (r.note ?? 'Not set up yet')}</small>
                       </span>
                       {!r.installed && <span className="tag">Not set up</span>}
                     </button>

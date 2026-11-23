@@ -16,7 +16,7 @@ const ICON: Record<string, React.ReactNode> = { Reads: <Eye size={14} />, Writes
  * exactly what will run, where the code goes, and what it may touch.
  */
 export default function DeepAudit({ source, canRun, site, onResult }: { source: unknown; canRun: boolean; site: string | null; onResult: (r: ReviewResult) => void }): React.JSX.Element {
-  const { act, busy, settings, notify } = useApp()
+  const { act, busy, settings, notify, updateSettings } = useApp()
   const api = window.laramac
   const [engine, setEngine] = useState<DeepEngine>('cloudflare')
   const [ai, setAi] = useState<DeepReviewerKind>('claude')
@@ -42,6 +42,14 @@ export default function DeepAudit({ source, canRun, site, onResult }: { source: 
     { id: 'claude-local', title: model ? `claudelm: ${model.split('/').pop()}` : 'claudelm', text: model ? 'Claude Code on the model you chose: private in LM Studio but slower and shallower, or online (such as DeepSeek), where the code is sent to that provider.' : 'Choose a model in the Assistant first.', icon: <Cpu size={16} />, ok: ok('claude-local') },
     { id: 'claude-free', title: 'claudefree', text: ok('claude-free') ? 'Claude Code on Free LLM API. Free, with the limits of your free keys.' : (note('claude-free') ?? 'Connect Free LLM API first.'), icon: <Network size={16} />, ok: ok('claude-free') }
   ]
+  // DeepSeek: its own card sets the server and the model in the same click.
+  const dsClaude = options.find((o) => o.id === 'claude-local' && o.llm)
+  if (dsClaude) {
+    const i = choices.findIndex((c) => c.id === 'claude-local')
+    const card = { id: 'claude-local' as DeepReviewerKind, title: 'Claude Code on DeepSeek', text: 'Claude Code on your DeepSeek key. The code it reads is sent to DeepSeek.', icon: <Sparkles size={16} />, ok: dsClaude.installed, llm: dsClaude.llm }
+    if (i >= 0 && settings?.llm.baseUrl === dsClaude.llm?.baseUrl) choices.splice(i, 1)
+    choices.push(card as never)
+  }
   const start = async (): Promise<void> => {
     if (ai === 'claude-desktop') {
       const r = await act('deep-handoff', () => api.invoke('review:deep-handoff', { engine, site: site ?? '' }))
@@ -74,7 +82,19 @@ export default function DeepAudit({ source, canRun, site, onResult }: { source: 
       <div className="deep-label">Run it with</div>
       <div className="deep-grid deep-grid-4" role="radiogroup" aria-label="AI">
         {choices.map((c) => (
-          <button key={c.id} className="deep-card" role="radio" aria-checked={ai === c.id} disabled={!c.ok} onClick={() => setAi(c.id)} title={c.ok ? undefined : 'Not ready yet'}>
+          <button
+            key={`${c.id}-${(c as { llm?: { baseUrl: string } }).llm?.baseUrl ?? ''}`}
+            className="deep-card"
+            role="radio"
+            aria-checked={ai === c.id && (!(c as { llm?: { baseUrl: string } }).llm || settings?.llm.baseUrl === (c as { llm?: { baseUrl: string } }).llm?.baseUrl)}
+            disabled={!c.ok}
+            onClick={async () => {
+              const l = (c as { llm?: { baseUrl: string; model: string } }).llm
+              if (l) await updateSettings({ llm: l })
+              setAi(c.id)
+            }}
+            title={c.ok ? undefined : 'Not ready yet'}
+          >
             <strong>
               {c.icon} {c.title}
             </strong>

@@ -14,7 +14,7 @@ function clock(ms: number): string {
 }
 
 export default function Recon(): React.JSX.Element {
-  const { act, busy } = useApp()
+  const { act, busy, settings, updateSettings } = useApp()
   const api = window.laramac
   const [list, setList] = useState<ReconInfo[]>([])
   const [open, setOpen] = useState<string | null>(null)
@@ -68,7 +68,17 @@ export default function Recon(): React.JSX.Element {
               None
             </button>
             {reviewers.map((r) => (
-              <button key={r.id} role="radio" aria-checked={reviewer === r.id} disabled={!r.installed} title={r.note} onClick={() => setReviewer(r.id)}>
+              <button
+                key={`${r.id}-${r.llm?.baseUrl ?? ''}`}
+                role="radio"
+                aria-checked={reviewer === r.id && (!r.llm || settings?.llm.baseUrl === r.llm.baseUrl)}
+                disabled={!r.installed}
+                title={r.note}
+                onClick={async () => {
+                  if (r.llm) await updateSettings({ llm: r.llm })
+                  setReviewer(r.id)
+                }}
+              >
                 {r.name}
               </button>
             ))}
