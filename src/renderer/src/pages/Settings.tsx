@@ -352,7 +352,8 @@ export default function Settings(): React.JSX.Element {
         <div className="glass-picker" role="radiogroup" aria-label="Glass style">
           {(
             [
-              ['studio', 'Studio', 'Clear Liquid Glass lit in your accent colour. The default.'],
+              ['graphite', 'Graphite', 'Flat graphite surfaces and thin borders, like MacSec. The default.'],
+              ['studio', 'Studio', 'Clear Liquid Glass lit in your accent colour.'],
               ['prism', 'Prism', 'Glass with a rainbow edge over slowly moving light, like a lens catching the sun.'],
               ['ion', 'Ion', 'MacSec’s look: deep space lit in ion blue and violet, over a faint grid.'],
               ['aurora', 'Aurora', 'Glass soaked in purple, pink and cyan.'],
@@ -360,7 +361,7 @@ export default function Settings(): React.JSX.Element {
               ['frost', 'Frosted', 'Quiet, neutral frosted glass.']
             ] as const
           ).map(([id, label, hint]) => (
-            <button key={id} className="gp-tile" role="radio" aria-checked={(settings.glassStyle ?? 'studio') === id} onClick={() => updateSettings({ glassStyle: id })}>
+            <button key={id} className="gp-tile" role="radio" aria-checked={(settings.glassStyle ?? 'graphite') === id} onClick={() => updateSettings({ glassStyle: id })}>
               <span className={`gp-preview gp-${id}`} aria-hidden>
                 <span className="gp-side" />
                 <span className="gp-card" />
