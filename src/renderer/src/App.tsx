@@ -38,7 +38,7 @@ function Shell(): React.JSX.Element {
   // Mac, or always light or dark), so the media query below already says which one to show.
   useEffect(() => {
     const root = document.documentElement
-    const style = settings?.glassStyle ?? 'graphite'
+    const style = settings?.glassStyle ?? 'spectrum'
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
       root.dataset.glass = style
