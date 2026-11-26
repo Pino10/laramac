@@ -359,9 +359,9 @@ export default function Sites(): React.JSX.Element {
   const [projectFor, setProjectFor] = useState<SiteInfo | null>(null)
   const [view, setViewState] = useState<'list' | 'gallery'>(() => {
     try {
-      return localStorage.getItem('sites-view') === 'gallery' ? 'gallery' : 'list'
+      return localStorage.getItem('sites-view') === 'list' ? 'list' : 'gallery'
     } catch {
-      return 'list'
+      return 'gallery'
     }
   })
   const setView = (v: 'list' | 'gallery'): void => {

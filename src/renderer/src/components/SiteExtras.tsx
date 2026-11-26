@@ -266,8 +266,13 @@ function Thumb({ site }: { site: SiteInfo }): React.JSX.Element {
     void load(false)
   }, [site.name]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="gal-thumb" data-busy={busy}>
-      {src ? <img src={src} alt="" draggable={false} /> : <div className="gal-empty">{src === null ? 'No preview' : ''}</div>}
+    <div className="gal-thumb" data-busy={busy} style={{ ['--hue' as string]: [...site.name].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 360, 7) }}>
+      {src ? <img src={src} alt="" draggable={false} /> : <div className="gal-empty">
+          <span className="gal-initial" aria-hidden>
+            {site.name.slice(0, 1).toUpperCase()}
+          </span>
+          <span>{src === null ? 'No preview yet' : ''}</span>
+        </div>}
       <button className="icon-btn gal-refresh" data-tip="Refresh preview" aria-label={`Refresh the preview of ${site.name}`} onClick={() => load(true)}>
         <RefreshCw />
       </button>

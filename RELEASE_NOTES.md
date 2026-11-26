@@ -1,3 +1,8 @@
+## New in 1.3.0
+
+- **Sites opens as cards.** Each site is a big colourful card with its first letter, address, type and quick actions. The List view is one click away and your choice is remembered. A site with a preview picture shows it instead of the colour.
+- **First-run plan** (Set up your stack) is a set of numbered cards instead of one long list, so the page is no longer mostly empty.
+
 ## New in 1.2.1
 
 - **Laramac has its own look: Spectrum.** Deep indigo, bold gradients from your accent colour, big rounded cards and a glowing current page, so it no longer looks like MacSec. It is the default once; Settings, Look switches to Graphite (flat and plain) or any older look. Light mode follows the same style.
