@@ -13,7 +13,7 @@ const defaults = (): AppSettings => ({
   wwwPath: DEFAULT_WWW(),
   tld: 'test',
   glass: true,
-  glassStyle: 'studio',
+  glassStyle: 'graphite',
   appearance: 'dark',
   darkDefault: true,
   tourDone: false,

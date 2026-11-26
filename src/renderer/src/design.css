@@ -1,0 +1,346 @@
+/*
+ * Laramac Graphite (1.2). A flat, dark-first look that matches MacSec: graphite surfaces, thin borders,
+ * one accent (your accent colour), no glass blur and no floating panels. It is a Look like the others,
+ * so it only applies when Settings, Look is Graphite, and the other looks are unchanged.
+ */
+html[data-glass='graphite'] {
+  color-scheme: dark;
+  --canvas: 11 13 17;
+  --canvas-alpha: 1;
+  --void: #0b0d11;
+  --glass: #12151b;
+  --glass-strong: #181c24;
+  --glass-solid: #1f242e;
+  --glass-sheen: transparent;
+  --glass-edge: #252b37;
+  --glass-hair: transparent;
+  --blur: none;
+  --surface: #12151b;
+  --surface-2: #181c24;
+  --ink: #e9edf5;
+  --ink-2: #b0b9cb;
+  --ink-3: #8691a6;
+  --line: #252b37;
+  --line-strong: #323a49;
+  --sel: rgba(255, 255, 255, 0.045);
+  --accent: var(--a1);
+  --accent-2: var(--a1);
+  --accent-text: var(--a-text);
+  --accent-ink: var(--a-ink);
+  --accent-soft: rgb(var(--a1-rgb) / 0.14);
+  --accent-softer: rgb(var(--a1-rgb) / 0.08);
+  --glow: none;
+  --ok: #3ddc97;
+  --ok-soft: rgba(61, 220, 151, 0.14);
+  --warn: #f5c542;
+  --bad: #ff5c7f;
+  --bad-soft: rgba(255, 92, 127, 0.14);
+  --focus: 0 0 0 3px rgb(var(--a1-rgb) / 0.4);
+  --rim: none;
+  --float: none;
+  --float-hi: 0 18px 40px -16px rgba(0, 0, 0, 0.7);
+  --r-xl: 14px;
+  --r-lg: 12px;
+  --r-md: 10px;
+  --r-sm: 8px;
+}
+html[data-glass='graphite'][data-tone='light'] {
+  color-scheme: light;
+  --canvas: 243 245 249;
+  --glass: #ffffff;
+  --glass-strong: #f6f7fa;
+  --glass-solid: #eceff4;
+  --glass-edge: #e1e5ed;
+  --surface: #ffffff;
+  --surface-2: #f6f7fa;
+  --ink: #141824;
+  --ink-2: #444d62;
+  --ink-3: #6a7489;
+  --line: #e1e5ed;
+  --line-strong: #cdd3df;
+  --sel: rgba(20, 30, 60, 0.05);
+  --ok: #138a58;
+  --ok-soft: rgba(19, 138, 88, 0.12);
+  --warn: #a8690d;
+  --bad: #d6285a;
+  --bad-soft: rgba(214, 40, 90, 0.1);
+  --float-hi: 0 14px 34px -14px rgba(20, 30, 60, 0.3);
+}
+html[data-glass='graphite'] body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+html[data-glass='graphite'] h1,
+html[data-glass='graphite'] h2,
+html[data-glass='graphite'] .page-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+html[data-glass='graphite'] .page-title {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* The shell: one flat window, a sidebar with a hairline, no floating cards. */
+html[data-glass='graphite'] .canvas {
+  background: rgb(var(--canvas));
+}
+html[data-glass='graphite'] .shell {
+  padding: 0;
+  gap: 0;
+}
+html[data-glass='graphite'] .sidebar {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--glass);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  width: 224px;
+}
+html[data-glass='graphite'] .main {
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='graphite'] .topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--line);
+  background: var(--glass);
+}
+html[data-glass='graphite'] .search-pill {
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+  width: 300px;
+}
+html[data-glass='graphite'] .search-pill:hover {
+  box-shadow: none;
+  border-color: var(--a1);
+}
+html[data-glass='graphite'] .kbd {
+  border-radius: 5px;
+}
+html[data-glass='graphite'] .bell {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+}
+html[data-glass='graphite'] .main-inner {
+  padding: 18px 32px 72px;
+  animation: none;
+}
+
+/* Surfaces: flat cards with a thin border. */
+html[data-glass='graphite'] .glass,
+html[data-glass='graphite'] .panel,
+html[data-glass='graphite'] .group,
+html[data-glass='graphite'] .card,
+html[data-glass='graphite'] .ys-card,
+html[data-glass='graphite'] .server-card,
+html[data-glass='graphite'] .main .group,
+html[data-glass='graphite'] .main .panel,
+html[data-glass='graphite'] .main .glass,
+html[data-glass='graphite'] .main .card,
+html[data-glass='graphite'] .main .ys-card,
+html[data-glass='graphite'] .ov-card,
+html[data-glass='graphite'] .pulse-tile,
+html[data-glass='graphite'] .svc-tile,
+html[data-glass='graphite'] .lang-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='graphite'] .ys-card:hover,
+html[data-glass='graphite'] .card:hover,
+html[data-glass='graphite'] .svc-tile:hover {
+  border-color: var(--line-strong);
+  box-shadow: none;
+  transform: none;
+}
+html[data-glass='graphite'] .dialog,
+html[data-glass='graphite'] .popover,
+html[data-glass='graphite'] .palette,
+html[data-glass='graphite'] .menu,
+html[data-glass='graphite'] .toast {
+  background: var(--glass-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--float-hi);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='graphite'] .banner {
+  background: var(--accent-softer);
+  border: 1px solid rgb(var(--a1-rgb) / 0.3);
+  border-radius: 10px;
+}
+
+/* Navigation: quiet rows, the current page has an accent bar. */
+html[data-glass='graphite'] .nav-item {
+  border-radius: 8px;
+  color: var(--ink-2);
+}
+html[data-glass='graphite'] .nav-item:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+html[data-glass='graphite'] .nav-item[aria-current='page'],
+html[data-glass='graphite'][data-tone='dark'] .nav-item[aria-current='page'],
+html[data-glass='graphite'][data-tone='light'] .nav-item[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--a1);
+}
+html[data-glass='graphite'] .nav-item[aria-current='page'] svg,
+html[data-glass='graphite'][data-tone='dark'] .nav-item[aria-current='page'] svg,
+html[data-glass='graphite'][data-tone='light'] .nav-item[aria-current='page'] svg {
+  color: var(--accent-text);
+}
+html[data-glass='graphite'] .nav-item[aria-current='page'] .nav-count {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+html[data-glass='graphite'] .foot-btn,
+html[data-glass='graphite'] .sidebar-foot {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+html[data-glass='graphite'] .foot-btn[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: rgb(var(--a1-rgb) / 0.4);
+  box-shadow: none;
+}
+
+/* Buttons: small rounded squares; the main action is a solid accent. */
+html[data-glass='graphite'] .btn,
+html[data-glass='graphite'] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  box-shadow: none;
+}
+html[data-glass='graphite'] .btn:hover:not(:disabled) {
+  background: var(--glass-solid);
+  border-color: var(--line-strong);
+}
+html[data-glass='graphite'] .btn-primary,
+html[data-glass='graphite'] .btn-primary:hover:not(:disabled) {
+  background: var(--a1);
+  color: var(--a-ink);
+  border: 1px solid transparent;
+  font-weight: 600;
+  box-shadow: none;
+}
+html[data-glass='graphite'] .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+html[data-glass='graphite'] .btn-primary:disabled {
+  filter: saturate(0.4) brightness(0.8);
+}
+html[data-glass='graphite'] .btn-tonal,
+html[data-glass='graphite'] .btn-accent {
+  background: var(--accent-soft);
+  border: 1px solid rgb(var(--a1-rgb) / 0.35);
+  color: var(--accent-text);
+  box-shadow: none;
+}
+html[data-glass='graphite'] .btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent-text);
+}
+html[data-glass='graphite'] .btn-danger {
+  background: var(--bad-soft);
+  border: 1px solid rgb(255 92 127 / 0.35);
+  color: var(--bad);
+}
+
+/* Forms, tabs, tags. */
+html[data-glass='graphite'] .input,
+html[data-glass='graphite'] select.input,
+html[data-glass='graphite'] textarea.input,
+html[data-glass='graphite'] .searchbox {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: none;
+}
+html[data-glass='graphite'] .input:focus,
+html[data-glass='graphite'] textarea.input:focus {
+  border-color: var(--a1);
+  box-shadow: var(--focus);
+}
+html[data-glass='graphite'] .seg,
+html[data-glass='graphite'] .seg-tabs {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: none;
+}
+html[data-glass='graphite'] .seg button,
+html[data-glass='graphite'] .seg-tabs button {
+  border-radius: 7px;
+}
+html[data-glass='graphite'] .seg button[aria-checked='true'],
+html[data-glass='graphite'] .seg-tabs button[aria-selected='true'],
+html[data-glass='graphite'] .dialog .seg-tabs button[aria-selected='true'] {
+  background: var(--glass-solid);
+  color: var(--ink);
+  box-shadow: none;
+}
+html[data-glass='graphite'] .tag {
+  border-radius: 6px;
+  box-shadow: none;
+}
+html[data-glass='graphite'] .tag-accent {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+html[data-glass='graphite'] .switch[aria-checked='true'] {
+  background: var(--a1);
+  box-shadow: none;
+}
+html[data-glass='graphite'] .icon-btn:hover {
+  background: var(--sel);
+}
+html[data-glass='graphite'] a,
+html[data-glass='graphite'] .link {
+  color: var(--accent-text);
+}
+html[data-glass='graphite'] ::selection {
+  background: rgb(var(--a1-rgb) / 0.35);
+}
+html[data-glass='graphite'] .shortcut,
+html[data-glass='graphite'] .shortcut-icon,
+html[data-glass='graphite'] .dock-app,
+html[data-glass='graphite'] .cs-item,
+html[data-glass='graphite'] .settings-jump,
+html[data-glass='graphite'] .code-hero {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Look picker preview */
+.gp-graphite { background: #0b0d11; }
+.gp-graphite .gp-side, .gp-graphite .gp-card { background: #12151b; border: 1px solid #252b37; }
+.gp-graphite .gp-pop { background: var(--a1, #4ea8ff); border: 1px solid transparent; color: #fff; }
