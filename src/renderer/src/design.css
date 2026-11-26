@@ -241,8 +241,8 @@ html[data-glass='graphite'] .btn:hover:not(:disabled) {
   background: var(--glass-solid);
   border-color: var(--line-strong);
 }
-html[data-glass='graphite'] .btn-primary,
-html[data-glass='graphite'] .btn-primary:hover:not(:disabled) {
+html:root[data-glass='graphite'] .btn-primary,
+html:root[data-glass='graphite'] .btn-primary:hover:not(:disabled) {
   background: var(--a1);
   color: var(--a-ink);
   border: 1px solid transparent;
@@ -340,7 +340,481 @@ html[data-glass='graphite'] .code-hero {
   -webkit-backdrop-filter: none;
 }
 
+/*
+ * Laramac Spectrum (1.2.1). A flat, dark-first look that matches MacSec: spectrum surfaces, thin borders,
+ * one accent (your accent colour), no glass blur and no floating panels. It is a Look like the others,
+ * so it only applies when Settings, Look is Graphite, and the other looks are unchanged.
+ */
+html[data-glass='spectrum'] {
+  color-scheme: dark;
+  --canvas: 11 13 17;
+  --canvas-alpha: 1;
+  --void: #0b0d11;
+  --glass: #12151b;
+  --glass-strong: #181c24;
+  --glass-solid: #1f242e;
+  --glass-sheen: transparent;
+  --glass-edge: #252b37;
+  --glass-hair: transparent;
+  --blur: none;
+  --surface: #12151b;
+  --surface-2: #181c24;
+  --ink: #e9edf5;
+  --ink-2: #b0b9cb;
+  --ink-3: #8691a6;
+  --line: #252b37;
+  --line-strong: #323a49;
+  --sel: rgba(255, 255, 255, 0.045);
+  --accent: var(--a1);
+  --accent-2: var(--a1);
+  --accent-text: var(--a-text);
+  --accent-ink: var(--a-ink);
+  --accent-soft: rgb(var(--a1-rgb) / 0.14);
+  --accent-softer: rgb(var(--a1-rgb) / 0.08);
+  --glow: none;
+  --ok: #3ddc97;
+  --ok-soft: rgba(61, 220, 151, 0.14);
+  --warn: #f5c542;
+  --bad: #ff5c7f;
+  --bad-soft: rgba(255, 92, 127, 0.14);
+  --focus: 0 0 0 3px rgb(var(--a1-rgb) / 0.4);
+  --rim: none;
+  --float: none;
+  --float-hi: 0 18px 40px -16px rgba(0, 0, 0, 0.7);
+  --r-xl: 14px;
+  --r-lg: 12px;
+  --r-md: 10px;
+  --r-sm: 8px;
+}
+html[data-glass='spectrum'][data-tone='light'] {
+  color-scheme: light;
+  --canvas: 243 245 249;
+  --glass: #ffffff;
+  --glass-strong: #f6f7fa;
+  --glass-solid: #eceff4;
+  --glass-edge: #e1e5ed;
+  --surface: #ffffff;
+  --surface-2: #f6f7fa;
+  --ink: #141824;
+  --ink-2: #444d62;
+  --ink-3: #6a7489;
+  --line: #e1e5ed;
+  --line-strong: #cdd3df;
+  --sel: rgba(20, 30, 60, 0.05);
+  --ok: #138a58;
+  --ok-soft: rgba(19, 138, 88, 0.12);
+  --warn: #a8690d;
+  --bad: #d6285a;
+  --bad-soft: rgba(214, 40, 90, 0.1);
+  --float-hi: 0 14px 34px -14px rgba(20, 30, 60, 0.3);
+}
+html[data-glass='spectrum'] body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+html[data-glass='spectrum'] h1,
+html[data-glass='spectrum'] h2,
+html[data-glass='spectrum'] .page-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+html[data-glass='spectrum'] .page-title {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* The shell: one flat window, a sidebar with a hairline, no floating cards. */
+html[data-glass='spectrum'] .canvas {
+  background: rgb(var(--canvas));
+}
+html[data-glass='spectrum'] .shell {
+  padding: 0;
+  gap: 0;
+}
+html[data-glass='spectrum'] .sidebar {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--glass);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  width: 224px;
+}
+html[data-glass='spectrum'] .main {
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='spectrum'] .topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--line);
+  background: var(--glass);
+}
+html[data-glass='spectrum'] .search-pill {
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+  width: 300px;
+}
+html[data-glass='spectrum'] .search-pill:hover {
+  box-shadow: none;
+  border-color: var(--a1);
+}
+html[data-glass='spectrum'] .kbd {
+  border-radius: 5px;
+}
+html[data-glass='spectrum'] .bell {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+}
+html[data-glass='spectrum'] .main-inner {
+  padding: 18px 32px 72px;
+  animation: none;
+}
+
+/* Surfaces: flat cards with a thin border. */
+html[data-glass='spectrum'] .glass,
+html[data-glass='spectrum'] .panel,
+html[data-glass='spectrum'] .group,
+html[data-glass='spectrum'] .card,
+html[data-glass='spectrum'] .ys-card,
+html[data-glass='spectrum'] .server-card,
+html[data-glass='spectrum'] .main .group,
+html[data-glass='spectrum'] .main .panel,
+html[data-glass='spectrum'] .main .glass,
+html[data-glass='spectrum'] .main .card,
+html[data-glass='spectrum'] .main .ys-card,
+html[data-glass='spectrum'] .ov-card,
+html[data-glass='spectrum'] .pulse-tile,
+html[data-glass='spectrum'] .svc-tile,
+html[data-glass='spectrum'] .lang-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='spectrum'] .ys-card:hover,
+html[data-glass='spectrum'] .card:hover,
+html[data-glass='spectrum'] .svc-tile:hover {
+  border-color: var(--line-strong);
+  box-shadow: none;
+  transform: none;
+}
+html[data-glass='spectrum'] .dialog,
+html[data-glass='spectrum'] .popover,
+html[data-glass='spectrum'] .palette,
+html[data-glass='spectrum'] .menu,
+html[data-glass='spectrum'] .toast {
+  background: var(--glass-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--float-hi);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-glass='spectrum'] .banner {
+  background: var(--accent-softer);
+  border: 1px solid rgb(var(--a1-rgb) / 0.3);
+  border-radius: 10px;
+}
+
+/* Navigation: quiet rows, the current page has an accent bar. */
+html[data-glass='spectrum'] .nav-item {
+  border-radius: 8px;
+  color: var(--ink-2);
+}
+html[data-glass='spectrum'] .nav-item:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+html[data-glass='spectrum'] .nav-item[aria-current='page'],
+html[data-glass='spectrum'][data-tone='dark'] .nav-item[aria-current='page'],
+html[data-glass='spectrum'][data-tone='light'] .nav-item[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--a1);
+}
+html[data-glass='spectrum'] .nav-item[aria-current='page'] svg,
+html[data-glass='spectrum'][data-tone='dark'] .nav-item[aria-current='page'] svg,
+html[data-glass='spectrum'][data-tone='light'] .nav-item[aria-current='page'] svg {
+  color: var(--accent-text);
+}
+html[data-glass='spectrum'] .nav-item[aria-current='page'] .nav-count {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+html[data-glass='spectrum'] .foot-btn,
+html[data-glass='spectrum'] .sidebar-foot {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .foot-btn[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: rgb(var(--a1-rgb) / 0.4);
+  box-shadow: none;
+}
+
+/* Buttons: small rounded squares; the main action is a solid accent. */
+html[data-glass='spectrum'] .btn,
+html[data-glass='spectrum'] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent) {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .btn:hover:not(:disabled) {
+  background: var(--glass-solid);
+  border-color: var(--line-strong);
+}
+html[data-glass='spectrum'] .btn-primary,
+html[data-glass='spectrum'] .btn-primary:hover:not(:disabled) {
+  background: var(--a1);
+  color: var(--a-ink);
+  border: 1px solid transparent;
+  font-weight: 600;
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+html[data-glass='spectrum'] .btn-primary:disabled {
+  filter: saturate(0.4) brightness(0.8);
+}
+html[data-glass='spectrum'] .btn-tonal,
+html[data-glass='spectrum'] .btn-accent {
+  background: var(--accent-soft);
+  border: 1px solid rgb(var(--a1-rgb) / 0.35);
+  color: var(--accent-text);
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent-text);
+}
+html[data-glass='spectrum'] .btn-danger {
+  background: var(--bad-soft);
+  border: 1px solid rgb(255 92 127 / 0.35);
+  color: var(--bad);
+}
+
+/* Forms, tabs, tags. */
+html[data-glass='spectrum'] .input,
+html[data-glass='spectrum'] select.input,
+html[data-glass='spectrum'] textarea.input,
+html[data-glass='spectrum'] .searchbox {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .input:focus,
+html[data-glass='spectrum'] textarea.input:focus {
+  border-color: var(--a1);
+  box-shadow: var(--focus);
+}
+html[data-glass='spectrum'] .seg,
+html[data-glass='spectrum'] .seg-tabs {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .seg button,
+html[data-glass='spectrum'] .seg-tabs button {
+  border-radius: 7px;
+}
+html[data-glass='spectrum'] .seg button[aria-checked='true'],
+html[data-glass='spectrum'] .seg-tabs button[aria-selected='true'],
+html[data-glass='spectrum'] .dialog .seg-tabs button[aria-selected='true'] {
+  background: var(--glass-solid);
+  color: var(--ink);
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .tag {
+  border-radius: 6px;
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .tag-accent {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+html[data-glass='spectrum'] .switch[aria-checked='true'] {
+  background: var(--a1);
+  box-shadow: none;
+}
+html[data-glass='spectrum'] .icon-btn:hover {
+  background: var(--sel);
+}
+html[data-glass='spectrum'] a,
+html[data-glass='spectrum'] .link {
+  color: var(--accent-text);
+}
+html[data-glass='spectrum'] ::selection {
+  background: rgb(var(--a1-rgb) / 0.35);
+}
+html[data-glass='spectrum'] .shortcut,
+html[data-glass='spectrum'] .shortcut-icon,
+html[data-glass='spectrum'] .dock-app,
+html[data-glass='spectrum'] .cs-item,
+html[data-glass='spectrum'] .settings-jump,
+html[data-glass='spectrum'] .code-hero {
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Spectrum: what makes it different from Graphite. */
+html[data-glass='spectrum'] {
+  --canvas: 12 9 24;
+  --void: #0c0918;
+  --glass: #151030;
+  --glass-strong: #1c1640;
+  --glass-solid: #261e52;
+  --glass-edge: #2b2358;
+  --surface: #151030;
+  --surface-2: #1c1640;
+  --line: #2b2358;
+  --line-strong: #3d3377;
+  --ink: #f3f0ff;
+  --ink-2: #c4bdea;
+  --ink-3: #8f87bd;
+  --sel: rgba(160, 130, 255, 0.1);
+  --r-xl: 22px;
+  --r-lg: 18px;
+  --r-md: 14px;
+  --r-sm: 10px;
+}
+html[data-glass='spectrum'][data-tone='light'] {
+  --canvas: 247 245 255;
+  --glass: #ffffff;
+  --glass-strong: #f4f1ff;
+  --glass-solid: #ebe6ff;
+  --glass-edge: #e2dcfa;
+  --surface: #ffffff;
+  --surface-2: #f4f1ff;
+  --line: #e2dcfa;
+  --line-strong: #cbc2f0;
+  --ink: #1a1433;
+  --ink-2: #4a4170;
+  --ink-3: #7a72a3;
+  --sel: rgba(90, 60, 200, 0.07);
+}
+html[data-glass='spectrum'] .canvas {
+  background:
+    radial-gradient(55% 45% at 0% 0%, rgb(var(--a1-rgb) / 0.22), transparent 70%),
+    radial-gradient(45% 40% at 100% 0%, rgba(255, 90, 170, 0.14), transparent 72%),
+    rgb(var(--canvas));
+}
+html[data-glass='spectrum'][data-tone='light'] .canvas {
+  background:
+    radial-gradient(55% 45% at 0% 0%, rgb(var(--a1-rgb) / 0.12), transparent 70%),
+    radial-gradient(45% 40% at 100% 0%, rgba(255, 90, 170, 0.08), transparent 72%),
+    rgb(var(--canvas));
+}
+html[data-glass='spectrum'] .sidebar,
+html[data-glass='spectrum'] .topbar {
+  background: color-mix(in srgb, var(--glass) 88%, transparent);
+}
+html[data-glass='spectrum'] .page-title {
+  background: linear-gradient(100deg, var(--ink) 30%, var(--a1) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html[data-glass='spectrum'] .nav-item[aria-current='page'],
+html[data-glass='spectrum'][data-tone='dark'] .nav-item[aria-current='page'],
+html[data-glass='spectrum'][data-tone='light'] .nav-item[aria-current='page'] {
+  background: linear-gradient(100deg, rgb(var(--a1-rgb) / 0.38), rgba(255, 90, 170, 0.18));
+  box-shadow: inset 0 0 0 1px rgb(var(--a1-rgb) / 0.45);
+  border-radius: 10px;
+}
+html[data-glass='spectrum'] .nav-item {
+  border-radius: 10px;
+}
+html:root[data-glass='spectrum'] .btn-primary,
+html:root[data-glass='spectrum'] .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(110deg, var(--a1), #ff7ab8);
+  color: #170f33;
+  font-weight: 650;
+  box-shadow: 0 8px 22px -10px rgb(var(--a1-rgb) / 0.9);
+  border-radius: 10px;
+}
+html[data-glass='spectrum'] .btn,
+html[data-glass='spectrum'] .btn:not(.btn-primary):not(.btn-quiet):not(.btn-tonal):not(.btn-danger):not(.btn-accent),
+html[data-glass='spectrum'] .input,
+html[data-glass='spectrum'] select.input,
+html[data-glass='spectrum'] textarea.input,
+html[data-glass='spectrum'] .searchbox {
+  border-radius: 10px;
+}
+html[data-glass='spectrum'] .search-pill {
+  border-radius: 999px;
+  height: 34px;
+}
+html[data-glass='spectrum'] .glass,
+html[data-glass='spectrum'] .panel,
+html[data-glass='spectrum'] .group,
+html[data-glass='spectrum'] .card,
+html[data-glass='spectrum'] .ys-card,
+html[data-glass='spectrum'] .server-card,
+html[data-glass='spectrum'] .main .group,
+html[data-glass='spectrum'] .main .panel,
+html[data-glass='spectrum'] .main .glass,
+html[data-glass='spectrum'] .main .card,
+html[data-glass='spectrum'] .main .ys-card,
+html[data-glass='spectrum'] .ov-card,
+html[data-glass='spectrum'] .pulse-tile,
+html[data-glass='spectrum'] .svc-tile,
+html[data-glass='spectrum'] .lang-card {
+  border-radius: 18px;
+}
+html[data-glass='spectrum'] .ov-card,
+html[data-glass='spectrum'] .pulse-tile,
+html[data-glass='spectrum'] .stat,
+html[data-glass='spectrum'] .svc-tile {
+  background: linear-gradient(160deg, rgb(var(--a1-rgb) / 0.14), transparent 60%), var(--surface);
+}
+html[data-glass='spectrum'] .ys-card:hover,
+html[data-glass='spectrum'] .card:hover,
+html[data-glass='spectrum'] .svc-tile:hover {
+  border-color: rgb(var(--a1-rgb) / 0.6);
+  box-shadow: 0 14px 34px -18px rgb(var(--a1-rgb) / 0.8);
+}
+html[data-glass='spectrum'] .banner {
+  background: linear-gradient(100deg, rgb(var(--a1-rgb) / 0.2), rgba(255, 90, 170, 0.1));
+  border-radius: 14px;
+}
+html[data-glass='spectrum'] .switch[aria-checked='true'] {
+  background: linear-gradient(110deg, var(--a1), #ff5aaa);
+}
+html[data-glass='spectrum'] .main-inner {
+  max-width: 1400px;
+}
+
 /* Look picker preview */
 .gp-graphite { background: #0b0d11; }
 .gp-graphite .gp-side, .gp-graphite .gp-card { background: #12151b; border: 1px solid #252b37; }
 .gp-graphite .gp-pop { background: var(--a1, #4ea8ff); border: 1px solid transparent; color: #fff; }
+
+.gp-spectrum { background: radial-gradient(70% 70% at 0% 0%, rgba(124, 77, 255, 0.5), transparent 70%), radial-gradient(60% 60% at 100% 0%, rgba(255, 90, 170, 0.35), transparent 70%), #0c0918; }
+.gp-spectrum .gp-side, .gp-spectrum .gp-card { background: #151030; border: 1px solid #3d3377; border-radius: 8px; }
+.gp-spectrum .gp-pop { background: linear-gradient(110deg, var(--a1, #7c4dff), #ff5aaa); border: 1px solid transparent; color: #fff; }

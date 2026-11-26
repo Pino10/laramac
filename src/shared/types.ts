@@ -919,7 +919,7 @@ export interface AppSettings {
   tld: string
   glass: boolean
   /** smoke: dark smoked glass everywhere. frost: light frosted glass that follows light and dark mode. */
-  glassStyle: 'graphite' | 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism' | 'ion'
+  glassStyle: 'spectrum' | 'graphite' | 'studio' | 'smoke' | 'frost' | 'aurora' | 'prism' | 'ion'
   /** Light or dark: follow the Mac, or always one. Every look has both. */
   appearance?: 'auto' | 'light' | 'dark'
   /** Set once the move to the dark default has been made, so it never repeats. */

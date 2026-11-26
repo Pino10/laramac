@@ -3630,8 +3630,8 @@ app.whenReady().then(() => {
       }
     })()
   }, 25_000)
-  // 1.2 brings the Graphite look as the default; it reaches everyone once, and Settings, Look switches back.
-  if ((getSettings().lookVersion ?? 0) < 24) setSettings({ glassStyle: 'graphite', lookVersion: 24 })
+  // 1.2.1 brings the Spectrum look as the default; it reaches everyone once, and Settings, Look switches back.
+  if ((getSettings().lookVersion ?? 0) < 25) setSettings({ glassStyle: 'spectrum', lookVersion: 25 })
   // Light, dark or the Mac's own: for the window, its glass and Laramac Code.
   nativeTheme.themeSource = getSettings().appearance === 'light' ? 'light' : getSettings().appearance === 'auto' ? 'system' : 'dark'
   ensureWww()

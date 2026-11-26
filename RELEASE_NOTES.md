@@ -1,3 +1,7 @@
+## New in 1.2.1
+
+- **Laramac has its own look: Spectrum.** Deep indigo, bold gradients from your accent colour, big rounded cards and a glowing current page, so it no longer looks like MacSec. It is the default once; Settings, Look switches to Graphite (flat and plain) or any older look. Light mode follows the same style.
+
 ## New in 1.2.0
 
 - **A new look: Graphite.** Flat graphite surfaces, thin borders, a quiet sidebar with an accent bar on the page you are on, and small solid buttons. It matches MacSec, works in light and dark, and uses your accent colour. It is the default for everyone once; Settings, Look switches back to Studio, Prism, Ion, Aurora, Smoked or Frosted, which are unchanged.
