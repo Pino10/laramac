@@ -1,3 +1,7 @@
+## New in 1.1.6
+
+- **Claude desktop no longer times out on Laramac.** The small script the Claude app starts only answered an error in one exact case. If Laramac was closed, or the saved token no longer matched, the Claude app got no answer and waited until it said "Request timed out". The script now always answers, and says plainly what is wrong (Laramac is not running, or the token was refused). Laramac also refreshes the script when it opens, so you do not need to connect again.
+
 ## New in 1.1.5
 
 - **DeepSeek shows up as a reviewer.** Once the DeepSeek servers and your key are saved, "Claude Code on DeepSeek" and "DeepSeek (API)" appear in the reviewer lists of code review, the deep audit and recon. One click picks the server and the model too, so nothing else has to be set first. Code sent to DeepSeek is said so in the description.

@@ -48,8 +48,24 @@ export function connectClaudeDesktop(url: string, tokenFile: string): { connecte
 }
 
 /** An entry written by an older Laramac (npx and mcp-remote) is moved to the new command. */
+/** Keeps the script the Claude app starts up to date, so a fix to it reaches people who connected earlier. */
+export function refreshBridge(url: string, tokenFile: string): void {
+  const text = desktopBridge(url, tokenFile, 'Laramac')
+  let old = ''
+  try {
+    old = readFileSync(desktopBridgePath(), 'utf8')
+  } catch {
+    // Missing: written below.
+  }
+  if (old === text) return
+  mkdirSync(dirs.bin(), { recursive: true })
+  writeFileSync(desktopBridgePath(), text)
+  chmodSync(desktopBridgePath(), 0o755)
+}
+
 export function repairClaudeDesktop(url: string, tokenFile: string): boolean {
   const e = read()?.mcpServers?.laramac
+  if (e) refreshBridge(url, tokenFile)
   if (!e || e.command === desktopBridgePath()) return false
   connectClaudeDesktop(url, tokenFile)
   return true
